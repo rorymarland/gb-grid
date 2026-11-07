@@ -124,12 +124,12 @@ responses = {
                         {'nationalGridBmUnit': 'WINDA-1', 'totalVolumeAccepted': -40.0}],
     'volumes/all/offer': [{'nationalGridBmUnit': 'GASB-1', 'totalVolumeAccepted': 75.0}],
 }
-original = server.get_json
-server.get_json = lambda url, timeout=30: {'data': next(v for k, v in responses.items() if k in url)}
+original = server.fetch.get_json
+server.fetch.get_json = lambda url, timeout=30: {'data': next(v for k, v in responses.items() if k in url)}
 try:
     bal.fetch_period(day, 1)
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 rows = {r[0]: r[1:] for r in store.query('SELECT unit, vol_bid, vol_offer, cash_bid, cash_offer FROM bal')}
 check('bid volumes summed per unit', rows['WINDA-1'][0] == -100.0 and rows['WINDA-1'][2] == 7000.0, rows)
 check('offers stored', rows['GASB-1'][1] == 75.0 and rows['GASB-1'][3] == 9000.0, rows)
@@ -149,12 +149,12 @@ now = server.time.time()
 margin_rows = [{'startTime': server.iso(now + 3600), 'publishTime': server.iso(now - 600), 'forecastHorizon': 1, 'deratedMargin': 4100.0, 'lossOfLoadProbability': 0.0},
                {'startTime': server.iso(now + 3600), 'publishTime': server.iso(now - 9000), 'forecastHorizon': 4, 'deratedMargin': 9999.0, 'lossOfLoadProbability': 0.0},
                {'startTime': server.iso(now + 7200), 'publishTime': server.iso(now - 600), 'forecastHorizon': 2, 'deratedMargin': 900.0, 'lossOfLoadProbability': 0.01}]
-original = server.get_json
-server.get_json = lambda url, timeout=30: {'data': margin_rows}
+original = server.fetch.get_json
+server.fetch.get_json = lambda url, timeout=30: {'data': margin_rows}
 try:
     series = out.fetch_margin(now)
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 check('shortest horizon wins', series[0][1] == 4100, series)
 out.margin = series
 grid = server.Grid(server.Store(tempfile.mkdtemp()), server.Status(), outages=out)
@@ -191,15 +191,15 @@ def fake(url, timeout=30):
         return {'result': {'records': records if len(calls) == 1 else []}}
     return {'data': [{'startTime': server.iso(t), 'dataProvider': 'APXMIDP', 'price': 50.0 + (t // 1800) % 7, 'volume': 10.0}
                      for t in range(server.PRICE_HISTORY_START + 1800 * 0, server.PRICE_HISTORY_START + 7 * 86400, 1800)]}
-original = server.get_json
-server.get_json = fake
+original = server.fetch.get_json
+server.fetch.get_json = fake
 try:
     n = lh.fetch_mix()
     since = calls[0]
     lh.fetch_mix()
     first_prices = lh.fetch_prices()
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 check('mix rows stored', n == len(records) and store.scalar('SELECT COUNT(*) FROM lh') == len(records))
 check('first query starts at the beginning', '2000-01-01' in server.urllib.parse.unquote(since), since)
 check('next query starts after the last row', datetime.fromtimestamp(start + (len(records) - 1) * 1800, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') in server.urllib.parse.unquote(calls[1]), calls[1])
@@ -229,23 +229,23 @@ def fake_outlook(url, timeout=30):
                          {'startTime': server.iso(base), 'publishTime': '2026-11-07T11:00:00Z', 'boundary': 'N', 'nationalDemand': 31000},
                          {'startTime': server.iso(base), 'publishTime': '2026-11-07T12:00:00Z', 'boundary': 'B1', 'nationalDemand': 1}]}
     return {'data': [{'startTime': server.iso(base), 'generation': 8000}]}
-server.get_json = fake_outlook
+server.fetch.get_json = fake_outlook
 try:
     ol.poll()
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 check('latest national demand forecast', ol.demand == [(base, 31000.0)], ol.demand)
 def fake_tsd(url, timeout=30):
     if 'demand' in url:
         return {'data': [{'startTime': server.iso(base + i * 1800), 'publishTime': '2026-11-07T11:00:00Z', 'boundary': 'N', 'nationalDemand': None if i else 30000,
                           'transmissionSystemDemand': 32000 + i} for i in range(4)]}
     return {'data': []}
-server.get_json = fake_tsd
+server.fetch.get_json = fake_tsd
 try:
     ol2 = server.Outlook()
     ol2.poll()
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 check('falls back to transmission demand', ol2.demand_kind == 'transmission' and len(ol2.demand) == 4 and ol2.demand[0][1] == 32000, (ol2.demand_kind, ol2.demand))
 check('wind forecast', ol.wind == [(base, 8000.0)], ol.wind)
 grid.outlook = ol

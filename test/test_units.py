@@ -153,13 +153,13 @@ payload = {'data': [
     {'nationalGridBmUnit': 'ATOM-1', 'bmUnit': 'T_ATOM-1', 'acceptanceNumber': 7, 'timeFrom': server.iso(T - 60),
      'timeTo': server.iso(T + 600), 'levelFrom': 800, 'levelTo': 800, 'amendmentFlag': 'DEL'},
 ]}
-original = server.get_json
-server.get_json = lambda url, timeout=30: payload
+original = server.fetch.get_json
+server.fetch.get_json = lambda url, timeout=30: payload
 try:
     units.boa = {}
     units.update_boalf(T)
 finally:
-    server.get_json = original
+    server.fetch.get_json = original
 check('deleted acceptance removed', ('ATOM-1', 7) not in units.boa, units.boa)
 
 print('units tests:', 'all passed' if not failures else '%d failed' % failures)
