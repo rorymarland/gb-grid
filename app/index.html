@@ -1742,6 +1742,7 @@ table { border-collapse: collapse; width: 100%; }
   function valueAt(series, t) {
     var best = null;
     series.forEach(function (p) { if (p[0] <= t) best = p; });
+    if (!best && series.length && series[0][0] - t <= 3600) best = series[0];  // hourly forecasts start on the hour
     return best ? best[1] : null;
   }
   function render() {
