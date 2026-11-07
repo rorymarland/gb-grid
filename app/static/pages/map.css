@@ -12,42 +12,12 @@
 .stage > svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .side { background: var(--surface); border-left: 1px solid var(--hair); overflow-y: auto; padding: 22px 22px 36px; }
 
-/* Map drawing */
-.land { fill: var(--land); stroke: var(--coast); stroke-width: 0.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.land-near { fill: var(--land-near); stroke: var(--coast-near); stroke-width: 0.7; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.geo-label { fill: var(--muted); font-size: 12px; text-anchor: middle; paint-order: stroke; stroke: var(--land-near); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
-.geo-label.gb { fill: var(--ink-2); font-size: 13px; letter-spacing: 0.04em; stroke: var(--land); opacity: 0.8; }
-.geo-label.sea { font-style: italic; stroke: var(--sea); font-size: 11.5px; }
-.st { stroke: var(--land); stroke-width: 1.25px; fill-opacity: 0.9; }
-.st.sea-st { stroke: var(--sea); }
-.st.idle { fill: var(--land); fill-opacity: 1; stroke-width: 1.5px; opacity: 0.7; }
-.st.using { fill: none; stroke-width: 2px; stroke-dasharray: 3 2; }
-.st.dim { opacity: 0.14; }
-.st.hover, .st.sel { stroke: var(--ink); stroke-width: 2.5px; opacity: 1; }
-.st-label { font-size: 12px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--land); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
-.st-label.on-sea { stroke: var(--sea); }
-.st-label .mw { font-weight: 500; fill: var(--ink-2); }
-.link-base { fill: none; stroke: var(--c-imports); stroke-linecap: round; opacity: 0.3; }
-.link-flow { fill: none; stroke: var(--c-imports); stroke-linecap: round; stroke-dasharray: 0.1 9; animation: flow 1.6s linear infinite; }
-.link-idle { fill: none; stroke: var(--c-imports); stroke-width: 1.5px; stroke-dasharray: 4 4; opacity: 0.45; }
-.link-arrow { fill: var(--c-imports); }
-.link-end { fill: var(--c-imports); stroke: var(--land-near); stroke-width: 1.5px; }
-.link-gb { fill: var(--surface); stroke: var(--c-imports); stroke-width: 2px; }
-.link.hover .link-base { opacity: 0.55; }
-.link-label { font-size: 11.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--sea); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
-.link-label .v { font-weight: 650; fill: var(--ink); }
-@keyframes flow { to { stroke-dashoffset: -18.2; } }
 
 /* Map controls and keys */
 .zoom { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
 .zoom button { width: 34px; height: 34px; border: 0; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; color: var(--ink); display: grid; place-items: center; padding: 0; }
 .zoom button + button { border-top: 1px solid var(--hair); }
 .zoom button:hover { background: var(--wash); }
-.size-key { position: absolute; left: 12px; bottom: 12px; background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 8px 12px 8px 10px; font-size: 12px; color: var(--ink-2); pointer-events: none; }
-.size-key svg { display: block; overflow: visible; }
-.size-key text { fill: var(--ink-2); font-size: 11.5px; }
-.size-key circle { fill: none; stroke: var(--axis); stroke-width: 1.25px; }
-.size-key .line { stroke: var(--axis); stroke-width: 1px; stroke-dasharray: 2 2; }
 .fs-btn { position: absolute; right: 12px; top: 12px; width: 36px; height: 36px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; display: grid; place-items: center; padding: 0; }
 .fs-btn:hover { background-image: linear-gradient(var(--wash), var(--wash)); }
 .fs-btn .fs-off { display: none; }

@@ -1,15 +1,10 @@
 import G from '/static/js/gb.js';
+import { LEVEL_CLASS, LEVEL_NAME, MAP_REGIONS, INSET, levelFor, isDarkFill, regionShapes } from '/static/js/regionmap.js';
 
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num, clamp = G.clamp;
-var LEVEL_CLASS = ['ci-very-low', 'ci-low', 'ci-moderate', 'ci-high', 'ci-very-high'];
-var LEVEL_NAME = ['Very low', 'Low', 'Moderate', 'High', 'Very high'];
 var FUEL_NAME = { biomass: 'Biomass', coal: 'Coal', imports: 'Imports', gas: 'Gas', nuclear: 'Nuclear', other: 'Other', hydro: 'Hydro', solar: 'Solar', wind: 'Wind' };
-var MAP_REGIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 var GB_ID = 18;
-/* Shetland sits in an inset east of Orkney so the map stays a sensible height */
-var SHETLAND_Y = -2330;   /* half-km units: rings starting north of 59.5N */
-var INSET = { dx: 175, dy: 230 };
 
 var state = { geo: null, near: null, data: null, poll: null, index: null, atNow: true, selected: null, hover: null,
   solar: false, playing: false, timer: null, scale: 1, nodes: {}, labels: {}, suns: {} };
@@ -36,11 +31,6 @@ function mixAt(id, i) {
   return out;
 }
 function nameOf(id) { return (D() && D().names[String(id)]) || (id === GB_ID ? 'Great Britain' : 'Region ' + id); }
-function levelFor(value, level) {
-  if (num(level)) return level;
-  if (!num(value)) return null;
-  return value < 40 ? 0 : value < 120 ? 1 : value < 200 ? 2 : value < 280 ? 3 : 4;
-}
 function whenText(i) {
   var t = tAt(i);
   return G.when(t) + (i === D().now ? ' (now)' : t > tAt(D().now) ? ' (forecast)' : '');
@@ -48,45 +38,13 @@ function whenText(i) {
 
 /* ---------- the map ---------- */
 
-/* Bounding box (half-km units) of one "M x y l dx dy ..." subpath */
-function ringBox(part) {
-  var nums = part.match(/-?\d+/g).map(Number);
-  var x = nums[0], y = nums[1], box = [x, y, x, y];
-  for (var k = 2; k + 1 < nums.length; k += 2) {
-    x += nums[k];
-    y += nums[k + 1];
-    box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y);
-    box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], y);
-  }
-  return box;
-}
-function grow(box, other) {
-  return box ? [Math.min(box[0], other[0]), Math.min(box[1], other[1]), Math.max(box[2], other[2]), Math.max(box[3], other[3])] : other.slice();
-}
-
 function buildMap() {
   var svg = byId('rg-svg');
   var main = s('g', { transform: 'scale(0.5)' });
   var inset = s('g', { transform: 'translate(' + (INSET.dx * 2) + ' ' + (INSET.dy * 2) + ')' });
-  var mainBox = null, islandBox = null;
-  var regions = state.geo.regions.map(function (region) {
-    var mainland = '', island = '';
-    region.d.split(/(?=M)/).forEach(function (part) {
-      var box = ringBox(part);
-      if (box[1] < SHETLAND_Y) { island += part; islandBox = grow(islandBox, box); }
-      else { mainland += part; mainBox = grow(mainBox, box); }
-    });
-    return { region: region, mainland: mainland, island: island };
-  });
-  /* View: the mainland plus the moved islands, in km */
-  var view = [mainBox[0] / 2, mainBox[1] / 2, mainBox[2] / 2, mainBox[3] / 2];
-  if (islandBox) {
-    var ib = [islandBox[0] / 2 + INSET.dx - 7, islandBox[1] / 2 + INSET.dy - 7, islandBox[2] / 2 + INSET.dx + 7, islandBox[3] / 2 + INSET.dy + 7];
-    view = [Math.min(view[0], ib[0]), Math.min(view[1], ib[1]), Math.max(view[2], ib[2]), Math.max(view[3], ib[3])];
-    state.insetFrame = ib;
-  }
-  var pad = 12;
-  state.view = [view[0] - pad, view[1] - pad, view[2] - view[0] + 2 * pad, view[3] - view[1] + 2 * pad];
+  var shapes = regionShapes(state.geo), regions = shapes.regions;
+  state.insetFrame = shapes.insetFrame;
+  state.view = shapes.view;
   svg.setAttribute('viewBox', state.view.map(function (v) { return v.toFixed(1); }).join(' '));
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   var near = s('g', { transform: 'scale(0.5)' });
@@ -144,7 +102,6 @@ function measure() {
   state.scale = Math.max(state.view[2] / width, state.view[3] / height);
 }
 
-function isDarkFill(level) { return level === 4 || level === 3 || level === 0; }
 
 function paint() {
   if (!state.data || !state.geo) return;
