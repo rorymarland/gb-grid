@@ -217,6 +217,8 @@
   var themes = ['auto', 'light', 'dark'];
   GB.theme = 'auto';
   try { GB.theme = localStorage.getItem('gb-grid-theme') || 'auto'; } catch (error) { GB.theme = 'auto'; }
+  var urlTheme = location.search.match(/[?&]theme=(light|dark|auto)/);
+  if (urlTheme) GB.theme = urlTheme[1];  /* the Display view and its frames */
   function applyTheme(name) {
     GB.theme = themes.indexOf(name) >= 0 ? name : 'auto';
     if (GB.theme === 'auto') document.documentElement.removeAttribute('data-theme');

@@ -246,3 +246,10 @@ table { border-collapse: collapse; width: 100%; }
 @media (forced-colors: active) {
   .sw { forced-color-adjust: none; }
 }
+
+/* ---------- inside the Display view (?display) ---------- */
+
+html.display .top, html.display .alert-bar, html.display .foot, html.display .page-head .lede { display: none; }
+html.display .page-head { padding: 22px 0 12px; }
+html.display body { overflow: hidden; }
+html.display .tools .tool-btn { display: none; }

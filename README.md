@@ -35,6 +35,15 @@ standard library inside.
 - **History:** the generation mix, carbon intensity and wholesale price since
   2009 (prices since 2018), zoomable down to the half hour, plus records, the
   latest day against a year earlier, and each year's mix.
+- **Display:** a kiosk view for a tablet or spare screen, opened from the
+  Display button in the header. Big type, cycling through right now, the map,
+  regions and balancing. Tap to pause, swipe or use the arrow keys to move on,
+  and it dims to a clock overnight. On an iPad, add it to the home screen for a
+  full-screen app; it keeps the screen awake where the browser allows.
+
+  Options go in the address: `/display?views=now,map,regions,balancing,outages,history`
+  (which views, in order), `every=20` (seconds per view), `night=23-7` (dim
+  hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
 
 ![The map page](docs/map.png)
 

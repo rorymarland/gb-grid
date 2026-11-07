@@ -2950,6 +2950,7 @@ PAGES = [
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('history', '/history', 'History', 'history.html'),
+    ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not a tab
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -2965,8 +2966,10 @@ HEAD_HTML = (
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
     '<meta name="color-scheme" content="light dark">\n'
     '<link rel="stylesheet" href="{{static:base.css}}">\n'
-    "<script>try{var t=localStorage.getItem('gb-grid-theme');if(t==='light'||t==='dark')"
-    "document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>")
+    "<script>try{var t=localStorage.getItem('gb-grid-theme'),m=location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];"
+    "if(t==='light'||t==='dark')"
+    "document.documentElement.setAttribute('data-theme',t)}catch(e){}"
+    "if(/[?&]display(=|&|$)/.test(location.search))document.documentElement.classList.add('display')</script>")
 ELEXON_CREDIT = ('Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> '
                  '(<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" '
                  'rel="noopener">licence</a>).')
@@ -2990,7 +2993,7 @@ CREDITS_SHORT_HTML = (
 def header_html(current):
     tabs = ''.join('<a href="%s"%s%s>%s</a>' % (
         path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
-        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES)
+        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES if key != 'display')
     return (
         '<div class="alert-bar" id="alert-bar" role="region" aria-label="Grid notices" hidden></div>\n'
         '<header class="top">\n  <div class="wrap top-inner">\n'
@@ -2998,7 +3001,8 @@ def header_html(current):
         '    <nav class="nav" aria-label="Pages">' + tabs + '</nav>\n'
         '    <p class="live"><span class="dot" id="live-dot"></span>'
         '<span id="live-text">Connecting to the dashboard server…</span></p>\n'
-        '    <div class="tools"><button class="theme-btn" id="theme-btn" type="button">Theme: auto</button></div>\n'
+        '    <div class="tools"><a class="tool-btn" href="/display" title="A full-screen view for a spare screen or tablet">'
+        'Display</a><button class="theme-btn" id="theme-btn" type="button">Theme: auto</button></div>\n'
         '  </div>\n</header>\n<script src="{{static:base.js}}"></script>')
 
 
