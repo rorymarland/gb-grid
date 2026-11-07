@@ -142,5 +142,33 @@ check('days have the right length', len(data['series']['today']) == server.settl
 check('top payments', data['top'][0]['unit'] == 'GASB-1' and data['top'][0]['paid'] == 9000, data['top'])
 check('periods in a clock-change day', server.settlement_periods(date(2026, 10, 25)) == 50 and server.settlement_periods(date(2026, 3, 29)) == 46)
 
+# ---- outages and margin -----------------------------------------------------
+
+out = server.Outages()
+now = server.time.time()
+margin_rows = [{'startTime': server.iso(now + 3600), 'publishTime': server.iso(now - 600), 'forecastHorizon': 1, 'deratedMargin': 4100.0, 'lossOfLoadProbability': 0.0},
+               {'startTime': server.iso(now + 3600), 'publishTime': server.iso(now - 9000), 'forecastHorizon': 4, 'deratedMargin': 9999.0, 'lossOfLoadProbability': 0.0},
+               {'startTime': server.iso(now + 7200), 'publishTime': server.iso(now - 600), 'forecastHorizon': 2, 'deratedMargin': 900.0, 'lossOfLoadProbability': 0.01}]
+original = server.get_json
+server.get_json = lambda url, timeout=30: {'data': margin_rows}
+try:
+    series = out.fetch_margin(now)
+finally:
+    server.get_json = original
+check('shortest horizon wins', series[0][1] == 4100, series)
+out.margin = series
+grid = server.Grid(server.Store(tempfile.mkdtemp()), server.Status(), outages=out)
+summary = grid.margin_summary()
+check('margin summary', summary['margin'] == 4100 and summary['min'] == 900 and summary['level'] == 'very-tight', summary)
+check('margin levels', server.margin_level(6000)[0] == 'comfortable' and server.margin_level(3000)[0] == 'normal' and server.margin_level(1500)[0] == 'tight')
+out.events = [
+    {'asset': 'I_IEG-FRAN1', 'unit': 'IEG-FRAN1', 'lost': 1500.0, 'normal': 2000.0, 'type': 'Unplanned', 'cause': 'Fault', 'start': now - 86400, 'end': now + 86400, 'fuel': ''},
+    {'asset': 'I_IED-FRAN1', 'unit': 'IED-FRAN1', 'lost': 1500.0, 'normal': 2000.0, 'type': 'Unplanned', 'cause': 'Fault', 'start': now - 86400, 'end': now + 86400, 'fuel': ''},
+    {'asset': 'T_X-1', 'unit': 'X-1', 'lost': 400.0, 'normal': 400.0, 'type': 'Planned', 'cause': '', 'start': now + 86400, 'end': now + 9 * 86400, 'fuel': ''},
+]
+data = grid.outages_payload()
+check('interconnector twins counted once', data['offline'][0]['name'] == 'IFA (France)' and data['offline'][0]['lost'] == 1500 and data['lost_total'] == 1500, data['offline'])
+check('future outages listed separately', len(data['upcoming']) == 1 and data['upcoming'][0]['lost'] == 400, data['upcoming'])
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

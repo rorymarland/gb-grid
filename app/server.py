@@ -92,6 +92,7 @@ POLL = {
     'warnings': env_int('POLL_WARNINGS_SECONDS', 300, 60, 3600),
     'regions': env_int('POLL_REGIONS_SECONDS', 1800, 300, 7200),
     'balancing': env_int('POLL_BALANCING_SECONDS', 300, 120, 3600),
+    'outages': env_int('POLL_OUTAGES_SECONDS', 900, 300, 7200),
 }
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
@@ -474,6 +475,7 @@ SOURCE_LABELS = {
     'warnings': 'Grid notices (Elexon system warnings)',
     'regions': 'Regions (NESO carbon intensity, Sheffield Solar)',
     'balancing': 'Balancing (Elexon cashflows and volumes, NESO constraint costs)',
+    'outages': 'Outages and margin (Elexon REMIT and loss of load forecasts)',
 }
 
 
@@ -1625,6 +1627,107 @@ class Balancing:
 
 
 # --------------------------------------------------------------------------
+# Outages: REMIT notices of unavailable capacity, and the margin forecast
+# --------------------------------------------------------------------------
+
+LINK_NAMES = {'FRAN1': 'IFA (France)', 'IFA2': 'IFA2 (France)', 'ELEC': 'ElecLink (France)', 'NETH': 'BritNed (Netherlands)',
+              'BRIT': 'BritNed (Netherlands)', 'BELG': 'Nemo Link (Belgium)', 'NEMO': 'Nemo Link (Belgium)',
+              'NORW': 'North Sea Link (Norway)', 'NSL': 'North Sea Link (Norway)', 'DENM': 'Viking Link (Denmark)',
+              'VKL': 'Viking Link (Denmark)', 'IRE': 'East West (Ireland)', 'EWIC': 'East West (Ireland)',
+              'MOYL': 'Moyle (Northern Ireland)', 'GREE': 'Greenlink (Ireland)'}
+MARGIN_LEVELS = [(5000, 'comfortable', 'Comfortable'), (2500, 'normal', 'Normal'), (1000, 'tight', 'Tight'),
+                 (float('-inf'), 'very-tight', 'Very tight')]
+
+
+def margin_level(mw):
+    for floor, key, label in MARGIN_LEVELS:
+        if mw >= floor:
+            return key, label
+    return MARGIN_LEVELS[-1][1:]
+
+
+class Outages:
+    """Active outage notices covering now and the next 14 days, and Elexon's
+    loss of load probability and de-rated margin forecast."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.events = []     # current and upcoming REMIT unavailabilities
+        self.margin = []     # [(start, de-rated margin MW, loss of load probability)]
+        self.checked = 0
+        self.version = 0
+
+    def fetch_margin(self, now):
+        payload = get_json(ELEXON + '/forecast/system/loss-of-load?from=%s&to=%s' % (iso_minute(now - 1800), iso_minute(now + 13 * 3600)))
+        items = payload.get('data') if isinstance(payload, dict) else payload
+        best = {}
+        for item in items if isinstance(items, list) else []:
+            try:
+                t = parse_time(item['startTime'])
+                key = (int(item.get('forecastHorizon') or 99), -parse_time(item['publishTime']))
+                margin, lolp = as_float(item.get('deratedMargin')), as_float(item.get('lossOfLoadProbability'))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if margin is not None and (t not in best or key < best[t][0]):
+                best[t] = (key, margin, lolp or 0.0)
+        if not best:
+            raise FetchError('The margin forecast was empty')
+        return [(t, round(v[1]), v[2]) for t, v in sorted(best.items())]
+
+    def fetch_events(self, now):
+        listing = get_json(ELEXON + '/remit/list/by-event?from=%s&to=%s&latestRevisionOnly=true' % (iso_minute(now - 600), iso_minute(now + 14 * 86400)), timeout=90)
+        items = listing.get('data') if isinstance(listing, dict) else listing
+        ids = [item['id'] for item in items if isinstance(item, dict) and 'id' in item] if isinstance(items, list) else []
+        details = []
+        for start in range(0, min(len(ids), 1500), 50):
+            query = '&'.join('messageId=%d' % i for i in ids[start:start + 50])
+            payload = get_json(ELEXON + '/remit?' + query, timeout=90)
+            batch = payload.get('data') if isinstance(payload, dict) else payload
+            details += batch if isinstance(batch, list) else []
+            time.sleep(0.2)
+        latest = {}
+        for d in details:
+            if d.get('messageType') != 'UnavailabilitiesOfElectricityFacilities' or d.get('eventStatus') != 'Active':
+                continue
+            try:
+                start, end = parse_time(d['eventStartTime']), parse_time(d['eventEndTime']) if d.get('eventEndTime') else None
+                lost = float(d.get('unavailableCapacity') or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if lost < 10 or (end is not None and end <= now):
+                continue
+            mrid = d.get('mrid') or str(d.get('id'))
+            if mrid in latest and latest[mrid]['rev'] >= (d.get('revisionNumber') or 0):
+                continue
+            latest[mrid] = {'rev': d.get('revisionNumber') or 0, 'asset': d.get('assetId') or '', 'unit': d.get('affectedUnit') or '',
+                            'lost': lost, 'normal': as_float(d.get('normalCapacity')), 'type': d.get('unavailabilityType') or '',
+                            'cause': (d.get('cause') or '').strip(), 'start': start, 'end': end, 'fuel': d.get('fuelType') or '',
+                            'published': parse_time(d['publishTime']) if d.get('publishTime') else None}
+        return list(latest.values())
+
+    def poll(self):
+        now = time.time()
+        errors = []
+        try:
+            margin = self.fetch_margin(now)
+            with self.lock:
+                self.margin = margin
+        except FetchError as error:
+            errors.append('margin forecast: ' + str(error))
+        try:
+            events = self.fetch_events(now)
+            with self.lock:
+                self.events = events
+                self.checked = now
+        except FetchError as error:
+            errors.append('outage notices: ' + str(error))
+        with self.lock:
+            self.version += 1
+        if errors:
+            raise FetchError('; '.join(errors))
+
+
+# --------------------------------------------------------------------------
 # Grid notices: NESO's system warnings in plain English
 # --------------------------------------------------------------------------
 
@@ -1745,8 +1848,9 @@ def r2(value):
 class Grid:
     """Builds the /api/live and /api/history payloads from the store."""
 
-    def __init__(self, store, status, fleet=None, units=None, balancing=None):
+    def __init__(self, store, status, fleet=None, units=None, balancing=None, outages=None):
         self.store = store
+        self.outages = outages
         self.status = status
         self.fleet = fleet
         self.units = units
@@ -2425,7 +2529,92 @@ class Grid:
             if now <= end + 900:
                 active.append(notice)
         active.sort(key=lambda n: (n['level'] != 'strong', -n['published']))
-        return {'active': active, 'generated': int(now)}
+        return {'active': active, 'margin': self.margin_summary(), 'generated': int(now)}
+
+    def margin_summary(self):
+        if not self.outages:
+            return None
+        with self.outages.lock:
+            series = list(self.outages.margin)
+        now = time.time()
+        series = [row for row in series if row[0] + 1800 > now]
+        if not series:
+            return None
+        first, low = series[0], min(series, key=lambda row: row[1])
+        key, label = margin_level(low[1])
+        return {'t': first[0], 'margin': first[1], 'lolp': first[2], 'min': low[1], 'min_t': low[0],
+                'lolp_max': max(row[2] for row in series), 'level': key, 'label': label,
+                'series': [[t, m, round(p, 4)] for t, m, p in series]}
+
+    # ---- /api/outages -------------------------------------------------------
+
+    def outages_payload(self):
+        key = (self.outages.version if self.outages else 0, self.units.version if self.units else 0, int(time.time() // 60))
+        return self.cached(('outages',), key, self._build_outages)
+
+    def _build_outages(self):
+        now = time.time()
+        with self.outages.lock if self.outages else threading.Lock():
+            events = list(self.outages.events) if self.outages else []
+            checked = self.outages.checked if self.outages else 0
+        snapshot = self.units.snapshot if self.units else None
+        live = (snapshot or {}).get('stations', {})
+        groups = {}
+        for e in events:
+            asset = e['asset'] or e['unit']
+            if asset.startswith('I_'):
+                link = asset.split('-', 1)[-1]
+                name = next((v for k, v in LINK_NAMES.items() if link.upper().startswith(k)), asset[2:])
+                key, sid, cat = 'link:' + name, None, 'imports'
+            else:
+                unit = e['unit'] or short_unit_id(asset)
+                sid, cat, name = self.units.describe(unit, asset) if self.units else (None, 'other', unit)
+                key = 'st:%s' % sid if sid is not None else 'unit:' + unit
+            current = e['start'] <= now
+            g = groups.setdefault((key, current), {'name': name, 'sid': sid, 'cat': cat, 'lost': 0.0, 'normal': 0.0, 'units': set(),
+                                                    'start': e['start'], 'end': e['end'], 'type': set(), 'cause': set()})
+            unit_key = e['unit'] or asset
+            if key.startswith('link:'):
+                if e['lost'] > g['lost']:
+                    g['lost'], g['normal'] = e['lost'], e['normal'] or 0.0  # import and export notices describe one cable
+            elif unit_key not in g['units'] or current:
+                g['lost'] += e['lost']
+                g['normal'] += e['normal'] or 0.0
+            g['units'].add(unit_key)
+            g['start'] = min(g['start'], e['start'])
+            g['end'] = None if (g['end'] is None or e['end'] is None) else max(g['end'], e['end'])
+            if e['type']:
+                g['type'].add(e['type'])
+            if e['cause']:
+                g['cause'].add(e['cause'])
+        offline, upcoming = [], []
+        for (key, current), g in groups.items():
+            item = {'name': g['name'], 'sid': g['sid'], 'cat': g['cat'], 'lost': round(g['lost']), 'normal': round(g['normal']) or None,
+                    'units': len(g['units']), 'start': g['start'], 'end': g['end'], 'planned': g['type'] == {'Planned'},
+                    'cause': '; '.join(sorted(g['cause']))[:120], 'mw': round(live[g['sid']]['mw']) if g['sid'] in live else None}
+            (offline if current else upcoming).append(item)
+        offline.sort(key=lambda i: -i['lost'])
+        upcoming.sort(key=lambda i: i['start'])
+        lost_by_cat = {}
+        for item in offline:
+            lost_by_cat[item['cat']] = lost_by_cat.get(item['cat'], 0) + item['lost']
+        nuclear = []
+        if self.fleet:
+            outage_by_sid = {i['sid']: i for i in offline if i['sid'] is not None}
+            for sid, st in self.fleet.stations.items():
+                if st['cat'] != 'nuclear' or not st.get('capacity'):
+                    continue
+                o = outage_by_sid.get(sid)
+                nuclear.append({'sid': sid, 'name': st['name'], 'capacity': round(st['capacity']),
+                                'mw': round(live[sid]['mw']) if sid in live else None,
+                                'out': o['lost'] if o else 0, 'end': o['end'] if o else None, 'cause': o['cause'] if o else '',
+                                'planned': o['planned'] if o else None})
+            nuclear.sort(key=lambda n: -n['capacity'])
+        notices = [n for n in self.notices(30) if not n['routine']]
+        notices.sort(key=lambda n: -n['published'])
+        return {'margin': self.margin_summary(), 'offline': offline[:60], 'offline_count': len(offline),
+                'upcoming': upcoming[:40], 'lost_by_cat': lost_by_cat, 'lost_total': round(sum(lost_by_cat.values())),
+                'nuclear': nuclear, 'notices': notices[:30], 'checked': int(checked) or None, 'generated': int(now)}
 
 
 # --------------------------------------------------------------------------
@@ -2457,6 +2646,7 @@ PAGES = [
     ('stations', '/stations', 'Stations', 'map.html'),
     ('regions', '/regions', 'Regions', 'regions.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
+    ('outages', '/outages', 'Outages', 'outages.html'),
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -2599,6 +2789,8 @@ class Handler(BaseHTTPRequestHandler):
             elif parts.path == '/regions.json':
                 body, etag = App.regions
                 self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
+            elif parts.path == '/api/outages':
+                self.respond_json(App.grid.outages_payload(), send_body)
             elif parts.path == '/api/balancing':
                 self.respond_json(App.grid.balancing(), send_body)
             elif parts.path == '/api/regions':
@@ -2701,7 +2893,8 @@ def main():
     fleet = Fleet(STATIONS_PATH)
     units = Units(store, fleet)
     balancing = Balancing(store)
-    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing), UI()
+    outages = Outages()
+    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing, outages), UI()
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
@@ -2718,6 +2911,7 @@ def main():
         ('warnings', ingest.poll_warnings),
         ('regions', ingest.poll_regions),
         ('balancing', balancing.poll),
+        ('outages', outages.poll),
     ]
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))

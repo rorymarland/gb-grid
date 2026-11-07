@@ -274,6 +274,26 @@ def constraint_records():
     return out
 
 
+def mock_remit():
+    now = _clock.time()
+    day = 86400
+    rows = [('T_HEYM28', 'HEYM28', 'Nuclear', 'Planned', 660, 660, now - 60 * day, now + 17 * day, 'OPR'),
+            ('T_TORN-1', 'TORN-1', 'Nuclear', 'Unplanned', 300, 640, now - 2 * day, now + 4 * day, 'Reactor trip'),
+            ('I_IEG-FRAN1', 'IEG-FRAN1', None, 'Unplanned', 1500, 2000, now - 12 * day, now + 6 * day, 'Under Investigation'),
+            ('I_IED-FRAN1', 'IED-FRAN1', None, 'Unplanned', 1500, 2000, now - 12 * day, now + 6 * day, 'Under Investigation'),
+            ('T_DIDCB5', 'DIDCB5', 'Fossil Gas', 'Planned', 780, 780, now - 5 * day, now + 20 * day, 'Major overhaul'),
+            ('T_PEMB-21', 'PEMB-21', 'Fossil Gas', 'Unplanned', 460, 460, now - 3600, now + 2 * day, 'Boiler tube leak'),
+            ('T_DRAXX-4', 'DRAXX-4', 'Biomass', 'Planned', 645, 645, now + 3 * day, now + 30 * day, 'Statutory outage'),
+            ('T_SIZB-1', 'SIZB-1', 'Nuclear', 'Planned', 600, 600, now + 9 * day, now + 40 * day, 'Refuelling')]
+    out = []
+    for asset, unit, fuel, kind, lost, normal, start, end, cause in rows:
+        out.append({'messageType': 'UnavailabilitiesOfElectricityFacilities', 'eventStatus': 'Active', 'assetId': asset,
+                    'affectedUnit': unit, 'fuelType': fuel, 'unavailabilityType': kind, 'unavailableCapacity': float(lost),
+                    'normalCapacity': float(normal), 'availableCapacity': float(normal - lost), 'cause': cause,
+                    'eventStartTime': iso(start), 'eventEndTime': iso(end), 'publishTime': iso(now - 5 * day)})
+    return out
+
+
 def mock_warnings(start, end):
     """System warnings in Elexon's shape: a daily SO-SO trade notice, plus an
     Electricity Margin Notice (or its cancellation) when MODE['warn'] asks."""
@@ -499,6 +519,26 @@ class Handler(BaseHTTPRequestHandler):
             records = constraint_records()
             records = records[:120] if q['resource_id'] == 'cb-2026' else records[120:]
             return self.send(200, {'success': True, 'result': {'records': records, 'total': len(records)}})
+        if path == '/bmrs/api/v1/forecast/system/loss-of-load':
+            start, end = parse(q['from']), parse(q['to'])
+            rows = []
+            t = start - start % 1800
+            while t <= end:
+                for horizon in (1, 2, 4, 8, 12):
+                    publish = t - horizon * 3600
+                    if publish <= _clock.time():
+                        margin = 8000 + 4000 * math.sin(t / 20000.0) - 300 * horizon
+                        rows.append({'publishTime': iso(publish), 'startTime': iso(t), 'forecastHorizon': horizon,
+                                     'lossOfLoadProbability': 0.0 if margin > 3000 else 0.002, 'deratedMargin': round(margin, 3)})
+                t += 1800
+            return self.send(200, {'data': rows})
+        if path == '/bmrs/api/v1/remit/list/by-event':
+            return self.send(200, {'data': [{'id': 900000 + k, 'mrid': 'MOCK-%d' % k, 'revisionNumber': 1} for k in range(len(mock_remit()))]})
+        if path == '/bmrs/api/v1/remit':
+            ids = [int(v) for v in urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('messageId', [])]
+            events = mock_remit()
+            return self.send(200, {'data': [dict(events[i - 900000], id=i, mrid='MOCK-%d' % (i - 900000), revisionNumber=1)
+                                            for i in ids if 0 <= i - 900000 < len(events)]})
         if path == '/bmrs/api/v1/system/warnings':
             return self.send(200, {'data': mock_warnings(parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo']))})
         if path.startswith('/pvlive/api/v4/pes/'):

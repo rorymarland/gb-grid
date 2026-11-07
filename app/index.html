@@ -26,6 +26,12 @@
 .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; display: inline-block; }
 
 /* Key figures */
+.margin-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -12px 0 26px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; text-decoration: none; color: var(--ink-2); font-size: 14px; }
+.margin-strip:hover { border-color: var(--axis); }
+.margin-strip b { color: var(--ink); font-weight: 650; }
+.margin-strip .lvl { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.margin-strip .more { margin-left: auto; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.lvl.comfortable { background: var(--ci-very-low); } .lvl.normal { background: var(--ci-low); } .lvl.tight { background: var(--warn); } .lvl.very-tight { background: var(--bad); }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--hair); border-radius: 18px; margin: 0 0 26px; }
 .kpi { padding: 18px 20px 16px; border-left: 1px solid var(--hair); min-width: 0; display: flex; flex-direction: column; }
 .kpi:first-child { border-left: 0; }
@@ -242,6 +248,8 @@ table { border-collapse: collapse; width: 100%; }
       <p class="spark-cap">Last hour</p>
     </div>
   </section>
+
+  <a class="margin-strip" id="margin-strip" href="/outages" hidden></a>
 
   <section class="panel" aria-labelledby="forecast-title">
     <div class="panel-head">
@@ -1644,6 +1652,16 @@ table { border-collapse: collapse; width: 100%; }
   }
 
   window.addEventListener('gb:theme', renderAll);
+  /* Spare capacity, from the same poll as the grid notice banner */
+  window.addEventListener('gb:alerts', function (e) {
+    var m = e.detail && e.detail.margin, strip = byId('margin-strip');
+    if (!m) { strip.hidden = true; return; }
+    clear(strip);
+    strip.appendChild(h('i', { cls: 'lvl ' + m.level }));
+    strip.appendChild(h('span', null, ['Spare capacity: ', h('b', { text: GB.gw(m.margin) + ' GW' }), ' now, lowest ' + GB.gw(m.min) + ' GW at ' + GB.hm(m.min_t) + '. ' + m.label + ' over the next 12 hours.']));
+    strip.appendChild(h('span', { cls: 'more', text: 'Outages and margin' }));
+    strip.hidden = false;
+  });
 
   document.addEventListener('click', function (event) {
     var button = event.target.closest ? event.target.closest('button.info') : null;

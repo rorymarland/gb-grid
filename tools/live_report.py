@@ -108,6 +108,18 @@ def main():
     except Exception as error:
         print('== Balancing unavailable:', error)
 
+    try:
+        o = get(base, '/api/outages')
+        m = o.get('margin') or {}
+        print('== Margin: now %s MW, lowest %s MW, %s' % (m.get('margin'), m.get('min'), m.get('label')))
+        print('== Offline: %s MW in %d groups' % (o['lost_total'], o['offline_count']))
+        for item in o['offline'][:12]:
+            print('    %-30s %-8s %6s MW of %s, %s, back %s, %s' % (item['name'][:30], item['cat'], item['lost'], item['normal'], 'planned' if item['planned'] else 'unplanned', item['end'], item['cause'][:40]))
+        print('  nuclear:', ', '.join('%s %s/%s out %s' % (n['name'], n['mw'], n['capacity'], n['out']) for n in o['nuclear']))
+        print('  upcoming:', len(o['upcoming']), '| notices:', len(o['notices']))
+    except Exception as error:
+        print('== Outages unavailable:', error)
+
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))
     return 0
