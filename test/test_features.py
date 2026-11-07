@@ -175,7 +175,7 @@ check('future outages listed separately', len(data['upcoming']) == 1 and data['u
 store = server.Store(tempfile.mkdtemp())
 lh = server.LongHistory(store)
 lh.resource = 'hgm'
-start = utc(2024, 9, 25)
+start = server.floor_to(server.time.time(), 86400) - 400 * 86400
 def mix_record(t, ci, coal=0.0, wind=5000.0):
     return {'DATETIME': datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'), 'GAS': 10000.0, 'COAL': coal,
             'NUCLEAR': 5000.0, 'WIND': wind, 'WIND_EMB': 1000.0, 'HYDRO': 300, 'IMPORTS': 2000.0, 'BIOMASS': 2000.0,
@@ -215,7 +215,7 @@ check('cleanest half hour', rec['cleanest-hh']['value'] == 150, rec.get('cleanes
 check('wind peak', rec['wind-peak']['value'] == 21000 and rec['wind-peak']['t'] == start + 300 * 1800, rec.get('wind-peak'))
 check('last coal', summary['last_coal'] == start + 99 * 1800, summary['last_coal'])
 check('year apart', summary['compare']['now'] and summary['compare']['then'] and summary['compare']['now']['t'] - summary['compare']['then']['t'] == 364 * 86400, summary['compare'])
-check('years', [y['year'] for y in summary['years']] == [2024, 2025] and abs(sum(summary['years'][0]['mix'].values()) - 1) < 0.01, summary['years'])
+check('years', len(summary['years']) >= 2 and abs(sum(summary['years'][0]['mix'].values()) - 1) < 0.01, summary['years'])
 
 ol = server.Outlook()
 now = server.time.time()

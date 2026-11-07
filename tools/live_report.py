@@ -49,7 +49,7 @@ def main():
             ready = (any(get(base, '/api/regions').get('ci', {}).values())
                      and get(base, '/api/balancing')['today']['periods'] > 0
                      and get(base, '/api/outages').get('checked')
-                     and get(base, '/api/longterm/summary').get('ready'))
+                     and (get(base, '/api/longterm/summary').get('extent') or {}).get('rows'))
             if ready:
                 break
         except Exception as error:
@@ -136,7 +136,7 @@ def main():
         lt = get(base, '/api/longterm/summary')
         e = lt.get('extent') or {}
         fmt = lambda t: time.strftime('%Y-%m-%d %H:%M', time.gmtime(t)) if t else None
-        print('== Long-term history: %s rows, %s to %s; prices %s to %s' % (e.get('rows'), fmt(e.get('first')), fmt(e.get('last')), fmt(e.get('price_first')), fmt(e.get('price_last'))))
+        print('== Long-term history: %s rows, %s to %s (%s%%, complete %s); prices %s to %s' % (e.get('rows'), fmt(e.get('first')), fmt(e.get('last')), round(100 * (e.get('progress') or 0)), e.get('complete'), fmt(e.get('price_first')), fmt(e.get('price_last'))))
         for r in lt.get('records', []):
             print('    %-28s %10s %-6s %s%s' % (r['title'], r['value'], r['unit'], fmt(r['t']), ' (recent)' if r['recent'] else ''))
         print('  last coal:', fmt(lt.get('last_coal')))

@@ -94,6 +94,7 @@ POLL = {
     'balancing': env_int('POLL_BALANCING_SECONDS', 300, 120, 3600),
     'outages': env_int('POLL_OUTAGES_SECONDS', 900, 300, 7200),
     'longhistory': env_int('POLL_LONG_HISTORY_SECONDS', 600, 300, 86400),
+    'longprices': env_int('POLL_LONG_HISTORY_SECONDS', 600, 300, 86400),
     'outlook': env_int('POLL_OUTLOOK_SECONDS', 1800, 300, 7200),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
@@ -486,7 +487,8 @@ SOURCE_LABELS = {
     'regions': 'Regions (NESO carbon intensity, Sheffield Solar)',
     'balancing': 'Balancing (Elexon cashflows and volumes, NESO constraint costs)',
     'outages': 'Outages and margin (Elexon REMIT and loss of load forecasts)',
-    'longhistory': 'Long-term history (NESO generation mix since 2009, Elexon prices since 2018)',
+    'longhistory': 'Long-term history (NESO historic generation mix)',
+    'longprices': 'Long-term prices (Elexon market index since 2018)',
     'outlook': 'Outlook (Elexon demand and wind forecasts)',
 }
 
@@ -1754,6 +1756,7 @@ class Outages:
 LH_COLUMNS = ['gas', 'coal', 'nuclear', 'wind', 'wind_emb', 'hydro', 'imports', 'biomass', 'other', 'solar', 'storage', 'generation', 'ci']
 LH_SOURCE = ['GAS', 'COAL', 'NUCLEAR', 'WIND', 'WIND_EMB', 'HYDRO', 'IMPORTS', 'BIOMASS', 'OTHER', 'SOLAR', 'STORAGE', 'GENERATION', 'CARBON_INTENSITY']
 LH_RESOURCE = 'f93d1835-75bc-43e5-84ad-12472b180a98'  # NESO "Historic generation mix", looked up by name first
+LH_START = int(datetime(2009, 1, 1, tzinfo=timezone.utc).timestamp())
 PRICE_HISTORY_START = int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp())
 
 
@@ -1765,6 +1768,7 @@ class LongHistory:
         self.store = store
         self.resource = None
         self.mix_checked = 0
+        self.price_span = 7 * 86400  # falls back to a day at a time if Elexon refuses a week
         self.version = 0
 
     def find_resource(self):
@@ -1777,7 +1781,7 @@ class LongHistory:
             log.debug('[longhistory] dataset lookup failed: %s', error)
         return LH_RESOURCE
 
-    def fetch_mix(self, limit=20000):
+    def fetch_mix(self, limit=10000):
         if not self.resource:
             self.resource = self.find_resource()
         last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
@@ -1800,10 +1804,17 @@ class LongHistory:
     def fetch_prices(self):
         last = self.store.scalar('SELECT MAX(t) FROM lp') or (PRICE_HISTORY_START - 1800)
         start = last + 1800
-        end = min(start + 7 * 86400, time.time())
+        end = min(start + self.price_span, time.time())
         if end - start < 3600:
             return 0
-        payload = get_json(ELEXON + '/balancing/pricing/market-index?from=%s&to=%s&dataProviders=APXMIDP' % (iso_minute(start), iso_minute(end)), timeout=90)
+        url = ELEXON + '/balancing/pricing/market-index?from=%s&to=%s&dataProviders=APXMIDP'
+        try:
+            payload = get_json(url % (iso_minute(start), iso_minute(end - 60)), timeout=90)
+        except FetchError as error:
+            if 'HTTP 400' not in str(error) or self.price_span == 86400:
+                raise
+            self.price_span = 86400
+            return self.fetch_prices()
         items = payload.get('data') if isinstance(payload, dict) else payload
         rows = []
         for item in items if isinstance(items, list) else []:
@@ -1820,32 +1831,31 @@ class LongHistory:
         self.store.write('INSERT OR REPLACE INTO lp (t, price) VALUES (?, ?)', rows, history=False)
         return len(rows)
 
-    def poll(self):
+    def poll_mix(self):
+        """Page through the record (10,000 half hours per query) until caught up,
+        spending at most five minutes per poll; then check every six hours."""
         now = time.time()
-        if not LONG_HISTORY:
-            return
-        errors = []
         last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
-        behind = now - last > 3 * 86400
-        if behind or now - self.mix_checked > 6 * 3600:
-            try:
-                for _ in range(20 if behind else 1):
-                    if self.fetch_mix() < 20000:
-                        break
-                    time.sleep(1)
-                self.mix_checked = now
-            except FetchError as error:
-                errors.append('generation mix: ' + str(error))
-        try:
-            for _ in range(60):
-                if not self.fetch_prices():
-                    break
-                time.sleep(0.3)
-        except FetchError as error:
-            errors.append('prices: ' + str(error))
-        self.version += 1
-        if errors:
-            raise FetchError('; '.join(errors))
+        if now - last < 3 * 86400 and now - self.mix_checked < 6 * 3600:
+            return
+        while time.time() - now < 300:
+            got = self.fetch_mix()
+            self.version += 1
+            if not got:
+                break
+            time.sleep(1)
+        self.mix_checked = now
+
+    def poll_prices(self):
+        """A week of prices per request, one request at a time, until caught up."""
+        now = time.time()
+        while time.time() - now < 240:
+            got = self.fetch_prices()
+            self.version += 1
+            if not got:
+                break
+            time.sleep(0.5)
+
 
 
 class Outlook:
@@ -2718,11 +2728,14 @@ class Grid:
     def longterm_extent(self):
         first, last, count = self.store.query('SELECT MIN(t), MAX(t), COUNT(*) FROM lh')[0]
         price_first, price_last = self.store.query('SELECT MIN(t), MAX(t) FROM lp WHERE price IS NOT NULL')[0]
-        return {'first': first, 'last': last, 'rows': count, 'price_first': price_first, 'price_last': price_last}
+        complete = bool(last and last > time.time() - 10 * 86400)
+        progress = 0.0 if not last else max(0.0, min(1.0, (last - LH_START) / max(1, time.time() - 2 * 86400 - LH_START)))
+        return {'first': first, 'last': last, 'rows': count, 'price_first': price_first, 'price_last': price_last,
+                'complete': complete, 'progress': round(progress, 3)}
 
     def longterm(self, start=None, end=None):
         extent = self.longterm_extent()
-        if not extent['rows']:
+        if not extent['complete']:
             return {'ready': False, 'enabled': LONG_HISTORY, 'extent': extent}
         end = min(int(end or extent['last'] + 1800), extent['last'] + 1800)
         start = max(int(start or end - 365 * 86400), extent['first'])
@@ -2760,7 +2773,7 @@ class Grid:
 
     def longterm_summary(self):
         extent = self.longterm_extent()
-        if not extent['rows']:
+        if not extent['complete']:
             return {'ready': False, 'enabled': LONG_HISTORY, 'extent': extent}
         return self.cached(('longterm-summary',), (extent['last'], extent['price_last'], int(time.time() // 3600)),
                            lambda: self._build_summary(extent))
@@ -3233,7 +3246,7 @@ def main():
         ('outlook', outlook.poll),
     ]
     if LONG_HISTORY:
-        jobs.append(('longhistory', longhistory.poll))
+        jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))
     for index, (name, function) in enumerate(jobs):
