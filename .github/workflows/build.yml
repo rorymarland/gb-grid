@@ -30,9 +30,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all history and tags, for git describe
 
-      - name: Image name (registry names must be lower case)
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Image name and version
+        run: |
+          # Registry names must be lower case
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          # 1.2.3 for a release, 1.2.3-4-gabc1234 for a later commit, or just
+          # the commit before the first release. Reported by /api/status.
+          version=$(git describe --tags --always --match 'v[0-9]*')
+          echo "VERSION=${version#v}" >> "$GITHUB_ENV"
 
       - name: Image tags
         id: meta
@@ -55,7 +63,7 @@ jobs:
           context: .
           load: true
           tags: gb-grid:test
-          build-args: VERSION=${{ steps.meta.outputs.version }}
+          build-args: VERSION=${{ env.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -89,9 +97,27 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ steps.meta.outputs.version }}
+          build-args: VERSION=${{ env.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # GitHub creates new packages as private, which a fork's first run will
+      # too. Warn (without failing) if the image can't be pulled anonymously.
+      - name: Check the image can be pulled without logging in
+        if: github.event_name != 'pull_request'
+        env:
+          TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          repo="${IMAGE#ghcr.io/}"
+          token=$(curl -sS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r '.token // empty' || true)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/${repo}/manifests/${TAG}" || true)
+          if [ "$code" = 200 ]; then
+            echo "Public: anyone can pull ${IMAGE}:${TAG}"
+          else
+            echo "::warning title=Image is private::${IMAGE} can't be pulled without logging in (HTTP ${code}). Make it public under the package's settings, Danger Zone, Change visibility."
+          fi
 
       # Informational only: runs the image against the real APIs for a few
       # minutes and prints what it gets, including units it can't place.
