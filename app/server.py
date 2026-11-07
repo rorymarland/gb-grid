@@ -277,7 +277,10 @@ def http_get(url, accept='application/json', timeout=30, extra_headers=None):
             return 304, b'', error.headers
         detail = ''
         try:
-            detail = error.read(240).decode('utf-8', 'replace').strip().replace('\n', ' ')
+            raw = error.read(65536)
+            if (error.headers.get('Content-Encoding') or '').lower() == 'gzip' or raw[:2] == b'\x1f\x8b':
+                raw = gzip.decompress(raw)
+            detail = raw[:300].decode('utf-8', 'replace').strip().replace('\n', ' ')
         except Exception:
             pass
         raise FetchError('HTTP ' + str(error.code) + ' from ' + host + (': ' + detail if detail else ''))
@@ -1684,9 +1687,17 @@ class Outages:
         return [(t, round(v[1]), v[2]) for t, v in sorted(best.items())]
 
     def fetch_events(self, now):
-        listing = get_json(ELEXON + '/remit/list/by-event?from=%s&to=%s&latestRevisionOnly=true' % (iso_minute(now - 600), iso_minute(now + 14 * 86400)), timeout=90)
-        items = listing.get('data') if isinstance(listing, dict) else listing
-        ids = [item['id'] for item in items if isinstance(item, dict) and 'id' in item] if isinstance(items, list) else []
+        # One day per request: Elexon refuses long ranges on this endpoint
+        ids, seen = [], set()
+        for day in range(15):
+            start = now - 600 + day * 86400
+            listing = get_json(ELEXON + '/remit/list/by-event?from=%s&to=%s&latestRevisionOnly=true' % (iso_minute(start), iso_minute(start + 86400)), timeout=90)
+            items = listing.get('data') if isinstance(listing, dict) else listing
+            for item in items if isinstance(items, list) else []:
+                if isinstance(item, dict) and 'id' in item and item['id'] not in seen:
+                    seen.add(item['id'])
+                    ids.append(item['id'])
+            time.sleep(0.2)
         details = []
         for start in range(0, min(len(ids), 1500), 50):
             query = '&'.join('messageId=%d' % i for i in ids[start:start + 50])
