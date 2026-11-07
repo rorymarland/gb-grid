@@ -641,7 +641,9 @@ class Handler(BaseHTTPRequestHandler):
             end = min(start + int(limit.group(1)) * 1800, int(_clock.time()) - 2 * 86400)
             end -= end % 1800
             return self.send(200, {'success': True, 'result': {'records': [history_row(t) for t in range(start, end, 1800)]}})
-        if path == '/bmrs/api/v1/forecast/demand/day-ahead/latest':
+        if path in ('/bmrs/api/v1/forecast/demand/day-ahead/latest', '/bmrs/api/v1/forecast/demand/day-ahead'):
+            if 'from' not in q:
+                q['from'], q['to'] = iso_min(_clock.time() - _clock.time() % 1800), iso_min(_clock.time() + 18 * 3600)
             start, end = parse(q['from']), parse(q['to'])
             rows = []
             for t in range(start - start % 1800, end, 1800):

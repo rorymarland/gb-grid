@@ -152,7 +152,7 @@ def main():
 
     try:
         ol = get(base, '/api/outlook')
-        print('== Outlook: ' + ', '.join('%s %d points (%s..%s)' % (k, len(ol[k]), ol[k][0][1] if ol[k] else '-', max(p[1] for p in ol[k]) if ol[k] else '-') for k in ('demand', 'wind', 'solar', 'carbon')))
+        print('== Outlook: ' + ', '.join('%s %d points (%s..%s)' % (k, len(ol[k]), ol[k][0][1] if ol[k] else '-', max(p[1] for p in ol[k]) if ol[k] else '-') for k in ('demand', 'wind', 'solar', 'carbon')) + ', raw %s' % ol.get('raw'))
     except Exception as error:
         print('== Outlook unavailable:', error)
 

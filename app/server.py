@@ -1833,12 +1833,12 @@ class LongHistory:
 
     def poll_mix(self):
         """Page through the record (10,000 half hours per query) until caught up,
-        spending at most five minutes per poll; then check every six hours."""
+        for up to an hour per poll; then check every six hours."""
         now = time.time()
         last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
         if now - last < 3 * 86400 and now - self.mix_checked < 6 * 3600:
             return
-        while time.time() - now < 300:
+        while time.time() - now < 3600:
             got = self.fetch_mix()
             self.version += 1
             if not got:
@@ -1849,7 +1849,7 @@ class LongHistory:
     def poll_prices(self):
         """A week of prices per request, one request at a time, until caught up."""
         now = time.time()
-        while time.time() - now < 240:
+        while time.time() - now < 3600:
             got = self.fetch_prices()
             self.version += 1
             if not got:
@@ -1862,19 +1862,26 @@ class Outlook:
     """Elexon's national demand and transmission wind forecasts."""
 
     def __init__(self):
-        self.demand, self.wind, self.version = [], [], 0
+        self.demand, self.wind, self.version, self.raw = [], [], 0, {}
 
     def poll(self):
         now = time.time()
         window = 'from=%s&to=%s' % (iso_minute(floor_to(now, 1800)), iso_minute(now + 49 * 3600))
         errors = []
         try:
-            payload = get_json(ELEXON + '/forecast/demand/day-ahead/latest?' + window)
-            best = {}
-            for item in payload.get('data') or []:
-                t, v = parse_time(item['startTime']), as_float(item.get('nationalDemand'))
-                if v is not None and item.get('boundary', 'N') == 'N' and (t not in best or item['publishTime'] > best[t][0]):
-                    best[t] = (item['publishTime'], v)
+            # The current day-ahead forecast, filled out with the latest forecast for each later half hour
+            best, raw = {}, []
+            for url in ('/forecast/demand/day-ahead/latest?boundary=N&' + window, '/forecast/demand/day-ahead?boundary=N'):
+                payload = get_json(ELEXON + url)
+                items = payload.get('data') if isinstance(payload, dict) else payload
+                items = items if isinstance(items, list) else []
+                raw.append(len(items))
+                for item in items:
+                    t, v = parse_time(item['startTime']), as_float(item.get('nationalDemand'))
+                    published = item.get('publishTime') or ''
+                    if v is not None and item.get('boundary', 'N') == 'N' and (t not in best or published > best[t][0]):
+                        best[t] = (published, v)
+            self.raw['demand'] = raw
             self.demand = [(t, best[t][1]) for t in sorted(best)]
         except (FetchError, KeyError, ValueError) as error:
             errors.append('demand: %s' % error)
@@ -2859,6 +2866,7 @@ class Grid:
             'wind': clip(outlook.wind if outlook else []),
             'solar': clip(solar),
             'carbon': clip(carbon),
+            'raw': outlook.raw if outlook else {},
         }
 
     # ---- /api/outages -------------------------------------------------------
