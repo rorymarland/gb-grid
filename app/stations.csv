@@ -111,7 +111,7 @@ id,name,fuel,lat,lon,nation,offshore,capacity_mw,units,unit_prefixes,name_patter
 10178,Corriegarth Wind Farm,WIND,57.1901,-4.3596,Scotland,0,69,CGTHW-1,,
 10179,Corriemoillie Wind Farm,WIND,57.6942,-4.8385,Scotland,0,48,CRMLW-1,,
 10180,Cour Wind Farm,WIND,55.6807,-5.4849,Scotland,0,41,COUWW-1,,
-10181,Crystal Rig Wind Farm,WIND,55.8938,-2.3950,Scotland,0,152,CRYRW-2 CRYRW-3,,
+10181,Crystal Rig Wind Farm,WIND,55.8938,-2.3950,Scotland,0,152,CRYRW-2 CRYRW-3,CRYRW-,
 10183,Dalswinton Wind Farm,WIND,55.1837,-3.6628,Scotland,0,60,DALSW-1,,
 10184,Dersalloch Wind Farm,WIND,55.3113,-4.4842,Scotland,0,69,DRSLW-1,,
 10185,Dudgeon,WIND,53.2490,1.3900,England,1,402,DDGNO-1 DDGNO-2 DDGNO-3 DDGNO-4,,
@@ -225,3 +225,23 @@ id,name,fuel,lat,lon,nation,offshore,capacity_mw,units,unit_prefixes,name_patter
 20024,Blackhillock storage,BATTERY,57.5300,-2.9400,Scotland,0,200,,,blackhillock
 20025,Capenhurst storage,BATTERY,53.2600,-2.9500,England,0,100,,,capenhurst
 20026,Kilmarnock South storage,BATTERY,55.5800,-4.4500,Scotland,0,200,,,kilmarnock south
+20030,Teesside Renewable Energy Plant,BIOMASS,54.5880,-1.1630,England,0,299,,TSREP-,teesrep|teesside renewable
+20031,Wilton International,BIOMASS,54.5740,-1.1040,England,0,,,WILCT-,wilton site
+20032,Cleve Hill Solar Park,SOLAR,51.3300,0.9400,England,0,373,,CLVHS-,cleve hill
+20033,Little Raith storage,BATTERY,56.1040,-3.3300,Scotland,0,,,LITRB-,little raith bess
+20034,Wishaw storage,BATTERY,55.7700,-3.9200,Scotland,0,,,WISHB-,wishaw bess
+20035,Jamesfield storage,BATTERY,56.3300,-3.2800,Scotland,0,,,JAMBB-,jamesfield
+20036,Iron Acton storage,BATTERY,51.5560,-2.4780,England,0,,,IRNAB-,iron acton
+20037,Larks Green Solar,SOLAR,51.5450,-2.4700,England,0,,,LARKS-,larks green solar
+20038,Larks Green storage,BATTERY,51.5430,-2.4660,England,0,,,LARKB-,larks green battery
+20039,Neilston storage,BATTERY,55.7850,-4.4300,Scotland,0,,,NLSTB-,neilston battery
+20040,Coventry storage,BATTERY,52.3900,-1.4800,England,0,,,COVNB-,pivot power coventry
+20041,Sundon storage,BATTERY,51.9300,-0.4880,England,0,,,SUNDB-,sundon bess
+20042,Warley Green Solar,SOLAR,51.5550,0.3600,England,0,,,BLPFS-,warley green|bulphan fen
+20043,Tye Lane Solar,SOLAR,52.0700,1.0600,England,0,,,TYLNS-,tye lane solar
+20044,Tye Lane storage,BATTERY,52.0680,1.0640,England,0,,,TYLNB-,tye lane bess
+20045,Sutton Bridge Solar Farm,SOLAR,52.7700,0.1900,England,0,,,SUTBS-,sutton bridge solar
+20046,Tebworth Solar,SOLAR,51.9350,-0.5650,England,0,,,TEBWS-,tebworth
+20047,Wolverhampton West storage,BATTERY,52.6000,-2.1700,England,0,,,WOLVB-,wolverhampton west
+20048,North Kyle Wind Farm,WIND,55.3650,-4.4200,Scotland,0,,,NOKYW-,north kyle
+20049,Greengairs East Wind Farm,WIND,55.9050,-3.9600,Scotland,0,,,GRGRW-,greengairs

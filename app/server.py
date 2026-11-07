@@ -857,8 +857,25 @@ class Ingest:
 UNIT_CATEGORY = {
     'CCGT': 'gas', 'OCGT': 'gas', 'NUCLEAR': 'nuclear', 'WIND': 'wind', 'NPSHYD': 'hydro',
     'BIOMASS': 'biomass', 'PS': 'storage', 'BATTERY': 'storage', 'BESS': 'storage',
-    'COAL': 'other', 'OIL': 'other', 'OTHER': 'other',
+    'COAL': 'other', 'OIL': 'other', 'OTHER': 'other', 'SOLAR': 'solar',
 }
+# Elexon files batteries and directly connected solar farms under OTHER, so
+# their names decide how they're shown.
+NAME_CATEGORY = [(re.compile(r'\b(bess|batter(y|ies)|storage)\b', re.I), 'storage'),
+                 (re.compile(r'\b(solar|pv|photovoltaic)\b', re.I), 'solar')]
+
+
+def unit_category(fuel, station, ref):
+    category = UNIT_CATEGORY.get(fuel, 'other')
+    if fuel not in ('OTHER', ''):
+        return category
+    if station and station['cat'] in ('solar', 'storage'):
+        return station['cat']
+    text = ' '.join(part for part in ((ref or {}).get('n'), (ref or {}).get('p')) if part)
+    for pattern, named in NAME_CATEGORY:
+        if pattern.search(text):
+            return named
+    return category
 STORAGE_FUELS = ('PS', 'BATTERY', 'BESS')
 CATEGORY_ORDER = ['wind', 'solar', 'nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other']
 CATEGORY_LABELS = {
@@ -1226,7 +1243,7 @@ class Units:
         categories = {cat: {'mapped': 0.0, 'unplaced': 0.0, 'estimated': 0.0} for cat in CATEGORY_ORDER}
         for unit, elexon, sid, fuel, level, source, ref in rows:
             mw = level * scale.get(fuel, 1.0) if level > 0 else level
-            cat = UNIT_CATEGORY[fuel]
+            cat = unit_category(fuel, self.fleet.stations.get(sid), ref)
             if level > 0:
                 categories[cat]['estimated'] += level
             if sid is not None:
@@ -1774,7 +1791,7 @@ class Grid:
             return payload
         for sid, st in sorted(snapshot['stations'].items(), key=lambda item: -abs(item[1]['mw'])):
             station = self.fleet.stations[sid]
-            capacity = st['ref_cap'] or station['capacity']
+            capacity = station['capacity'] or st['ref_cap']
             payload['stations'].append({
                 'id': sid, 'n': station['name'], 'c': station['cat'], 'x': station['x'], 'y': station['y'],
                 'na': station['nation'], 'off': 1 if station['offshore'] else 0,

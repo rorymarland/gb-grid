@@ -1418,8 +1418,10 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
       var mapped = Math.min(total, Math.max(0, c.mapped || 0));
       var rest = Math.max(0, total - mapped);
       var note;
-      if (key === 'solar') note = 'Rooftops and solar farms everywhere, so not drawn as stations.';
-      else {
+      if (key === 'solar') {
+        note = c.stations ? 'Mostly rooftops and small farms; only the ' + plural(c.stations, 'large farm', 'large farms') + ' on the main grid are drawn.'
+          : 'Mostly rooftops and small farms, which aren’t drawn individually.';
+      } else {
         var parts = [];
         parts.push(c.stations ? 'From ' + plural(c.stations, 'station', 'stations') + ' on the map' : 'No stations generating');
         if (key === 'wind' && c.embedded >= 50) parts.push(gw(c.embedded) + ' GW from small wind farms not drawn');
@@ -1431,7 +1433,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
         type: 'button', cls: 'fuel-btn', 'aria-pressed': String(shown),
         'aria-label': NAMES[key] + ', ' + gw(total) + ' gigawatts. ' + (shown ? 'Shown on the map; select to hide.' : 'Hidden; select to show.'),
         onclick: function () {
-          if (key === 'solar') return;
           if (state.hidden[key]) delete state.hidden[key]; else state.hidden[key] = true;
           savePrefs();
           signatures.fuels = null;
@@ -1439,7 +1440,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
           refreshStations();
           requestRedraw();
         },
-        onmouseenter: function () { if (key !== 'solar') { state.highlight = key; refreshStations(); requestRedraw(); } },
+        onmouseenter: function () { state.highlight = key; refreshStations(); requestRedraw(); },
         onmouseleave: function () { if (state.highlight) { state.highlight = null; refreshStations(); requestRedraw(); } }
       }, [
         h('span', { cls: 'sw b-' + key }),
@@ -1451,7 +1452,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
         ]),
         h('span', { cls: 'note', text: note })
       ]);
-      if (key === 'solar') { button.setAttribute('aria-disabled', 'true'); button.removeAttribute('aria-pressed'); button.style.cursor = 'default'; }
       host.appendChild(h('li', null, button));
     });
   }
@@ -1687,7 +1687,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
       body.appendChild(h('tr', null, [
         h('td', null, h('span', { cls: 'typ' }, [h('span', { cls: 'sw b-' + key }), NAMES[key]])),
         h('td', { cls: 'num', text: gw(total) }),
-        h('td', { cls: 'num', text: key === 'solar' ? 'not drawn' : (total > 0 ? Math.round(100 * Math.min(total, c.mapped || 0) / total) + '%' : '–') }),
+        h('td', { cls: 'num', text: total > 0 ? Math.round(100 * Math.min(total, c.mapped || 0) / total) + '%' : '–' }),
         h('td', { cls: 'num hide-sm', text: c.stations ? String(c.stations) : '–' }),
         h('td', { cls: 'num hide-sm muted', text: factorText })
       ]));
@@ -1736,7 +1736,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     var chips = byId('fuel-chips');
     if (!chips.childNodes.length) {
       CATS.forEach(function (c) {
-        if (c === 'solar') return;
         chips.appendChild(h('button', { type: 'button', cls: 'chip', 'data-c': c, onclick: function () {
           if (state.cats[c]) delete state.cats[c]; else state.cats[c] = true;
           state.showAll = false;

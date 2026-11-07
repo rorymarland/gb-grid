@@ -27,7 +27,7 @@ OUT = os.path.join(ROOT, 'app', 'stations.csv')
 FUEL_CODES = {
     'CCGT': 'CCGT', 'OCGT': 'OCGT', 'COAL': 'COAL', 'NUCLEAR': 'NUCLEAR', 'WIND': 'WIND',
     'NPSHYD': 'NPSHYD', 'PS': 'PS', 'BIOMASS': 'BIOMASS', 'BATTERY': 'BATTERY',
-    'RECIPROCATING': 'OCGT', 'CHP': 'CCGT', 'TIDAL': 'OTHER', 'OIL': 'OIL',
+    'RECIPROCATING': 'OCGT', 'CHP': 'CCGT', 'TIDAL': 'OTHER', 'OIL': 'OIL', 'SOLAR': 'SOLAR',
 }
 
 # Closed, or never transmission-connected generation worth mapping
@@ -75,6 +75,7 @@ OVERRIDES = {
     10237: {'name': 'Rothes Wind Farm'}, 10319: {'name': 'Tilbury Green'},
     10111: {'fuel': 'NPSHYD'}, 10124: {'fuel': 'NPSHYD'}, 10168: {'fuel': 'WIND'},
     10072: {'fuel': 'CCGT'}, 10074: {'fuel': 'CCGT'}, 10080: {'fuel': 'OCGT'},
+    10181: {'name': 'Crystal Rig Wind Farm', 'prefixes': 'CRYRW-'},
 }
 
 # Stations missing from the dictionary. BM unit prefixes for some are
@@ -102,6 +103,27 @@ MANUAL = [
     (20024, 'Blackhillock storage', 'BATTERY', 57.53, -2.94, 200, '', r'blackhillock'),
     (20025, 'Capenhurst storage', 'BATTERY', 53.26, -2.95, 100, '', r'capenhurst'),
     (20026, 'Kilmarnock South storage', 'BATTERY', 55.58, -4.45, 200, '', r'kilmarnock south'),
+    # Found running but unplaced in Elexon's data, November 2026 (unit IDs from the BM unit register)
+    (20030, 'Teesside Renewable Energy Plant', 'BIOMASS', 54.588, -1.163, 299, 'TSREP-', r'teesrep|teesside renewable'),
+    (20031, 'Wilton International', 'BIOMASS', 54.574, -1.104, '', 'WILCT-', r'wilton site'),
+    (20032, 'Cleve Hill Solar Park', 'SOLAR', 51.330, 0.940, 373, 'CLVHS-', r'cleve hill'),
+    (20033, 'Little Raith storage', 'BATTERY', 56.104, -3.330, '', 'LITRB-', r'little raith bess'),
+    (20034, 'Wishaw storage', 'BATTERY', 55.770, -3.920, '', 'WISHB-', r'wishaw bess'),
+    (20035, 'Jamesfield storage', 'BATTERY', 56.330, -3.280, '', 'JAMBB-', r'jamesfield'),
+    (20036, 'Iron Acton storage', 'BATTERY', 51.556, -2.478, '', 'IRNAB-', r'iron acton'),
+    (20037, 'Larks Green Solar', 'SOLAR', 51.545, -2.470, '', 'LARKS-', r'larks green solar'),
+    (20038, 'Larks Green storage', 'BATTERY', 51.543, -2.466, '', 'LARKB-', r'larks green battery'),
+    (20039, 'Neilston storage', 'BATTERY', 55.785, -4.430, '', 'NLSTB-', r'neilston battery'),
+    (20040, 'Coventry storage', 'BATTERY', 52.390, -1.480, '', 'COVNB-', r'pivot power coventry'),
+    (20041, 'Sundon storage', 'BATTERY', 51.930, -0.488, '', 'SUNDB-', r'sundon bess'),
+    (20042, 'Warley Green Solar', 'SOLAR', 51.555, 0.360, '', 'BLPFS-', r'warley green|bulphan fen'),
+    (20043, 'Tye Lane Solar', 'SOLAR', 52.070, 1.060, '', 'TYLNS-', r'tye lane solar'),
+    (20044, 'Tye Lane storage', 'BATTERY', 52.068, 1.064, '', 'TYLNB-', r'tye lane bess'),
+    (20045, 'Sutton Bridge Solar Farm', 'SOLAR', 52.770, 0.190, '', 'SUTBS-', r'sutton bridge solar'),
+    (20046, 'Tebworth Solar', 'SOLAR', 51.935, -0.565, '', 'TEBWS-', r'tebworth'),
+    (20047, 'Wolverhampton West storage', 'BATTERY', 52.600, -2.170, '', 'WOLVB-', r'wolverhampton west'),
+    (20048, 'North Kyle Wind Farm', 'WIND', 55.365, -4.420, '', 'NOKYW-', r'north kyle'),
+    (20049, 'Greengairs East Wind Farm', 'WIND', 55.905, -3.960, '', 'GRGRW-', r'greengairs'),
 ]
 
 NAME_FIXES = [

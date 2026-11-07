@@ -136,6 +136,13 @@ check('scale guard', units.snapshot['scale']['CCGT'] == 1.0, units.snapshot['sca
 units.compute(T, None, {}, pn, date(2026, 11, 6), 29, T)
 check('no measured totals', units.snapshot['basis'] == 'scheduled' and abs(units.snapshot['stations'][1]['mw'] - 400.0) < 0.01)
 
+# Batteries and solar farms that Elexon files under OTHER are shown as storage and solar
+check('battery by name', server.unit_category('OTHER', None, {'n': 'Wishaw BESS', 'p': ''}) == 'storage')
+check('solar by name', server.unit_category('OTHER', None, {'n': 'Cleve Hill Solar 2', 'p': ''}) == 'solar')
+check('solar by station', server.unit_category('OTHER', {'cat': 'solar'}, None) == 'solar')
+check('named fuel wins', server.unit_category('WIND', None, {'n': 'Battery Hill Wind Farm', 'p': ''}) == 'wind')
+check('plain other', server.unit_category('OTHER', None, {'n': 'Some CHP', 'p': ''}) == 'other')
+
 # Deleted BOALF amendments are dropped
 class FakeUnits(server.Units):
     pass
