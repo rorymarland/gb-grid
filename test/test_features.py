@@ -235,6 +235,18 @@ try:
 finally:
     server.get_json = original
 check('latest national demand forecast', ol.demand == [(base, 31000.0)], ol.demand)
+def fake_tsd(url, timeout=30):
+    if 'demand' in url:
+        return {'data': [{'startTime': server.iso(base + i * 1800), 'publishTime': '2026-11-07T11:00:00Z', 'boundary': 'N', 'nationalDemand': None if i else 30000,
+                          'transmissionSystemDemand': 32000 + i} for i in range(4)]}
+    return {'data': []}
+server.get_json = fake_tsd
+try:
+    ol2 = server.Outlook()
+    ol2.poll()
+finally:
+    server.get_json = original
+check('falls back to transmission demand', ol2.demand_kind == 'transmission' and len(ol2.demand) == 4 and ol2.demand[0][1] == 32000, (ol2.demand_kind, ol2.demand))
 check('wind forecast', ol.wind == [(base, 8000.0)], ol.wind)
 grid.outlook = ol
 payload = grid.outlook_payload()

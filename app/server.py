@@ -1768,7 +1768,7 @@ class LongHistory:
         self.store = store
         self.resource = None
         self.mix_checked = 0
-        self.price_span = 7 * 86400  # falls back to a day at a time if Elexon refuses a week
+        self.price_span = 6 * 86400  # steps down to 3 days, then 1, if Elexon refuses the range
         self.version = 0
 
     def find_resource(self):
@@ -1811,9 +1811,10 @@ class LongHistory:
         try:
             payload = get_json(url % (iso_minute(start), iso_minute(end - 60)), timeout=90)
         except FetchError as error:
-            if 'HTTP 400' not in str(error) or self.price_span == 86400:
+            if 'HTTP 400' not in str(error) or self.price_span <= 86400:
                 raise
-            self.price_span = 86400
+            log.info('[longprices] Elexon refused %d days at a time (%s); trying fewer', self.price_span // 86400, error)
+            self.price_span = 3 * 86400 if self.price_span > 3 * 86400 else 86400
             return self.fetch_prices()
         items = payload.get('data') if isinstance(payload, dict) else payload
         rows = []
@@ -1862,7 +1863,7 @@ class Outlook:
     """Elexon's national demand and transmission wind forecasts."""
 
     def __init__(self):
-        self.demand, self.wind, self.version, self.raw = [], [], 0, {}
+        self.demand, self.wind, self.version, self.raw, self.demand_kind = [], [], 0, {}, 'national'
 
     def poll(self):
         now = time.time()
@@ -1870,20 +1871,26 @@ class Outlook:
         errors = []
         try:
             # The current day-ahead forecast, filled out with the latest forecast for each later half hour
-            best, raw = {}, []
+            best, tsd, raw = {}, {}, []
             for url in ('/forecast/demand/day-ahead/latest?boundary=N&' + window, '/forecast/demand/day-ahead?boundary=N'):
                 payload = get_json(ELEXON + url)
                 items = payload.get('data') if isinstance(payload, dict) else payload
                 items = items if isinstance(items, list) else []
                 raw.append(len(items))
                 for item in items:
-                    t, v = parse_time(item['startTime']), as_float(item.get('nationalDemand'))
-                    published = item.get('publishTime') or ''
-                    if v is not None and item.get('boundary', 'N') == 'N' and (t not in best or published > best[t][0]):
-                        best[t] = (published, v)
+                    if item.get('boundary', 'N') != 'N':
+                        continue
+                    t, published = parse_time(item['startTime']), item.get('publishTime') or ''
+                    for table, field in ((best, 'nationalDemand'), (tsd, 'transmissionSystemDemand')):
+                        v = as_float(item.get(field))
+                        if v is not None and (t not in table or published > table[t][0]):
+                            table[t] = (published, v)
             self.raw['demand'] = raw
-            self.raw['demand_sample'] = [items[:2] if items else [], [sorted(best)[:3], len(best)]]
-            self.demand = [(t, best[t][1]) for t in sorted(best)]
+            # Recent forecasts sometimes leave national demand out; use transmission demand then
+            if len(best) >= 0.5 * len(tsd):
+                self.demand, self.demand_kind = [(t, best[t][1]) for t in sorted(best)], 'national'
+            else:
+                self.demand, self.demand_kind = [(t, tsd[t][1]) for t in sorted(tsd)], 'transmission'
         except (FetchError, KeyError, ValueError) as error:
             errors.append('demand: %s' % error)
         try:
@@ -2868,6 +2875,7 @@ class Grid:
             'solar': clip(solar),
             'carbon': clip(carbon),
             'raw': outlook.raw if outlook else {},
+            'demand_kind': outlook.demand_kind if outlook else 'national',
         }
 
     # ---- /api/outages -------------------------------------------------------

@@ -286,7 +286,7 @@ table { border-collapse: collapse; width: 100%; }
       <h2 id="outlook-title">The next 48 hours <button class="info" type="button" aria-expanded="false" aria-controls="ex-outlook" aria-label="About the outlook">i</button></h2>
       <a class="panel-link" href="/history">Records and history</a>
     </div>
-    <div class="explain" id="ex-outlook" hidden><p>Forecasts published by Elexon and NESO. Demand is the national demand forecast: what the transmission network has to supply, so it falls when the sun comes out on rooftops and small solar farms. Wind is the forecast for large, metered wind farms. Solar is NESO's forecast for solar panels on local networks. Carbon intensity is NESO's forecast for Great Britain.</p></div>
+    <div class="explain" id="ex-outlook" hidden><p>Forecasts published by Elexon and NESO. Demand is Elexon's national demand forecast: what the transmission network has to supply, so it falls when the sun comes out on rooftops and small solar farms. When the latest forecast leaves national demand out, the chart shows transmission demand, which also includes power stations' own use and pumping. Wind is the forecast for large, metered wind farms. Solar is NESO's forecast for solar panels on local networks. Carbon intensity is NESO's forecast for Great Britain.</p></div>
     <div class="outlook" id="outlook"></div>
   </section>
 
@@ -1752,7 +1752,7 @@ table { border-collapse: collapse; width: 100%; }
     DEFS.forEach(function (def) {
       var series = data[def.key] || [], card = h('div', { cls: 'ol' });
       host.appendChild(card);
-      card.appendChild(h('h3', { text: def.title }));
+      card.appendChild(h('h3', { text: def.key === 'demand' && data.demand_kind === 'transmission' ? 'Transmission demand' : def.title }));
       if (series.length < 2) {
         card.appendChild(h('p', { cls: 'peak', text: 'Waiting for the forecast.' }));
         return;
