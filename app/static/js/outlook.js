@@ -1,8 +1,13 @@
-import G from '/static/js/gb.js';
+/* The next 48 hours: four small charts sharing one time axis and one
+   cursor. Used on the Overview and in the Display view.
 
-/* The next 48 hours: four small charts sharing one time axis and one cursor */
+     mountOutlook(element, { height: 92 });
+
+   The styles (.ol and friends) live in base.css. */
+
+import G from './gb.js';
+
 var h = G.h, sv = G.s, num = G.num;
-var host = G.byId('outlook'), data = null, hoverT = null;
 var DEFS = [
   { key: 'demand', title: 'Demand', unit: 'GW', colour: '--line', scale: 1000, digits: 1, peak: 'max' },
   { key: 'wind', title: 'Wind', unit: 'GW', colour: '--c-wind', scale: 1000, digits: 1, peak: 'max' },
@@ -16,6 +21,9 @@ function valueAt(series, t) {
   if (!best && series.length && series[0][0] - t <= 3600) best = series[0];  // hourly forecasts start on the hour
   return best ? best[1] : null;
 }
+export function mountOutlook(host, opts) {
+opts = opts || {};
+var data = null, hoverT = null, height = opts.height || 92;
 function render() {
   G.clear(host);
   if (!data) return;
@@ -34,7 +42,8 @@ function render() {
     card.appendChild(h('p', { cls: 'peak', text: (def.peak === 'max' ? 'Peaks at ' : 'Lowest ') + fmtv(def, pick[1]) + ' ' + def.unit + ', ' + G.when(pick[0]) }));
     var svg = sv('svg', { 'aria-hidden': 'true' });
     card.appendChild(svg);
-    var W = svg.clientWidth || 240, H = 92, top = 4, bottom = 16;
+    var W = svg.clientWidth || 240, H = height, top = 4, bottom = 16;
+    svg.style.height = H + 'px';
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var hi = Math.max.apply(null, series.map(function (p) { return p[1]; }));
     hi = hi <= 0 ? 1 : hi * 1.08;
@@ -69,3 +78,4 @@ window.addEventListener('gb:theme', render);
 window.addEventListener('gb:width', render);
 G.poll('/api/outlook', { onData: function (d) { data = d; render(); }, interval: function () { return 300; } });
 setInterval(function () { if (!num(hoverT)) render(); }, 60000);
+}

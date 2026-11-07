@@ -1,4 +1,5 @@
 import G from '/static/js/gb.js';
+import { mountOutlook } from '/static/js/outlook.js';
 
 var byId = G.byId, clear = G.clear, add = G.add, h = G.h, s = G.s, num = G.num, hm = G.hm, fetchText = G.fetchText, ago = G.ago;
 
@@ -1320,3 +1321,5 @@ lastWidth = document.documentElement.clientWidth;
 setInterval(renderHeader, 1000);
 setInterval(function () { if (state.live) { renderForecast(state.live); renderFeeds(state.live); } }, 60000);
 tick();
+
+mountOutlook(byId('outlook'));

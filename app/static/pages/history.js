@@ -1,19 +1,10 @@
 import G from '/static/js/gb.js';
+import { FUEL_ORDER as ORDER, FUEL_NAMES as NAMES, DAY, F, stack, stackedSeries, axes, tzDate, fuelColour as colour } from '/static/js/charts.js';
 
 var h = G.h, byId = G.byId, clear = G.clear, num = G.num;
-var ORDER = ['nuclear', 'wind', 'solar', 'hydro', 'biomass', 'imports', 'storage', 'coal', 'gas', 'other'];
-var NAMES = { nuclear: 'Nuclear', wind: 'Wind', solar: 'Solar', hydro: 'Hydro', biomass: 'Biomass', imports: 'Imports', storage: 'Storage', coal: 'Coal', gas: 'Gas', other: 'Other' };
-var DAY = 86400, START_2009 = 1230768000;
+var START_2009 = 1230768000;
 var state = { data: null, summary: null, preset: '365', zoomed: false, mode: 'gw', plots: {}, loading: 0, poll: null };
 
-var fmt = function (opts) { return new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: G.TZ }, opts)); };
-var F = {
-  hm: fmt({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
-  dm: fmt({ day: 'numeric', month: 'short' }),
-  my: fmt({ month: 'short', year: 'numeric' }),
-  y: fmt({ year: 'numeric' }),
-  full: fmt({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-};
 function d(t) { return new Date(t * 1000); }
 function when(t, bucket) {
   if (bucket >= 7 * DAY) return 'Week of ' + G.date(t);
@@ -21,8 +12,6 @@ function when(t, bucket) {
   if (bucket > 1800) return F.full.format(d(t)) + ', ' + F.hm.format(d(t)) + ' to ' + F.hm.format(d(t + bucket));
   return F.full.format(d(t)) + ' ' + F.hm.format(d(t));
 }
-function colour(key) { return G.css('--c-' + key); }
-function bodyFont(size, weight) { return (weight || 400) + ' ' + size + 'px ' + getComputedStyle(document.body).fontFamily; }
 
 /* ---------- data ---------- */
 
@@ -63,38 +52,17 @@ function zoomTo(from, to) {
 
 /* ---------- charts ---------- */
 
-function timeValues(u, splits, axisIdx, space, incr) {
-  return splits.map(function (v) {
-    if (v === null) return null;
-    if (incr < DAY) {
-      var label = F.hm.format(d(v));
-      return label === '00:00' ? F.dm.format(d(v)) : label;
-    }
-    if (incr < 28 * DAY) return F.dm.format(d(v));
-    if (incr < 365 * DAY) return F.my.format(d(v));
-    return F.y.format(d(v));
-  });
-}
-
-function axes(yValues, ySize) {
-  var ink = G.css('--muted'), grid = G.css('--hair');
-  return [
-    { stroke: ink, font: bodyFont(11.5), grid: { show: false }, ticks: { stroke: grid, size: 4 }, values: timeValues, space: 70, gap: 4 },
-    { stroke: ink, font: bodyFont(11.5), grid: { stroke: grid, width: 1 }, ticks: { show: false }, values: yValues, size: ySize || 44, gap: 6 }
-  ];
-}
-
 function baseOptions(width, height, yValues, ySize) {
   return {
     width: width, height: height, legend: { show: false }, padding: [8, 18, 0, 0],
-    tzDate: function (ts) { return uPlot.tzDate(new Date(ts * 1000), G.TZ); },
+    tzDate: tzDate,
     cursor: {
       sync: { key: 'gb-history' }, points: { show: false },
       drag: { x: true, y: false, setScale: false },
       bind: { dblclick: function () { return function () { if (state.zoomed) loadPreset(); return null; }; } }
     },
     scales: { x: { time: true } },
-    axes: axes(yValues, ySize),
+    axes: axes(yValues, { ySize: ySize }),
     hooks: { setSelect: [onSelect], setCursor: [onCursor] }
   };
 }
@@ -110,19 +78,7 @@ function plotWidth(id) { return Math.max(260, byId(id).clientWidth); }
 function heights() { var narrow = window.innerWidth < 640; return { mix: narrow ? 220 : 300, ci: narrow ? 120 : 150, price: narrow ? 120 : 150 }; }
 
 function mixData(data) {
-  var t = data.t, n = t.length, base = new Array(n).fill(0), rows = [t], totals = new Array(n).fill(0);
-  ORDER.forEach(function (k) { var s = data.mix[k] || []; for (var i = 0; i < n; i++) totals[i] += Math.max(0, s[i] || 0); });
-  ORDER.forEach(function (k) {
-    var s = data.mix[k] || [], line = new Array(n);
-    for (var i = 0; i < n; i++) {
-      var v = Math.max(0, s[i] || 0);
-      if (state.mode === 'share') v = totals[i] ? 100 * v / totals[i] : 0;
-      base[i] += v;
-      line[i] = data.mix.gas[i] === null ? null : base[i];
-    }
-    rows.push(line);
-  });
-  return { rows: rows, totals: totals };
+  return stack(data.t, data.mix, ORDER, state.mode === 'share');
 }
 
 function buildPlots() {
@@ -133,20 +89,13 @@ function buildPlots() {
   var mixed = mixData(data);
   state.mixTotals = mixed.totals;
 
-  var series = [{}], bands = [];
-  ORDER.forEach(function (k, i) {
-    var c = colour(k);
-    series.push({ label: NAMES[k], stroke: c, width: 0, fill: c, points: { show: false } });
-    if (i > 0) bands.push({ series: [i + 1, i], fill: c });
-  });
+  var stacked = stackedSeries(ORDER), series = stacked.series, bands = stacked.bands;
   var mixOpts = baseOptions(plotWidth('plot-mix'), hs.mix, function (u, splits) {
     return splits.map(function (v) { return state.mode === 'share' ? v + '%' : String(Math.round(v / 1000)); });
   });
   mixOpts.series = series;
   mixOpts.bands = bands;
   mixOpts.scales.y = { range: function (u, lo, hi) { return state.mode === 'share' ? [0, 100] : [0, Math.max(10000, Math.ceil(hi / 5000) * 5000)]; } };
-  // The bottom series fills to zero; the others fill only their band.
-  mixOpts.series.forEach(function (s, i) { if (i > 1) s.fill = null; });
   state.plots.mix = new uPlot(mixOpts, mixed.rows, byId('plot-mix'));
 
   var ciOpts = baseOptions(plotWidth('plot-ci'), hs.ci, function (u, splits) { return splits.map(function (v) { return String(v); }); });
