@@ -4,6 +4,20 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.2.0 (unreleased)
+
+- **Display mode rebuilt** with its own slides, each designed to fit one
+  screen: right now, the last 24 hours, the station map, regions, balancing
+  (with today's half hours), the next 48 hours, spare capacity and outages,
+  and then and now. It no longer shows cropped copies of the other pages.
+  Slide names for `views=` have changed: `now,day,map,regions,balancing,outlook,outages,records`.
+- The header spans the full window on every page, and every page uses the
+  wave logo as its favicon.
+- Under the hood: the pages' scripts and styles moved into `static/` as ES
+  modules with shared helpers, the station map became a reusable module,
+  and `server.py` became the `gridlive` package. No change to settings or
+  data.
+
 ## 1.1.0 (2026-11-07)
 
 New pages and views. Existing settings and data keep working; the new feeds

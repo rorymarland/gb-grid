@@ -1,7 +1,9 @@
 /* The next 48 hours: four small charts sharing one time axis and one
    cursor. Used on the Overview and in the Display view.
 
-     mountOutlook(element, { height: 92 });
+     var outlook = mountOutlook(element, { height: 92 });   // or a function,
+                                                          // or { fill: true }
+     outlook.render();                                    // after a resize
 
    The styles (.ol and friends) live in base.css. */
 
@@ -23,7 +25,8 @@ function valueAt(series, t) {
 }
 export function mountOutlook(host, opts) {
 opts = opts || {};
-var data = null, hoverT = null, height = opts.height || 92;
+var data = null, hoverT = null;
+function chartHeight() { return typeof opts.height === 'function' ? opts.height() : (opts.height || 92); }
 function render() {
   G.clear(host);
   if (!data) return;
@@ -42,7 +45,9 @@ function render() {
     card.appendChild(h('p', { cls: 'peak', text: (def.peak === 'max' ? 'Peaks at ' : 'Lowest ') + fmtv(def, pick[1]) + ' ' + def.unit + ', ' + G.when(pick[0]) }));
     var svg = sv('svg', { 'aria-hidden': 'true' });
     card.appendChild(svg);
-    var W = svg.clientWidth || 240, H = height, top = 4, bottom = 16;
+    var W = svg.clientWidth || 240, top = 4, bottom = 16;
+    /* fill: the chart takes whatever height its card has left */
+    var H = opts.fill ? Math.max(60, Math.floor(card.getBoundingClientRect().bottom - svg.getBoundingClientRect().top - 2)) : chartHeight();
     svg.style.height = H + 'px';
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var hi = Math.max.apply(null, series.map(function (p) { return p[1]; }));
@@ -76,6 +81,7 @@ function render() {
 }
 window.addEventListener('gb:theme', render);
 window.addEventListener('gb:width', render);
-G.poll('/api/outlook', { onData: function (d) { data = d; render(); }, interval: function () { return 300; } });
+G.poll('/api/outlook', { onData: function (d) { data = d; render(); if (opts.onData) opts.onData(d); }, interval: function () { return 300; } });
 setInterval(function () { if (!num(hoverT)) render(); }, 60000);
+return { render: render, data: function () { return data; } };
 }

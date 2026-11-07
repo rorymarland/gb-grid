@@ -36,13 +36,15 @@ standard library inside.
   2009 (prices since 2018), zoomable down to the half hour, plus records, the
   latest day against a year earlier, and each year's mix.
 - **Display:** a kiosk view for a tablet or spare screen, opened from the
-  Display button in the header. Big type, cycling through right now, the map,
-  regions and balancing. Tap to pause, swipe or use the arrow keys to move on,
-  and it dims to a clock overnight. On an iPad, add it to the home screen for a
+  Display button in the header. Each slide is designed to fit one screen:
+  right now, the last 24 hours, the station map, regions, balancing, the next
+  48 hours, spare capacity and outages, and then and now (once the history has
+  downloaded). Tap to pause, swipe or use the arrow keys to move on, and it
+  dims to a clock overnight. On an iPad, add it to the home screen for a
   full-screen app; it keeps the screen awake where the browser allows.
 
-  Options go in the address: `/display?views=now,map,regions,balancing,outages,history`
-  (which views, in order), `every=20` (seconds per view), `night=23-7` (dim
+  Options go in the address: `/display?views=now,day,map,regions,balancing,outlook,outages,records`
+  (which slides, in order), `every=20` (seconds per slide), `night=23-7` (dim
   hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
 
 ![The map page](docs/map.png)
@@ -169,8 +171,25 @@ NESO_BASE_URL=http://127.0.0.1:9101/neso \
 GRID_INTERNAL_PORT=8080 python3 app/server.py
 ```
 
-Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py` and
-`python3 test/test_edges.py`. Pushes to `main` and version tags (`v1.2.3`) run
+Add `UI_RELOAD=1` to reread the pages and static files on every request while
+you edit them.
+
+Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
+`python3 test/test_edges.py` and `python3 test/test_features.py`.
+
+### How the code is laid out
+
+| Where | What |
+|---|---|
+| `app/server.py` | Starts the dashboard |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`); the API payloads (`grid` and `views_*`); the HTTP server (`web`) |
+| `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
+| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
+| `app/static/pages/` | Each page's own script and styles |
+| `app/static/vendor/` | uPlot, served from the image |
+
+No build step: the browser loads the modules directly, and an import map in
+each page adds a version to every module's address so they can be cached. Pushes to `main` and version tags (`v1.2.3`) run
 the tests, smoke-test the image and publish it.
 
 To make a release, add its notes to [CHANGELOG.md](CHANGELOG.md), then create a

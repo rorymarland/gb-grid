@@ -67,8 +67,7 @@ HEAD_HTML = (
     '<link rel="apple-touch-icon" href="{{static:icon-180.png}}">\n'
     "<script>try{var t=localStorage.getItem('gb-grid-theme'),m=location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];"
     "if(t==='light'||t==='dark')"
-    "document.documentElement.setAttribute('data-theme',t)}catch(e){}"
-    "if(/[?&]display(=|&|$)/.test(location.search))document.documentElement.classList.add('display')</script>")
+    "document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>")
 ELEXON_CREDIT = ('Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> '
                  '(<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" '
                  'rel="noopener">licence</a>).')

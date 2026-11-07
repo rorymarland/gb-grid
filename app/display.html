@@ -9,31 +9,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GB grid">
 <meta name="theme-color" content="#0b131c">
+<link rel="stylesheet" href="{{static:vendor/uplot.min.css}}">
+<link rel="stylesheet" href="{{static:stationmap.css}}">
 <link rel="stylesheet" href="{{static:pages/display.css}}">
 </head>
 <body>
 <div class="screen">
   <div class="slides" id="slides">
-    <section class="slide" data-view="now" aria-label="Right now">
-      <div class="now">
-        <div id="notice"></div>
-        <div class="headline">
-          <div>
-            <p class="lead-k">Britain is using</p>
-            <p class="lead-v" id="demand">–</p>
-            <p class="lead-n" id="lead-note"></p>
-          </div>
-          <div class="facts" id="facts"></div>
-        </div>
-        <div class="mixbar" id="mix" role="img"></div>
-        <div class="later" id="later"></div>
-      </div>
-    </section>
     <div class="catcher" id="catcher" aria-hidden="true"></div>
   </div>
   <div class="bar">
     <div class="clock" id="clock">--:--<small></small></div>
-    <div class="where"><b id="view-name">Right now</b><span class="dots" id="dots"></span></div>
+    <div class="where"><b id="view-name"></b><span class="dots" id="dots"></span></div>
     <div class="state"><span id="state"></span><button type="button" id="fs-btn" hidden>Full screen</button><a href="/">Exit</a></div>
   </div>
   <div class="progress"><i id="progress"></i></div>
@@ -42,6 +29,7 @@
   <div class="t" id="night-clock">--:--</div>
   <p><span id="night-ci"></span><span id="night-demand"></span></p>
 </div>
+<script src="{{static:vendor/uplot.min.js}}"></script>
 <script type="module" src="{{static:pages/display.js}}"></script>
 </body>
 </html>

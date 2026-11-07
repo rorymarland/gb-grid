@@ -248,13 +248,6 @@ table { border-collapse: collapse; width: 100%; }
   .sw { forced-color-adjust: none; }
 }
 
-/* ---------- inside the Display view (?display) ---------- */
-
-html.display .top, html.display .alert-bar, html.display .foot, html.display .page-head .lede { display: none; }
-html.display .page-head { padding: 22px 0 12px; }
-html.display body { overflow: hidden; }
-html.display .tools .tool-btn { display: none; }
-
 /* ---------- the 48-hour outlook (Overview and Display) ---------- */
 
 .outlook { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 22px; margin-top: 14px; }
