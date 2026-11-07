@@ -1,5 +1,6 @@
 import G from '/static/js/gb.js';
 import { mountOutlook } from '/static/js/outlook.js';
+import { mountSummary } from '/static/js/summary.js';
 
 var byId = G.byId, clear = G.clear, add = G.add, h = G.h, s = G.s, num = G.num, hm = G.hm, fetchText = G.fetchText, ago = G.ago;
 
@@ -1323,3 +1324,4 @@ setInterval(function () { if (state.live) { renderForecast(state.live); renderFe
 tick();
 
 mountOutlook(byId('outlook'));
+mountSummary(byId('story'), { toggleHost: byId('story-toggle'), onRender: function (d) { byId('story-title').textContent = d.day === 'today' ? 'Today on the grid' : 'Yesterday on the grid'; } });

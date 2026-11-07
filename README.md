@@ -35,6 +35,12 @@ standard library inside.
 - **History:** the generation mix, carbon intensity and wholesale price since
   2009 (prices since 2018), zoomable down to the half hour, plus records, the
   latest day against a year earlier, and each year's mix.
+- **Plain English throughout:** grid jargon in the explanations is underlined;
+  hover, tap or tab to it for a short definition, or read them all on the
+  Glossary page (`/glossary`). The Overview opens with **Today on the grid**, a
+  summary of the day so far (or yesterday) written from the data: the mix,
+  carbon, demand, prices, peaks, imports, balancing costs and any notices,
+  led by whatever was most notable.
 - **Display:** a kiosk view for a tablet or spare screen, opened from the
   Display button in the header. Each slide is designed to fit one screen:
   right now, the last 24 hours, the station map, regions, balancing, the next
@@ -153,6 +159,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/longterm?from=&to=` | Mix, carbon and price between two Unix times, averaged to suit the span |
 | `/api/longterm/summary` | Records, the year-apart comparison and yearly mix |
 | `/api/outlook` | Demand, wind, solar and carbon forecasts for the next 48 hours |
+| `/api/summary?day=today` | Today on the grid (or `yesterday`), as text parts with glossary terms marked |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
 
@@ -182,9 +189,9 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`); the API payloads (`grid` and `views_*`); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`); the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
-| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
+| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
 | `app/static/vendor/` | uPlot, served from the image |
 

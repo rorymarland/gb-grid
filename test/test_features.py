@@ -252,5 +252,32 @@ grid.outlook = ol
 payload = grid.outlook_payload()
 check('outlook payload', payload['demand'] == [[base, 31000]] and payload['wind'] == [[base, 8000]], payload)
 
+# ---- today on the grid -----------------------------------------------------
+
+store = server.Store(tempfile.mkdtemp())
+now = server.time.time()
+today = server.uk_clock(now)[0]
+start = server.uk_midnight_utc(today - server.timedelta(days=2))
+end = server.floor_to(now, 300)
+gen, hh, ci = [], [], []
+for t in range(start, end, 300):
+    for code, mw in (('WIND', 15000), ('CCGT', 6000), ('NUCLEAR', 4000), ('INTFR', 2000)):
+        gen.append((t, code, mw))
+for t in range(start, end, 1800):
+    hh.append(('price', t, -5.0 if 2 <= (t - start) // 3600 % 24 < 4 else 60.0))
+    ci.append((0, t, 90, 90, 'low'))
+store.write(server.UPSERT_GEN, gen)
+store.write(server.UPSERT_HH, hh)
+store.write(server.UPSERT_CI, ci)
+grid = server.Grid(store, server.Status())
+y = grid.summary('yesterday')
+words = lambda parts: ''.join(p if isinstance(p, str) else p['t'] for p in parts)
+check('summary ready', y['ready'] and y['complete'], {k: y[k] for k in ('ready', 'date')})
+check('mix led by wind', words(y['points'][0]['parts']).startswith('Wind supplied 56%'), words(y['points'][0]['parts']))
+check('negative prices make the headline', 'below zero' in words(y['headline']) and y['stats']['negative_half_hours'] == 4, words(y['headline']))
+check('terms marked', any(isinstance(p, dict) and p.get('term') == 'carbon-intensity' for pt in y['points'] for p in pt['parts']))
+check('article', server.article('Electricity Margin Notice') == 'an Electricity Margin Notice' and server.article('High risk of demand reduction') == 'a high risk of demand reduction')
+check('today so far', grid.summary('today')['day'] == 'today' and grid.summary('bogus')['day'] == 'today')
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

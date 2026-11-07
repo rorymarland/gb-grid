@@ -6,6 +6,12 @@ releases that keep working with your existing settings and data.
 
 ## 1.2.0 (unreleased)
 
+- **Plain English layer:** grid terms in the explanations are underlined and
+  open a short definition; a new Glossary page (`/glossary`) lists all 41.
+- **Today on the grid:** the Overview opens with a written summary of the day
+  so far or yesterday, led by the most notable event (negative prices, a
+  notice, the cleanest day of the week, heavy curtailment). The Display view
+  has it as a slide too.
 - **Display mode rebuilt** with its own slides, each designed to fit one
   screen: right now, the last 24 hours, the station map, regions, balancing
   (with today's half hours), the next 48 hours, spare capacity and outages,

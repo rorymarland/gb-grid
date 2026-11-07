@@ -3,6 +3,7 @@ import { createStationMap } from '/static/js/stationmap.js';
 import { regionShapes, LEVEL_CLASS, MAP_REGIONS, INSET, levelFor, isDarkFill } from '/static/js/regionmap.js';
 import { FUEL_ORDER, FUEL_NAMES, fuelColour, stack, stackedSeries, axes, tzDate } from '/static/js/charts.js';
 import { mountOutlook } from '/static/js/outlook.js';
+import { renderParts } from '/static/js/summary.js';
 
 /* The Display view: single-screen slides for a tablet or spare screen,
    each designed to fit without scrolling. Options in the address:
@@ -11,7 +12,7 @@ import { mountOutlook } from '/static/js/outlook.js';
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
-var DEFAULT_VIEWS = 'now,day,map,regions,balancing,outlook,outages,records';
+var DEFAULT_VIEWS = 'now,story,day,map,regions,balancing,outlook,outages,records';
 var every = G.clamp(Number(params.get('every')) || 20, 5, 600);
 var nightSpec = (params.get('night') || '23-7').match(/^(\d{1,2})-(\d{1,2})$/);
 var nightFrom = nightSpec ? Number(nightSpec[1]) : null, nightTo = nightSpec ? Number(nightSpec[2]) : null;
@@ -24,7 +25,7 @@ function gw(mw) { return G.gw(mw); }
 /* Drop list rows from the end until the container stops overflowing */
 function fit(container) {
   function trim() {
-    var rows = container.querySelectorAll('.row');
+    var rows = container.querySelectorAll('.row, li');
     for (var i = rows.length - 1; i > 0 && container.scrollHeight > container.clientHeight + 1; i--) rows[i].remove();
   }
   trim();
@@ -44,7 +45,8 @@ function whenPhrase(t) {
 
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
-  regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800]
+  regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
+  story: ['/api/summary?day=today', 300]
 };
 var data = {}, polls = {};
 function startFeed(name) {
@@ -435,10 +437,36 @@ function buildRecords(body, take) {
   };
 }
 
+/* ---------- today on the grid ---------- */
+
+function buildStory(body, take) {
+  var head = h('p', { cls: 'story-head' }), list = h('ul', { cls: 'story-points' });
+  body.appendChild(h('div', { cls: 'story' }, [head, list]));
+  return {
+    ready: function () { return Boolean(data.story && data.story.ready); },
+    render: function () {
+      var d = data.story;
+      if (!d || !d.ready) return;
+      clear(head); clear(list);
+      renderParts(d.headline, true).forEach(function (n) { head.appendChild(n); });
+      /* The most telling points; the slide has room for five */
+      var order = ['mix', 'carbon', 'balancing', 'price', 'notices', 'flows', 'peaks', 'demand', 'margin'];
+      d.points.slice().sort(function (a, b) { return order.indexOf(a.key) - order.indexOf(b.key); }).slice(0, 5).forEach(function (p) {
+        var li = h('li');
+        renderParts(p.parts, true).forEach(function (n) { li.appendChild(n); });
+        list.appendChild(li);
+      });
+      fit(list);
+      take.textContent = 'So far today, up to ' + G.hm(d.covered_to) + '.';
+    }
+  };
+}
+
 /* ---------- the slides in order ---------- */
 
 var BUILDERS = {
   now: ['Right now', ['live', 'alerts'], buildNow],
+  story: ['Today on the grid', ['story'], buildStory],
   day: ['The last 24 hours', ['day'], buildDay],
   map: ['Power stations', ['map'], buildMap],
   regions: ['Carbon intensity by region', ['regions'], buildRegions],

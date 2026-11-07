@@ -156,6 +156,16 @@ def main():
     except Exception as error:
         print('== Outlook unavailable:', error)
 
+    for day in ('today', 'yesterday'):
+        try:
+            sm = get(base, '/api/summary?day=' + day)
+            words = lambda parts: ''.join(p if isinstance(p, str) else p['t'] for p in parts)
+            print('== Summary, %s (%s, ready %s): %s' % (day, sm.get('date'), sm.get('ready'), words(sm.get('headline', []))))
+            for point in sm.get('points', []):
+                print('    - %s' % words(point['parts']))
+        except Exception as error:
+            print('== Summary %s unavailable: %s' % (day, error))
+
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))
     return 0

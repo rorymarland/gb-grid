@@ -130,6 +130,13 @@ body { margin: 0; overflow: hidden; background: var(--page); color: var(--ink); 
 .rec b small { font-size: 0.4em; font-weight: 500; color: var(--ink-2); margin-left: 0.25em; letter-spacing: 0; }
 .rec .n { font-size: calc(var(--u) * 1.9); color: var(--muted); }
 
+/* Today on the grid */
+.d-story .story { max-width: none; height: 100%; display: flex; flex-direction: column; gap: calc(var(--u) * 3); }
+.story-head { font-size: calc(var(--u) * 5.4); font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; margin: 0; max-width: 28ch; }
+.story-points { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(var(--u) * 1.6); font-size: calc(var(--u) * 2.9); line-height: 1.4; color: var(--ink-2); min-height: 0; overflow: hidden; align-content: start; }
+.story-points li { padding-left: 1.1em; position: relative; max-width: 62ch; }
+.story-points li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 0.42em; height: 0.42em; border-radius: 50%; background: var(--c-wind); }
+
 /* The bar along the bottom */
 .bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2vw; padding: 1.4vh 3vw 1.8vh; border-top: 1px solid var(--hair); background: var(--page); font-size: clamp(14px, 2vh, 22px); color: var(--ink-2); z-index: 3; }
 .clock { font-size: clamp(26px, 4.6vh, 56px); font-weight: 650; color: var(--ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }

@@ -1,0 +1,16 @@
+.gl-search { margin: 0 0 22px; }
+.gl-search input { width: 100%; max-width: 520px; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--hair); background: var(--surface); color: var(--ink); }
+.gl-search input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.gl-group h2 { margin-bottom: 8px; }
+.gl-group dl { margin: 0; display: grid; grid-template-columns: minmax(0, 15em) minmax(0, 1fr); }
+.gl-group dt { font-weight: 650; padding: 14px 18px 14px 0; border-top: 1px solid var(--hair); scroll-margin-top: 90px; }
+.gl-group dd { margin: 0; padding: 14px 0; border-top: 1px solid var(--hair); color: var(--ink-2); line-height: 1.55; max-width: 72ch; }
+.gl-group dd a { color: var(--ink); text-underline-offset: 3px; }
+.gl-anchor { margin-left: 8px; color: var(--muted); text-decoration: none; font-weight: 400; opacity: 0; }
+.gl-group dt:hover .gl-anchor, .gl-anchor:focus { opacity: 1; }
+.gl-group dt.hit { color: var(--focus); }
+@media (max-width: 700px) {
+  .gl-group dl { grid-template-columns: minmax(0, 1fr); }
+  .gl-group dt { padding-bottom: 2px; }
+  .gl-group dd { border-top: 0; padding-top: 2px; }
+}

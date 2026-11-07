@@ -47,6 +47,7 @@ PAGES = [
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('history', '/history', 'History', 'history.html'),
     ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not a tab
+    ('glossary', '/glossary', 'Glossary', 'glossary.html'),  # linked from the credits and the term popovers
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -80,7 +81,7 @@ CREDITS_HTML = (
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
-    '<p class="credit">A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley’s '
+    '<p class="credit">Unfamiliar terms are underlined; the <a href="/glossary">glossary</a> explains them all. A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley’s '
     '<a href="https://grid.iamkate.com/" rel="noopener">National Grid: Live</a>. All times are UK time.</p>')
 CREDITS_SHORT_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Station locations: '
@@ -91,7 +92,7 @@ CREDITS_SHORT_HTML = (
 def header_html(current):
     tabs = ''.join('<a href="%s"%s%s>%s</a>' % (
         path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
-        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES if key != 'display')
+        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES if key not in ('display', 'glossary'))
     return (
         '<div class="alert-bar" id="alert-bar" role="region" aria-label="Grid notices" hidden></div>\n'
         '<header class="top">\n  <div class="wrap top-inner">\n'
@@ -204,6 +205,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(App.grid.longterm(number('from'), number('to')), send_body)
             elif parts.path == '/api/longterm/summary':
                 self.respond_json(App.grid.longterm_summary(), send_body)
+            elif parts.path == '/api/summary':
+                self.respond_json(App.grid.summary(query.get('day', ['today'])[0]), send_body)
             elif parts.path == '/api/outlook':
                 self.respond_json(App.grid.outlook_payload(), send_body)
             elif parts.path == '/api/outages':
