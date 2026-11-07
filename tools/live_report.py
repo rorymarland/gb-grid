@@ -96,6 +96,18 @@ def main():
     except Exception as error:
         print('== Regions unavailable:', error)
 
+    try:
+        bal = get(base, '/api/balancing')
+        now = bal['now']
+        print('== Balancing now: down %s MW, up %s MW, %d units, cost/hour %s (%d priced)' % (now['down'], now['up'], len(now['units']), now['cost_hour'], now['priced']))
+        for u in now['units'][:8]:
+            print('    %-28s %-8s %8.1f MW at %s' % (u['name'][:28], u['cat'], u['delta'], u['price']))
+        print('  today:', bal['today'])
+        print('  top:', ', '.join('%s %s' % (u['name'], u['paid']) for u in bal['top'][:6]))
+        print('  constraint days:', len(bal['constraints']), bal['constraints'][-1] if bal['constraints'] else '')
+    except Exception as error:
+        print('== Balancing unavailable:', error)
+
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))
     return 0

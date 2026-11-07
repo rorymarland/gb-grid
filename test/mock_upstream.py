@@ -211,6 +211,69 @@ def region_entry(rid, t):
                               ('biomass', 'coal', 'imports', 'gas', 'nuclear', 'other', 'hydro', 'solar', 'wind')]}
 
 
+def balancing_units():
+    """Scottish wind farms get paid to turn down, gas stations in England to turn up."""
+    out = []
+    with open(os.path.join(SRC, 'stations.csv'), encoding='utf-8') as handle:
+        rows = list(csv.DictReader(handle))
+    lat = {}
+    for st in rows:
+        for unit in st['units'].split():
+            lat[unit] = (float(st['lat']), st['fuel'])
+    for unit in FLEET:
+        where = lat.get(unit['ngc'])
+        if not where:
+            continue
+        if unit['fuel'] == 'WIND' and where[0] > 55.5:
+            out.append((unit, 'bid'))
+        elif unit['fuel'] == 'CCGT' and where[0] < 53.5:
+            out.append((unit, 'offer'))
+    return out
+
+
+BAL_UNITS = None
+
+
+def balancing_rows(kind, side, day, period):
+    global BAL_UNITS
+    if BAL_UNITS is None:
+        BAL_UNITS = balancing_units()
+    start = settlement_start(day, period)
+    windy = 0.5 + 0.5 * math.sin(start / 40000.0)
+    rows = []
+    for unit, unit_side in BAL_UNITS:
+        if unit_side != side or h01(unit['ngc'] + str(period)) > (0.25 + 0.6 * windy if side == 'bid' else 0.35):
+            continue
+        volume = (unit['cap'] * (0.2 + 0.5 * h01(unit['ngc'] + 'v' + str(period)))) / 2
+        price = -(60 + 40 * h01(unit['ngc'])) if side == 'bid' else 120 + 80 * h01(unit['ngc'])
+        signed = -volume if side == 'bid' else volume
+        base = {'settlementDate': day.isoformat(), 'settlementPeriod': period, 'startTime': iso(start),
+                'createdDateTime': iso(start + 2900), 'bmUnit': unit['elexon'], 'bmUnitType': 'T',
+                'leadPartyName': unit['party'], 'nationalGridBmUnit': unit['ngc']}
+        if kind == 'cash':
+            base.update({'bidOfferPairCashflows': {'negative1' if side == 'bid' else 'positive1': signed * price}, 'totalCashflow': round(signed * price, 2)})
+        else:
+            base.update({'acceptanceId': int(h01(unit['ngc']) * 9999), 'acceptanceDuration': 'L', 'totalVolumeAccepted': round(signed, 3),
+                         'pairVolumes': {'negative1' if side == 'bid' else 'positive1': round(signed, 3)}})
+        rows.append(base)
+    return rows
+
+
+def constraint_records():
+    out = []
+    day = datetime.fromtimestamp(_clock.time(), timezone.utc).date() - timedelta(days=8)
+    for back in range(150):
+        d = day - timedelta(days=back)
+        r = h01(d.isoformat())
+        out.append({'_id': 1000 - back, 'Date': d.isoformat(), 'Reducing largest loss cost': 0,
+                    'Increasing system inertia cost': round(200000 * r) if r > 0.8 else 0,
+                    'Voltage constraints cost': round(150000 + 300000 * r),
+                    'Thermal constraints cost': round(2e6 + 3.2e7 * r * r), 'Reducing largest loss volume': 0,
+                    'Increasing system inertia volume': 0, 'Voltage constraints volume': round(5000 * r),
+                    'Thermal constraints volume': -round(10000 + 90000 * r * r)})
+    return out
+
+
 def mock_warnings(start, end):
     """System warnings in Elexon's shape: a daily SO-SO trade notice, plus an
     Electricity Margin Notice (or its cancellation) when MODE['warn'] asks."""
@@ -408,6 +471,34 @@ class Handler(BaseHTTPRequestHandler):
                                      'acceptanceTime': iso(a - 120), 'deemedBoFlag': False, 'soFlag': True,
                                      'storFlag': False, 'rrFlag': False})
             return self.send(200, {'data': rows})
+        if path.startswith('/bmrs/api/v1/balancing/settlement/indicative/cashflows/all/') or \
+                path.startswith('/bmrs/api/v1/balancing/settlement/acceptance/volumes/all/'):
+            from datetime import date as _date
+            parts = path.split('/')
+            side, day, period = parts[-3], _date.fromisoformat(parts[-2]), int(parts[-1])
+            if settlement_start(day, period) + 1800 + 900 > _clock.time():
+                return self.send(200, {'data': []})
+            return self.send(200, {'data': balancing_rows('cash' if 'cashflows' in path else 'vol', side, day, period)})
+        if path == '/bmrs/api/v1/balancing/bid-offer/all':
+            rows = []
+            for unit in FLEET:
+                if unit['fuel'] in ('WIND', 'CCGT', 'OCGT', 'BATTERY'):
+                    r = h01(unit['ngc'])
+                    bid = -(60 + 40 * r) if unit['fuel'] == 'WIND' else 30 + 40 * r
+                    offer = 120 + 80 * r
+                    for pair in (-1, 1):
+                        rows.append({'settlementDate': q['settlementDate'], 'settlementPeriod': int(q['settlementPeriod']),
+                                     'nationalGridBmUnit': unit['ngc'], 'bmUnit': unit['elexon'], 'levelFrom': pair * 50,
+                                     'levelTo': pair * 50, 'bid': round(bid, 2), 'offer': round(offer, 2), 'pairId': pair})
+            return self.send(200, {'data': rows})
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'constraint-breakdown':
+            return self.send(200, {'success': True, 'result': {'resources': [
+                {'id': 'cb-2025', 'name': 'Constraint Breakdown 2025-2026', 'datastore_active': True},
+                {'id': 'cb-2026', 'name': 'Constraint Breakdown 2026-2027', 'datastore_active': True}]}})
+        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id', '').startswith('cb-'):
+            records = constraint_records()
+            records = records[:120] if q['resource_id'] == 'cb-2026' else records[120:]
+            return self.send(200, {'success': True, 'result': {'records': records, 'total': len(records)}})
         if path == '/bmrs/api/v1/system/warnings':
             return self.send(200, {'data': mock_warnings(parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo']))})
         if path.startswith('/pvlive/api/v4/pes/'):

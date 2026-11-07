@@ -91,6 +91,7 @@ POLL = {
     'units': env_int('POLL_UNITS_SECONDS', 60, 30, 3600),
     'warnings': env_int('POLL_WARNINGS_SECONDS', 300, 60, 3600),
     'regions': env_int('POLL_REGIONS_SECONDS', 1800, 300, 7200),
+    'balancing': env_int('POLL_BALANCING_SECONDS', 300, 120, 3600),
 }
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
@@ -221,6 +222,11 @@ def settlement_start(day, period):
     return uk_midnight_utc(day) + (int(period) - 1) * 1800
 
 
+def settlement_periods(day):
+    """Number of settlement periods in a UK day: 46, 48 or 50."""
+    return int((uk_midnight_utc(day + timedelta(days=1)) - uk_midnight_utc(day)) // 1800)
+
+
 MONTHS = {m: i + 1 for i, m in enumerate(
     ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'])}
 
@@ -347,6 +353,10 @@ UPSERT_ST = ('INSERT INTO st (t, id, mw) VALUES (?, ?, ?) '
 UPSERT_REG = ('INSERT INTO reg (t, region, v, idx, mix) VALUES (?, ?, ?, ?, ?) '
               'ON CONFLICT (region, t) DO UPDATE SET v = excluded.v, idx = excluded.idx, mix = excluded.mix '
               'WHERE reg.v IS NOT excluded.v OR reg.idx IS NOT excluded.idx OR reg.mix IS NOT excluded.mix')
+UPSERT_BAL = ('INSERT INTO bal (d, sp, unit, elexon, vol_bid, vol_offer, cash_bid, cash_offer) '
+              'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (d, sp, unit) DO UPDATE SET elexon = excluded.elexon, '
+              'vol_bid = excluded.vol_bid, vol_offer = excluded.vol_offer, cash_bid = excluded.cash_bid, '
+              'cash_offer = excluded.cash_offer')
 UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
                'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
 STATION_HISTORY_DAYS = 7
@@ -385,6 +395,10 @@ class Store:
                 body TEXT NOT NULL, PRIMARY KEY (t, kind)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS reg (t INTEGER NOT NULL, region INTEGER NOT NULL, v REAL,
                 idx TEXT, mix TEXT, PRIMARY KEY (region, t)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS bal (d TEXT NOT NULL, sp INTEGER NOT NULL, unit TEXT NOT NULL, elexon TEXT,
+                vol_bid REAL, vol_offer REAL, cash_bid REAL, cash_offer REAL, PRIMARY KEY (d, sp, unit)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS balp (d TEXT NOT NULL, sp INTEGER NOT NULL, t INTEGER NOT NULL,
+                fetched INTEGER NOT NULL, PRIMARY KEY (d, sp)) WITHOUT ROWID;
         ''')
 
     def write(self, sql, rows, history=True):
@@ -435,6 +449,9 @@ class Store:
             self.db.execute('DELETE FROM st WHERE t < ?', (time.time() - STATION_HISTORY_DAYS * 86400,))
             self.db.execute('DELETE FROM warn WHERE t < ?', (time.time() - 400 * 86400,))
             self.db.execute('DELETE FROM reg WHERE t < ?', (time.time() - 3 * 86400,))
+            old = (datetime.now(timezone.utc) - timedelta(days=9)).date().isoformat()
+            self.db.execute('DELETE FROM bal WHERE d < ?', (old,))
+            self.db.execute('DELETE FROM balp WHERE d < ?', (old,))
             removed = self.db.total_changes - before
         if removed:
             log.info('Pruned %d old rows', removed)
@@ -456,6 +473,7 @@ SOURCE_LABELS = {
     'units': 'Power stations (Elexon PN and BOALF)',
     'warnings': 'Grid notices (Elexon system warnings)',
     'regions': 'Regions (NESO carbon intensity, Sheffield Solar)',
+    'balancing': 'Balancing (Elexon cashflows and volumes, NESO constraint costs)',
 }
 
 
@@ -1277,6 +1295,16 @@ class Units:
             del self.boa[key]
         log.debug('[units] BOALF: %d segments, %d acceptances held', count, len(self.boa))
 
+    def describe(self, unit, elexon=''):
+        """(station id, category, display name) for a BM unit."""
+        ref = self.reference.get(unit)
+        sid = self.fleet.resolve(unit, elexon, ref)
+        fuel = (ref or {}).get('f') or (self.fleet.stations[sid]['fuel'] if sid else '')
+        fuel = fuel if fuel in UNIT_CATEGORY else 'OTHER'
+        station = self.fleet.stations.get(sid)
+        name = station['name'] if station else ((ref or {}).get('n') or (ref or {}).get('p') or elexon or unit)
+        return sid, unit_category(fuel, station, ref), name
+
     def accepted_levels(self, t):
         """Latest acceptance covering t, per unit: {unit: (level, elexon)}."""
         best = {}
@@ -1327,6 +1355,7 @@ class Units:
         for unit, (elexon, segments) in pn_units.items():
             level = segment_level(segments, at)
             levels[unit] = [held_level(segments, at) if level is None else level, 'pn', elexon]
+        planned = {unit: values[0] for unit, values in levels.items()}
         for unit, (level, elexon) in self.accepted_levels(at).items():
             levels[unit] = [level, 'boa', levels.get(unit, [0, '', elexon])[2] or elexon]
 
@@ -1357,9 +1386,13 @@ class Units:
                 factor = raw if 0.4 <= raw <= 2.5 or target < 50 else 1.0
             scale[fuel] = factor
 
-        stations, unplaced = {}, []
+        stations, unplaced, instructions = {}, [], []
         categories = {cat: {'mapped': 0.0, 'unplaced': 0.0, 'estimated': 0.0} for cat in CATEGORY_ORDER}
         for unit, elexon, sid, fuel, level, source, ref in rows:
+            if source == 'boa' and unit in planned and abs(level - planned[unit]) >= 1:
+                instructions.append({'unit': unit, 'elexon': elexon, 'sid': sid,
+                                     'cat': unit_category(fuel, self.fleet.stations.get(sid), ref),
+                                     'delta': round(level - planned[unit], 1), 'level': round(level, 1)})
             mw = level * scale.get(fuel, 1.0) if level > 0 else level
             cat = unit_category(fuel, self.fleet.stations.get(sid), ref)
             if level > 0:
@@ -1388,6 +1421,7 @@ class Units:
             'counts': {'units': len(rows), 'placed': sum(s['units'] for s in stations.values()),
                        'instructed': sum(s['instructed'] for s in stations.values())},
             'reference_units': len(self.reference), 'reference_error': self.reference_error,
+            'instructions': instructions,
         }
         with self.lock:
             self.snapshot = snapshot
@@ -1463,6 +1497,131 @@ def run_maintenance(store, stop):
             store.prune(HISTORY_DAYS + 2)
         except Exception as error:
             log.warning('[maintenance] %s', error)
+
+
+# --------------------------------------------------------------------------
+# Balancing: what the grid operator pays units to change their output
+# --------------------------------------------------------------------------
+
+class Balancing:
+    """Per-unit volumes and payments for each finished half hour (Elexon's
+    indicative figures, about 20 minutes after it ends), bid and offer prices
+    for the current half hour, and NESO's daily constraint costs."""
+
+    def __init__(self, store):
+        self.store = store
+        self.lock = threading.Lock()
+        self.prices = {}            # unit -> (bid price, offer price) for the current half hour
+        self.prices_period = None
+        self.constraints = []       # [(date, cost, volume, {category: cost})]
+        self.constraints_checked = 0
+        self.version = 0
+
+    def _rows(self, path):
+        payload = get_json(ELEXON + path, timeout=90)
+        items = payload.get('data') if isinstance(payload, dict) else payload
+        if not isinstance(items, list):
+            raise FetchError('Unexpected response shape from ' + path.split('?')[0])
+        return items
+
+    def fetch_period(self, day, period):
+        stamp = '%s/%d' % (day.isoformat(), period)
+        units = {}
+        for side in ('bid', 'offer'):
+            for item in self._rows('/balancing/settlement/indicative/cashflows/all/%s/%s' % (side, stamp)):
+                unit = item.get('nationalGridBmUnit') or item.get('bmUnit')
+                cash = as_float(item.get('totalCashflow'))
+                if unit and cash is not None:
+                    entry = units.setdefault(unit, [item.get('bmUnit') or '', 0.0, 0.0, 0.0, 0.0])
+                    entry[3 if side == 'bid' else 4] += cash
+            for item in self._rows('/balancing/settlement/acceptance/volumes/all/%s/%s' % (side, stamp)):
+                unit = item.get('nationalGridBmUnit') or item.get('bmUnit')
+                volume = as_float(item.get('totalVolumeAccepted'))
+                if unit and volume is not None:
+                    entry = units.setdefault(unit, [item.get('bmUnit') or '', 0.0, 0.0, 0.0, 0.0])
+                    entry[1 if side == 'bid' else 2] += volume
+        rows = [(day.isoformat(), period, unit, e[0], round(e[1], 3), round(e[2], 3), round(e[3], 2), round(e[4], 2))
+                for unit, e in units.items()]
+        self.store.write(UPSERT_BAL, rows, history=False)
+        self.store.write('INSERT OR REPLACE INTO balp (d, sp, t, fetched) VALUES (?, ?, ?, ?)',
+                         [(day.isoformat(), period, settlement_start(day, period), int(time.time()))], history=False)
+        return len(rows)
+
+    def fetch_prices(self, day, period):
+        prices = {}
+        for item in self._rows('/balancing/bid-offer/all?settlementDate=%s&settlementPeriod=%d' % (day.isoformat(), period)):
+            unit, pair = item.get('nationalGridBmUnit'), item.get('pairId')
+            if not unit or pair not in (-1, 1):
+                continue
+            entry = prices.setdefault(unit, [None, None])
+            if pair == -1:
+                entry[0] = as_float(item.get('bid'))
+            else:
+                entry[1] = as_float(item.get('offer'))
+        with self.lock:
+            self.prices, self.prices_period = prices, (day, period)
+
+    def fetch_constraints(self):
+        result = get_json(NESO + '/api/3/action/package_show?id=constraint-breakdown', timeout=60).get('result') or {}
+        resources = [r for r in result.get('resources', []) if r.get('datastore_active')]
+        rows = []
+        for resource in resources[-2:]:
+            data = get_json(NESO + '/api/3/action/datastore_search?resource_id=%s&limit=400&sort=_id%%20desc' % resource['id'],
+                            timeout=60).get('result') or {}
+            rows += data.get('records') or []
+        days = {}
+        for row in rows:
+            day = str(row.get('Date') or '')[:10]
+            if not day:
+                continue
+            costs = {key[:-5].strip(): as_float(value) or 0.0 for key, value in row.items() if key.endswith(' cost')}
+            volume = sum(as_float(value) or 0.0 for key, value in row.items() if key.endswith(' volume') and 'Thermal' in key)
+            days[day] = (day, round(sum(costs.values())), round(volume), {k: round(v) for k, v in costs.items()})
+        with self.lock:
+            self.constraints = [days[k] for k in sorted(days)][-120:]
+            self.version += 1
+
+    def poll(self):
+        now = time.time()
+        errors = []
+        day, period = settlement_period_at(now)
+        if self.prices_period != (day, period):
+            try:
+                self.fetch_prices(day, period)
+            except FetchError as error:
+                errors.append('bid and offer prices: ' + str(error))
+        # Finished half hours from yesterday (UK) onwards, oldest first, a few per poll
+        done = {(d, sp) for d, sp in self.store.query('SELECT d, sp FROM balp WHERE d >= ?', ((day - timedelta(days=1)).isoformat(),))}
+        todo = []
+        for back in (1, 0):
+            d = day - timedelta(days=back)
+            for sp in range(1, settlement_periods(d) + 1):
+                start = settlement_start(d, sp)
+                if start + 1800 + 1200 <= now and (d.isoformat(), sp) not in done:
+                    todo.append((d, sp))
+        fetched = 0
+        for d, sp in todo[-24:] if len(todo) > 24 and not done else todo[:24]:
+            try:
+                fetched += 1
+                self.fetch_period(d, sp)
+            except FetchError as error:
+                if settlement_start(d, sp) > now - 3 * 3600:
+                    break  # recent half hours may simply not be published yet
+                errors.append('half hour %s %d: %s' % (d.isoformat(), sp, error))
+                break
+            time.sleep(0.25)
+        if now - self.constraints_checked > 6 * 3600:
+            try:
+                self.fetch_constraints()
+                self.constraints_checked = now
+            except FetchError as error:
+                errors.append('constraint costs: ' + str(error))
+        with self.lock:
+            self.version += 1
+        if errors and not fetched and not self.prices:
+            raise FetchError('; '.join(errors))
+        if errors:
+            log.debug('[balancing] %s', '; '.join(errors))
 
 
 # --------------------------------------------------------------------------
@@ -1586,11 +1745,12 @@ def r2(value):
 class Grid:
     """Builds the /api/live and /api/history payloads from the store."""
 
-    def __init__(self, store, status, fleet=None, units=None):
+    def __init__(self, store, status, fleet=None, units=None, balancing=None):
         self.store = store
         self.status = status
         self.fleet = fleet
         self.units = units
+        self.bal = balancing
         self.cache = {}
         self.cache_lock = threading.Lock()
 
@@ -2155,6 +2315,94 @@ class Grid:
             'ci': values, 'index': levels, 'mix': mixes, 'solar': solar, 'generated': int(now),
         }
 
+    # ---- /api/balancing ----------------------------------------------------
+
+    def balancing(self):
+        key = (self.store.version, self.units.version if self.units else 0, self.bal.version if self.bal else 0)
+        return self.cached(('balancing',), key, self._build_balancing)
+
+    def _build_balancing(self):
+        now = time.time()
+        day, period = settlement_period_at(now)
+        names = {}
+
+        def describe(unit, elexon=''):
+            if unit not in names:
+                names[unit] = self.units.describe(unit, elexon) if self.units else (None, 'other', unit)
+            return names[unit]
+
+        def place(sid):
+            station = self.fleet.stations.get(sid) if (self.fleet and sid is not None) else None
+            return (round(station['x'], 1), round(station['y'], 1)) if station else (None, None)
+
+        # Now: units following instructions, priced at their bid or offer for this half hour
+        snapshot = self.units.snapshot if self.units else None
+        with self.bal.lock if self.bal else threading.Lock():
+            prices = dict(self.bal.prices) if self.bal else {}
+        live, cost, priced = [], 0.0, 0
+        for item in (snapshot or {}).get('instructions', []):
+            sid, cat, name = describe(item['unit'], item['elexon'])
+            bid, offer = prices.get(item['unit'], (None, None))
+            price = offer if item['delta'] > 0 else bid
+            if price is not None:
+                cost += item['delta'] * price
+                priced += 1
+            x, y = place(sid)
+            live.append({'unit': item['unit'], 'sid': sid, 'name': name, 'cat': cat, 'delta': item['delta'],
+                         'price': price, 'x': x, 'y': y})
+        live.sort(key=lambda u: -abs(u['delta']))
+
+        # Finished half hours, yesterday and today (UK days)
+        days = [day - timedelta(days=1), day]
+        fetched = {(d, sp) for d, sp in self.store.query('SELECT d, sp FROM balp WHERE d >= ?', (days[0].isoformat(),))}
+        totals, top = {}, {}
+        for d, sp, unit, elexon, vb, vo, cb, co in self.store.query(
+                'SELECT d, sp, unit, elexon, vol_bid, vol_offer, cash_bid, cash_offer FROM bal WHERE d >= ?',
+                (days[0].isoformat(),)):
+            sid, cat, name = describe(unit, elexon or '')
+            p = totals.setdefault((d, sp), [0.0] * 6)
+            p[0] += vb or 0.0
+            p[1] += vo or 0.0
+            p[2] += cb or 0.0
+            p[3] += co or 0.0
+            if cat == 'wind':
+                p[4] += vb or 0.0
+                p[5] += cb or 0.0
+            if d == day.isoformat():
+                u = top.setdefault(unit, {'unit': unit, 'sid': sid, 'name': name, 'cat': cat, 'down': 0.0, 'up': 0.0, 'paid': 0.0})
+                u['down'] += vb or 0.0
+                u['up'] += vo or 0.0
+                u['paid'] += (cb or 0.0) + (co or 0.0)
+        series = {}
+        for d in days:
+            rows = []
+            for sp in range(1, settlement_periods(d) + 1):
+                p = totals.get((d.isoformat(), sp))
+                if p is None and (d.isoformat(), sp) in fetched:
+                    p = [0.0] * 6
+                rows.append([settlement_start(d, sp)] + ([round(v, 1) for v in p] if p else [None] * 6))
+            series['today' if d == day else 'yesterday'] = rows
+        today = [r for r in series['today'] if r[1] is not None]
+        summary = {
+            'periods': len(today),
+            'down_mwh': round(-sum(r[1] for r in today)), 'up_mwh': round(sum(r[2] for r in today)),
+            'paid': round(sum(r[3] + r[4] for r in today)), 'wind_down_mwh': round(-sum(r[5] for r in today)),
+            'wind_paid': round(sum(r[6] for r in today)),
+        }
+        ranked = sorted(top.values(), key=lambda u: -u['paid'])
+        for u in ranked:
+            u['down'], u['up'], u['paid'] = round(-u['down'], 1), round(u['up'], 1), round(u['paid'])
+        return {
+            'now': {'time': (snapshot or {}).get('at'), 'period': period, 'units': live[:200],
+                    'down': round(-sum(u['delta'] for u in live if u['delta'] < 0)),
+                    'up': round(sum(u['delta'] for u in live if u['delta'] > 0)),
+                    'cost_hour': round(cost) if priced else None, 'priced': priced},
+            'series': series, 'columns': ['t', 'bid_mwh', 'offer_mwh', 'bid_paid', 'offer_paid', 'wind_bid_mwh', 'wind_bid_paid'],
+            'today': summary, 'top': ranked[:15], 'paid_units': len(ranked),
+            'constraints': [{'d': c[0], 'cost': c[1], 'volume': c[2], 'parts': c[3]} for c in (self.bal.constraints if self.bal else [])],
+            'generated': int(now),
+        }
+
     # ---- /api/alerts: grid notices in force now --------------------------
 
     def notices(self, days=30):
@@ -2208,6 +2456,7 @@ PAGES = [
     ('map', '/map', 'Map', 'map.html'),
     ('stations', '/stations', 'Stations', 'map.html'),
     ('regions', '/regions', 'Regions', 'regions.html'),
+    ('balancing', '/balancing', 'Balancing', 'balancing.html'),
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -2233,7 +2482,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'and region boundaries from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'region boundaries and constraint costs from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
@@ -2350,6 +2599,8 @@ class Handler(BaseHTTPRequestHandler):
             elif parts.path == '/regions.json':
                 body, etag = App.regions
                 self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
+            elif parts.path == '/api/balancing':
+                self.respond_json(App.grid.balancing(), send_body)
             elif parts.path == '/api/regions':
                 self.respond_json(App.grid.regions(), send_body)
             elif parts.path == '/api/replay':
@@ -2449,7 +2700,8 @@ def main():
     ingest = Ingest(store, status)
     fleet = Fleet(STATIONS_PATH)
     units = Units(store, fleet)
-    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units), UI()
+    balancing = Balancing(store)
+    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing), UI()
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
@@ -2465,6 +2717,7 @@ def main():
         ('units', units.poll),
         ('warnings', ingest.poll_warnings),
         ('regions', ingest.poll_regions),
+        ('balancing', balancing.poll),
     ]
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))

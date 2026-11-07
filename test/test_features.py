@@ -112,5 +112,35 @@ check('index levels', data['index']['13'][now] == 2 and data['index']['2'][now] 
 check('mix in fixed fuel order', data['mix']['2'][now].split(',')[data['fuels'].index('wind')] == '60')
 check('regional solar mapped to the region', data['solar']['13'][now - 1] == 250, data['solar'])
 
+# ---- balancing --------------------------------------------------------------
+
+store = server.Store(tempfile.mkdtemp())
+bal = server.Balancing(store)
+day, period = server.settlement_period_at(server.time.time())
+responses = {
+    'cashflows/all/bid': [{'nationalGridBmUnit': 'WINDA-1', 'bmUnit': 'T_WINDA-1', 'totalCashflow': 7000.0}],
+    'cashflows/all/offer': [{'nationalGridBmUnit': 'GASB-1', 'bmUnit': 'T_GASB-1', 'totalCashflow': 9000.0}],
+    'volumes/all/bid': [{'nationalGridBmUnit': 'WINDA-1', 'totalVolumeAccepted': -60.0},
+                        {'nationalGridBmUnit': 'WINDA-1', 'totalVolumeAccepted': -40.0}],
+    'volumes/all/offer': [{'nationalGridBmUnit': 'GASB-1', 'totalVolumeAccepted': 75.0}],
+}
+original = server.get_json
+server.get_json = lambda url, timeout=30: {'data': next(v for k, v in responses.items() if k in url)}
+try:
+    bal.fetch_period(day, 1)
+finally:
+    server.get_json = original
+rows = {r[0]: r[1:] for r in store.query('SELECT unit, vol_bid, vol_offer, cash_bid, cash_offer FROM bal')}
+check('bid volumes summed per unit', rows['WINDA-1'][0] == -100.0 and rows['WINDA-1'][2] == 7000.0, rows)
+check('offers stored', rows['GASB-1'][1] == 75.0 and rows['GASB-1'][3] == 9000.0, rows)
+check('half hour marked fetched', store.scalar('SELECT COUNT(*) FROM balp') == 1)
+grid = server.Grid(store, server.Status(), balancing=bal)
+data = grid.balancing()
+first = data['series']['today'][0]
+check('half hour totals', first[1] == -100.0 and first[2] == 75.0 and first[3] + first[4] == 16000.0, first)
+check('days have the right length', len(data['series']['today']) == server.settlement_periods(day))
+check('top payments', data['top'][0]['unit'] == 'GASB-1' and data['top'][0]['paid'] == 9000, data['top'])
+check('periods in a clock-change day', server.settlement_periods(date(2026, 10, 25)) == 50 and server.settlement_periods(date(2026, 3, 29)) == 46)
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)
