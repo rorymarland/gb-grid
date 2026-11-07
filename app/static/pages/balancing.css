@@ -1,0 +1,36 @@
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.tile { background: var(--page); border: 1px solid var(--hair); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.tile .k { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
+.tile .v { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; }
+.tile .v small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 3px; letter-spacing: 0; }
+.tile .n { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.dot-down, .dot-up { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot-down { background: var(--down); } .dot-up { background: var(--up); }
+.bal-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 0 28px; align-items: start; }
+.bmap { position: relative; background: var(--sea); border-radius: 14px; overflow: hidden; }
+.bmap svg { display: block; width: 100%; height: auto; max-height: calc(100vh - 200px); min-height: 380px; }
+.land { fill: var(--land); stroke: var(--coast); stroke-width: 0.7; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.near { fill: var(--land-near); stroke: var(--coast-near); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+.u-down { fill: var(--down); } .u-up { fill: var(--up); }
+.ucirc { fill-opacity: 0.82; stroke: var(--surface); cursor: pointer; }
+.ucirc:hover, .ucirc.hot { fill-opacity: 1; stroke: var(--ink); }
+.map-note { position: absolute; left: 10px; bottom: 10px; right: 10px; font-size: 12.5px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; padding: 6px 10px; }
+.ulist h3 { font-size: 15px; margin: 0 0 6px; }
+.ulist .data td { padding: 7px 6px; }
+.ulist .bar { display: inline-block; height: 8px; border-radius: 3px; vertical-align: middle; margin-right: 8px; }
+.ulist tr.hot td { background: var(--wash); }
+.scroll-list { max-height: 560px; overflow-y: auto; }
+.chart-wrap { position: relative; }
+.bar-up { fill: var(--up); } .bar-down { fill: var(--down); } .bar-wind { fill: var(--down); fill-opacity: 0.55; }
+.bar-cost { fill: var(--line); fill-opacity: 0.75; }
+.bar-hot { fill-opacity: 1 !important; stroke: var(--ink); stroke-width: 1; }
+.now-mark { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.method { font-size: 14.5px; color: var(--ink-2); line-height: 1.6; }
+.method p { margin: 0 0 10px; max-width: 80ch; }
+.fig-note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+@media (max-width: 980px) {
+  .bal-grid { grid-template-columns: minmax(0, 1fr); }
+  .ulist { margin-top: 20px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) { .tile .v { font-size: 22px; } }

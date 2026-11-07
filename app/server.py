@@ -3000,6 +3000,7 @@ HEAD_HTML = (
     '<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
     '<meta name="color-scheme" content="light dark">\n'
+    '<!--#importmap-->\n'
     '<link rel="stylesheet" href="{{static:base.css}}">\n'
     '<link rel="icon" href="{{static:favicon.svg}}" type="image/svg+xml">\n'
     '<link rel="apple-touch-icon" href="{{static:icon-180.png}}">\n'
@@ -3058,25 +3059,28 @@ class UI:
 
     def load(self):
         static = {}
-        try:
-            names = sorted(os.listdir(STATIC_DIR))
-        except OSError:
-            names = []
-        for name in names:
-            kind = STATIC_TYPES.get(os.path.splitext(name)[1].lower())
-            path = os.path.join(STATIC_DIR, name)
-            if kind and os.path.isfile(path):
-                body, etag = load_file(path, 'the static folder', b'')
-                static[name] = (body, etag, kind)
+        for folder, dirs, files in os.walk(STATIC_DIR):
+            dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+            for filename in sorted(files):
+                path = os.path.join(folder, filename)
+                name = os.path.relpath(path, STATIC_DIR).replace(os.sep, '/')
+                kind = STATIC_TYPES.get(os.path.splitext(name)[1].lower())
+                if kind and os.path.isfile(path) and STATIC_NAME.match(name):
+                    body, etag = load_file(path, 'the static folder', b'')
+                    static[name] = (body, etag, kind)
+        # Modules import each other by plain path; the import map adds each file's version
+        imports = {'/static/' + name: self._static_url(name, static) for name in static if name.endswith('.js')}
+        importmap = '<script type="importmap">' + json.dumps({'imports': imports}, separators=(',', ':')) + '</script>'
         sources, pages = {}, {}
         for key, path, label, filename in PAGES:
             if filename not in sources:
                 source = (UI_PATH if filename == 'index.html' else MAP_UI_PATH if filename == 'map.html'
                           else os.path.join(APP_DIR, filename))
                 sources[filename] = load_file(source, 'the app folder', MISSING_PAGE)[0].decode('utf-8', 'replace')
-            html = sources[filename].replace('<!--#head-->', HEAD_HTML).replace('<!--#header-->', header_html(key))
+            html = sources[filename].replace('<!--#head-->', HEAD_HTML.replace('<!--#importmap-->', importmap))
+            html = html.replace('<!--#header-->', header_html(key))
             html = html.replace('<!--#credits-->', CREDITS_HTML).replace('<!--#credits-short-->', CREDITS_SHORT_HTML)
-            html = re.sub(r'\{\{static:([\w.-]+)\}\}', lambda m: self._static_url(m.group(1), static), html)
+            html = re.sub(r'\{\{static:([\w./-]+)\}\}', lambda m: self._static_url(m.group(1), static), html)
             body = html.encode('utf-8')
             pages[key] = (body, '"' + hashlib.sha1(body).hexdigest()[:16] + '"')
         with self.lock:
@@ -3097,7 +3101,7 @@ class UI:
 
 PAGE_PATHS = {path: key for key, path, _, _ in PAGES}
 PAGE_PATHS['/index.html'] = 'overview'
-STATIC_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+STATIC_NAME = re.compile(r'^(?:[a-z0-9][a-z0-9_-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*$')
 
 
 class Handler(BaseHTTPRequestHandler):
