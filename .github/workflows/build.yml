@@ -125,9 +125,9 @@ jobs:
       - name: Live data report
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           docker run -d --name live -p 8080:8080 -e CARBON_REGION_ID=2 -e HISTORY_DAYS=2 gb-grid:test
-          python3 tools/live_report.py http://127.0.0.1:8080 --wait 240
+          python3 tools/live_report.py http://127.0.0.1:8080 --wait 480
           docker logs live 2>&1 | tail -40
           docker rm -f live

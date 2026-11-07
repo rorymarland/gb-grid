@@ -43,6 +43,17 @@ def main():
         except Exception as error:  # the server may still be starting
             print('waiting:', error)
         time.sleep(5)
+    # The newer feeds take a few minutes to fill on a fresh start
+    while time.time() < deadline:
+        try:
+            ready = (any(get(base, '/api/regions').get('ci', {}).values())
+                     and get(base, '/api/balancing')['today']['periods'] > 0
+                     and get(base, '/api/outages').get('checked'))
+            if ready:
+                break
+        except Exception as error:
+            print('waiting:', error)
+        time.sleep(10)
     live = get(base, '/api/live')
 
     print('== Feeds')
