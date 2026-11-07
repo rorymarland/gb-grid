@@ -90,12 +90,14 @@ POLL = {
     'region': env_int('POLL_CARBON_SECONDS', 300, 60, 7200),
     'units': env_int('POLL_UNITS_SECONDS', 60, 30, 3600),
     'warnings': env_int('POLL_WARNINGS_SECONDS', 300, 60, 3600),
+    'regions': env_int('POLL_REGIONS_SECONDS', 1800, 300, 7200),
 }
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
 ACCESS_LOG = env_str('ACCESS_LOG', 'false').lower() in ('1', 'true', 'yes', 'on')
 UI_RELOAD = env_str('UI_RELOAD', 'false').lower() in ('1', 'true', 'yes', 'on')  # development: reread pages per request
 STATIC_DIR = os.path.join(APP_DIR, 'static')
+REGIONS_PATH = os.path.join(APP_DIR, 'regions.json')
 
 ELEXON = env_str('ELEXON_BASE_URL', 'https://data.elexon.co.uk/bmrs/api/v1').rstrip('/')
 CARBON = env_str('CARBON_BASE_URL', 'https://api.carbonintensity.org.uk').rstrip('/')
@@ -136,6 +138,19 @@ INTERCONNECTORS = {
     'INTGRNL': ('Greenlink', 'Ireland', 0.5, 'Pembrokeshire to Wexford'),
 }
 COUNTRY_ORDER = ['France', 'Norway', 'Netherlands', 'Belgium', 'Denmark', 'Ireland']
+
+# The 14 distribution regions. Sheffield Solar's PES IDs (also NESO's licence
+# area IDs) -> NESO Carbon Intensity API region IDs. 15 to 17 are England,
+# Scotland and Wales, and 18 is Great Britain.
+PES_REGIONS = {17: 1, 18: 2, 16: 3, 15: 4, 23: 5, 13: 6, 21: 7, 14: 8, 11: 9, 10: 10, 22: 11, 20: 12, 12: 13, 19: 14}
+REGION_NAMES = {
+    1: 'North Scotland', 2: 'South Scotland', 3: 'North West England', 4: 'North East England', 5: 'Yorkshire',
+    6: 'North Wales & Merseyside', 7: 'South Wales', 8: 'West Midlands', 9: 'East Midlands', 10: 'East England',
+    11: 'South West England', 12: 'South England', 13: 'London', 14: 'South East England', 15: 'England',
+    16: 'Scotland', 17: 'Wales', 18: 'Great Britain',
+}
+MIX_FUELS = ['biomass', 'coal', 'imports', 'gas', 'nuclear', 'other', 'hydro', 'solar', 'wind']
+INDEX_LEVELS = ['very low', 'low', 'moderate', 'high', 'very high']
 
 # Emission factors (gCO2/kWh) from NESO's Carbon Intensity methodology
 # (May 2024 issue). Norway and Denmark are not in NESO's published table;
@@ -329,6 +344,9 @@ UPSERT_FREQ = ('INSERT INTO freq (t, hz) VALUES (?, ?) '
                'ON CONFLICT (t) DO UPDATE SET hz = excluded.hz WHERE freq.hz IS NOT excluded.hz')
 UPSERT_ST = ('INSERT INTO st (t, id, mw) VALUES (?, ?, ?) '
              'ON CONFLICT (id, t) DO UPDATE SET mw = excluded.mw WHERE st.mw IS NOT excluded.mw')
+UPSERT_REG = ('INSERT INTO reg (t, region, v, idx, mix) VALUES (?, ?, ?, ?, ?) '
+              'ON CONFLICT (region, t) DO UPDATE SET v = excluded.v, idx = excluded.idx, mix = excluded.mix '
+              'WHERE reg.v IS NOT excluded.v OR reg.idx IS NOT excluded.idx OR reg.mix IS NOT excluded.mix')
 UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
                'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
 STATION_HISTORY_DAYS = 7
@@ -365,6 +383,8 @@ class Store:
                 mw REAL NOT NULL, PRIMARY KEY (id, t)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS warn (t INTEGER NOT NULL, kind TEXT NOT NULL,
                 body TEXT NOT NULL, PRIMARY KEY (t, kind)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS reg (t INTEGER NOT NULL, region INTEGER NOT NULL, v REAL,
+                idx TEXT, mix TEXT, PRIMARY KEY (region, t)) WITHOUT ROWID;
         ''')
 
     def write(self, sql, rows, history=True):
@@ -414,6 +434,7 @@ class Store:
             self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - 26 * 3600,))
             self.db.execute('DELETE FROM st WHERE t < ?', (time.time() - STATION_HISTORY_DAYS * 86400,))
             self.db.execute('DELETE FROM warn WHERE t < ?', (time.time() - 400 * 86400,))
+            self.db.execute('DELETE FROM reg WHERE t < ?', (time.time() - 3 * 86400,))
             removed = self.db.total_changes - before
         if removed:
             log.info('Pruned %d old rows', removed)
@@ -434,6 +455,7 @@ SOURCE_LABELS = {
     'ddu': 'Embedded history (NESO Demand Data Update)',
     'units': 'Power stations (Elexon PN and BOALF)',
     'warnings': 'Grid notices (Elexon system warnings)',
+    'regions': 'Regions (NESO carbon intensity, Sheffield Solar)',
 }
 
 
@@ -488,6 +510,8 @@ class Ingest:
         self.embedded_url = None
         self.ddu_validators = {}
         self.region_summary = None
+        self.regions_past_checked = 0
+        self.regional_solar_checked = 0
 
     # ---- Elexon FUELINST (generation by fuel type, 5-minute) -------------
 
@@ -722,10 +746,10 @@ class Ingest:
 
     # ---- Sheffield Solar PV_Live (GB solar, half-hourly) -----------------
 
-    def pvlive(self, start, end, timeout=45):
+    def pvlive(self, start, end, timeout=45, pes=0, key='pv'):
         start = floor_to(start, 1800)
         end = floor_to(end, 1800) + 1800
-        url = PVLIVE + '/pes/0?start=' + iso(start) + '&end=' + iso(end) + '&period=30'
+        url = PVLIVE + '/pes/' + str(pes) + '?start=' + iso(start) + '&end=' + iso(end) + '&period=30'
         payload = get_json(url, timeout=timeout)
         if not isinstance(payload, dict) or 'data' not in payload or 'meta' not in payload:
             raise FetchError('Unexpected PV_Live response shape')
@@ -745,8 +769,8 @@ class Ingest:
                 t = floor_to(parse_time(record[time_col]), 1800) - 1800
             except (IndexError, TypeError, ValueError):
                 continue
-            rows.append(('pv', t, max(0.0, value)))
-        self.store.write(UPSERT_HH, rows)
+            rows.append((key, t, max(0.0, value)))
+        self.store.write(UPSERT_HH, rows, history=key == 'pv')
         return len(rows)
 
     def poll_solar(self):
@@ -875,6 +899,65 @@ class Ingest:
         now = time.time()
         last = self.store.scalar('SELECT MAX(t) FROM warn')
         self.system_warnings(max(last - 6 * 3600, now - 30 * 86400) if last else now - 30 * 86400, now + 60)
+
+    # ---- Regions: every region's carbon intensity and solar output -------
+
+    def _ingest_regions(self, payload):
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            raise FetchError('Unexpected regional carbon intensity response shape')
+        rows = []
+        for entry in data:
+            try:
+                t = floor_to(parse_time(entry['from']), 1800)
+                regions = entry['regions']
+            except (KeyError, TypeError, ValueError):
+                continue
+            for region in regions if isinstance(regions, list) else []:
+                try:
+                    rid = int(region['regionid'])
+                    intensity = region.get('intensity') or {}
+                    value = as_float(intensity.get('forecast'))
+                    if value is None:
+                        value = as_float(intensity.get('actual'))
+                except (KeyError, TypeError, ValueError):
+                    continue
+                index = intensity.get('index')
+                mix = {}
+                for item in region.get('generationmix') or []:
+                    try:
+                        mix[str(item['fuel']).lower()] = float(item['perc'])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                text = ','.join('%g' % round(mix.get(fuel, 0.0), 1) for fuel in MIX_FUELS) if mix else None
+                rows.append((t, rid, value, str(index).lower() if index else None, text))
+        self.store.write(UPSERT_REG, rows, history=False)
+        return len(rows)
+
+    def poll_regions(self):
+        now = time.time()
+        base = CARBON + '/regional/intensity/' + iso_minute(now)
+        if not self._ingest_regions(get_json(base + '/fw48h', timeout=90)):
+            raise FetchError('The regional forecast had no usable half hours')
+        if now - self.regions_past_checked > 3 * 3600:
+            try:
+                self._ingest_regions(get_json(base + '/pt24h', timeout=90))
+                self.regions_past_checked = now
+            except FetchError as error:
+                log.debug('[regions] past 24 hours unavailable: %s', error)
+        # Sheffield Solar's estimate for each region: the last day on the
+        # first run, then the last few hours (revisions included)
+        start = now - (26 * 3600 if now - self.regional_solar_checked > 26 * 3600 else 4 * 3600)
+        failures = []
+        for pes in sorted(PES_REGIONS):
+            try:
+                self.pvlive(start, now, pes=pes, key='rpv%d' % pes)
+            except FetchError as error:
+                failures.append(str(error))
+            time.sleep(0.2)
+        if len(failures) == len(PES_REGIONS):
+            raise FetchError('Regional solar unavailable: ' + failures[0])
+        self.regional_solar_checked = now
 
 
 # --------------------------------------------------------------------------
@@ -2034,6 +2117,44 @@ class Grid:
             result[key] = item
         return result
 
+    # ---- /api/regions ----------------------------------------------------
+
+    def regions(self):
+        return self.cached(('regions',), (self.store.version, int(time.time() // 300)), self._build_regions)
+
+    def _build_regions(self):
+        now = time.time()
+        current = floor_to(now, 1800)
+        start, end = current - 86400, current + 48 * 3600
+        times = list(range(start, end, 1800))
+        index = {t: i for i, t in enumerate(times)}
+        values, levels, mixes = {}, {}, {}
+        for t, region, value, idx, mix in self.store.query(
+                'SELECT t, region, v, idx, mix FROM reg WHERE t >= ? AND t < ? ORDER BY t', (start, end)):
+            i = index.get(t)
+            if i is None:
+                continue
+            key = str(region)
+            if key not in values:
+                values[key], levels[key], mixes[key] = [None] * len(times), [None] * len(times), [None] * len(times)
+            values[key][i] = None if value is None else int(round(value))
+            levels[key][i] = INDEX_LEVELS.index(idx) if idx in INDEX_LEVELS else None
+            mixes[key][i] = mix
+        solar = {}
+        keys = ['rpv%d' % pes for pes in sorted(PES_REGIONS)]
+        for key, t, value in self.store.query(
+                'SELECT k, t, v FROM hh WHERE k IN (%s) AND t >= ? AND t < ?' % ','.join('?' * len(keys)),
+                (*keys, start, end)):
+            i = index.get(t)
+            if i is not None:
+                series = solar.setdefault(str(PES_REGIONS[int(key[3:])]), [None] * len(times))
+                series[i] = int(round(value))
+        return {
+            't0': start, 'step': 1800, 'n': len(times), 'now': index.get(current), 'home': REGION_ID or None,
+            'names': {str(k): v for k, v in REGION_NAMES.items()}, 'fuels': MIX_FUELS, 'levels': INDEX_LEVELS,
+            'ci': values, 'index': levels, 'mix': mixes, 'solar': solar, 'generated': int(now),
+        }
+
     # ---- /api/alerts: grid notices in force now --------------------------
 
     def notices(self, days=30):
@@ -2068,6 +2189,7 @@ class App:
     grid = None
     ui = None
     geo = (b'', '')
+    regions = (b'', '')
 
 
 def load_file(path, variable, fallback):
@@ -2085,6 +2207,7 @@ PAGES = [
     ('overview', '/', 'Overview', 'index.html'),
     ('map', '/map', 'Map', 'map.html'),
     ('stations', '/stations', 'Stations', 'map.html'),
+    ('regions', '/regions', 'Regions', 'regions.html'),
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -2110,7 +2233,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'and region boundaries from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
@@ -2224,6 +2347,11 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'no-cache'
                     self.respond(200, item[0], item[2], send_body, etag=item[1], cache=cache)
+            elif parts.path == '/regions.json':
+                body, etag = App.regions
+                self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
+            elif parts.path == '/api/regions':
+                self.respond_json(App.grid.regions(), send_body)
             elif parts.path == '/api/replay':
                 self.respond_json(App.grid.replay(), send_body)
             elif parts.path == '/api/alerts':
@@ -2323,6 +2451,7 @@ def main():
     units = Units(store, fleet)
     App.store, App.grid, App.ui = store, Grid(store, status, fleet, units), UI()
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
+    App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
 
     jobs = [
@@ -2335,6 +2464,7 @@ def main():
         ('ddu', ingest.poll_ddu),
         ('units', units.poll),
         ('warnings', ingest.poll_warnings),
+        ('regions', ingest.poll_regions),
     ]
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))

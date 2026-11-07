@@ -87,6 +87,15 @@ def main():
     except Exception as error:
         print('== Grid notices unavailable:', error)
 
+    try:
+        reg = get(base, '/api/regions')
+        i = reg.get('now')
+        row = lambda key: ', '.join('%s %s' % (reg['names'][rid], reg[key][rid][i]) for rid in sorted(reg[key], key=int) if i is not None and reg[key][rid][i] is not None)
+        print('== Regions now (g/kWh):', row('ci'))
+        print('== Regional solar (MW, latest):', ', '.join('%s %s' % (reg['names'][rid], next((v for v in reversed(vals[:i + 1]) if v is not None), None)) for rid, vals in sorted(reg['solar'].items(), key=lambda kv: int(kv[0]))) if i is not None else '-')
+    except Exception as error:
+        print('== Regions unavailable:', error)
+
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))
     return 0

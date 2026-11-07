@@ -179,6 +179,38 @@ def index(v):
     return 'very low' if v < 40 else 'low' if v < 120 else 'moderate' if v < 200 else 'high' if v < 280 else 'very high'
 
 
+REGION_BASE = {1: 4, 2: 10, 3: 95, 4: 80, 5: 120, 6: 70, 7: 110, 8: 150, 9: 160, 10: 125, 11: 140, 12: 165,
+               13: 175, 14: 150, 15: 145, 16: 6, 17: 95, 18: 120}
+REGION_NAMES = {1: ('Scottish Hydro Electric Power Distribution', 'North Scotland'), 2: ('SP Distribution', 'South Scotland'),
+                3: ('Electricity North West', 'North West England'), 4: ('NPG North East', 'North East England'),
+                5: ('NPG Yorkshire', 'Yorkshire'), 6: ('SP Manweb', 'North Wales & Merseyside'), 7: ('WPD South Wales', 'South Wales'),
+                8: ('WPD West Midlands', 'West Midlands'), 9: ('WPD East Midlands', 'East Midlands'), 10: ('UKPN East', 'East England'),
+                11: ('WPD South West', 'South West England'), 12: ('SSE South', 'South England'), 13: ('UKPN London', 'London'),
+                14: ('UKPN South East', 'South East England'), 15: ('England', 'England'), 16: ('Scotland', 'Scotland'),
+                17: ('Wales', 'Wales'), 18: ('GB', 'GB')}
+PES_SOLAR_SHARE = {10: .12, 11: .09, 12: .03, 13: .05, 14: .08, 15: .04, 16: .05, 17: .02, 18: .03, 19: .1, 20: .11,
+                   21: .05, 22: .15, 23: .06}
+
+
+def region_entry(rid, t):
+    """One region's half hour: a weather front sweeps north to south over two days."""
+    front = 0.5 + 0.5 * math.sin(t / 36000.0 + rid * 0.45)
+    value = int(round(REGION_BASE[rid] * (0.35 + 0.9 * front)))
+    if rid in (1, 16):
+        value = int(round(max(0, 6 * front - 3)))
+    sun = max(0.0, math.sin(math.pi * (hour_of_day(t) - 7.3) / 8.9)) if 7.3 < hour_of_day(t) < 16.2 else 0.0
+    gas = min(70.0, value / 4.0)
+    wind = max(0.0, 70.0 - gas - 25 * sun) * (1.2 if rid in (1, 2, 16) else 0.7)
+    mix = {'biomass': 5.0, 'coal': 0.0, 'imports': 8.0 if rid >= 8 else 0.0, 'gas': gas, 'nuclear': 18.0,
+           'other': 1.0, 'hydro': 6.0 if rid in (1, 2, 16) else 0.5, 'solar': 25 * sun, 'wind': wind}
+    total = sum(mix.values()) or 1.0
+    shortname = REGION_NAMES[rid]
+    return {'regionid': rid, 'dnoregion': shortname[0], 'shortname': shortname[1],
+            'intensity': {'forecast': value, 'index': index(value)},
+            'generationmix': [{'fuel': fuel, 'perc': round(100.0 * mix[fuel] / total, 1)} for fuel in
+                              ('biomass', 'coal', 'imports', 'gas', 'nuclear', 'other', 'hydro', 'solar', 'wind')]}
+
+
 def mock_warnings(start, end):
     """System warnings in Elexon's shape: a daily SO-SO trade notice, plus an
     Electricity Margin Notice (or its cancellation) when MODE['warn'] asks."""
@@ -280,6 +312,17 @@ class Handler(BaseHTTPRequestHandler):
                             'settlementPeriod': 1, 'price': 0, 'volume': 0})
                 t += 1800
             return self.send(200, {'data': [x for x in out if x['dataProvider'] == q.get('dataProviders', 'APXMIDP')]})
+        if path.startswith('/carbon/regional/intensity/') and 'regionid' not in path:
+            parts = path.split('/')
+            frm = parse(parts[4])
+            start, end = (frm - 86400, frm) if parts[5] == 'pt24h' else (frm, frm + 48 * 3600)
+            data = []
+            t = start - start % 1800
+            while t < end:
+                data.append({'from': iso_min(t), 'to': iso_min(t + 1800),
+                             'regions': [region_entry(rid, t) for rid in range(1, 19)]})
+                t += 1800
+            return self.send(200, {'data': data})
         if path.startswith('/carbon/intensity/') or path.startswith('/carbon/regional/intensity/'):
             parts = path.split('/')
             regional = parts[2] == 'regional'
@@ -367,15 +410,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {'data': rows})
         if path == '/bmrs/api/v1/system/warnings':
             return self.send(200, {'data': mock_warnings(parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo']))})
-        if path == '/pvlive/api/v4/pes/0':
+        if path.startswith('/pvlive/api/v4/pes/'):
+            pes = int(path.rsplit('/', 1)[1])
+            share = 1.0 if pes == 0 else PES_SOLAR_SHARE.get(pes, 0.05)
             start, end = parse(q['start']), parse(q['end'])
-            import time as _time
-            real_now = _time.time()
+            real_now = _clock.time()
             rows = []
             t = start - start % 1800
             while t <= end:
                 if t <= real_now - 360:
-                    rows.append([0, iso(t), round(solar_mw(t - 900), 1)])
+                    rows.append([pes, iso(t), round(solar_mw(t - 900) * share, 1)])
                 t += 1800
             return self.send(200, {'data': rows, 'meta': ['pes_id', 'datetime_gmt', 'generation_mw']})
         if path == '/neso/api/3/action/resource_show':

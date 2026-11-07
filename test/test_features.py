@@ -91,5 +91,26 @@ check('station values averaged per frame', abs(replay['stations']['1'][0] - 100.
 check('interconnectors replayed', replay['links']['INTNSL'][0] == -700 and replay['links']['INTFR'][5] == 1500, replay['links'])
 check('totals replayed', replay['totals']['nuclear'][3] == 4000 and replay['totals']['exports'][0] == -700, replay['totals']['nuclear'][:4])
 
+# ---- regions ----------------------------------------------------------------
+
+store = server.Store(tempfile.mkdtemp())
+ingest = server.Ingest(store, server.Status())
+grid = server.Grid(store, server.Status())
+now_hh = (int(server.time.time()) // 1800) * 1800
+payload = {'data': [{'from': server.iso(now_hh + k * 1800), 'to': server.iso(now_hh + (k + 1) * 1800), 'regions': [
+    {'regionid': 2, 'shortname': 'South Scotland', 'intensity': {'forecast': 0, 'index': 'very low'},
+     'generationmix': [{'fuel': 'wind', 'perc': 60.0}, {'fuel': 'nuclear', 'perc': 40.0}]},
+    {'regionid': 13, 'shortname': 'London', 'intensity': {'forecast': 180 + k, 'index': 'Moderate'}, 'generationmix': []}]}
+    for k in range(3)]}
+check('regional rows stored', ingest._ingest_regions(payload) == 6)
+store.write(server.UPSERT_HH, [('rpv12', now_hh - 1800, 250.0)], history=False)
+data = grid.regions()
+now = data['now']
+check('now is the current half hour', data['t0'] + now * 1800 == now_hh, data['t0'])
+check('values by region', data['ci']['2'][now] == 0 and data['ci']['13'][now + 2] == 182, data['ci'])
+check('index levels', data['index']['13'][now] == 2 and data['index']['2'][now] == 0)
+check('mix in fixed fuel order', data['mix']['2'][now].split(',')[data['fuels'].index('wind')] == '60')
+check('regional solar mapped to the region', data['solar']['13'][now - 1] == 250, data['solar'])
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)
