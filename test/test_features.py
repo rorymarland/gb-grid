@@ -166,9 +166,12 @@ out.events = [
     {'asset': 'I_IED-FRAN1', 'unit': 'IED-FRAN1', 'lost': 1500.0, 'normal': 2000.0, 'type': 'Unplanned', 'cause': 'Fault', 'start': now - 86400, 'end': now + 86400, 'fuel': ''},
     {'asset': 'T_X-1', 'unit': 'X-1', 'lost': 400.0, 'normal': 400.0, 'type': 'Planned', 'cause': '', 'start': now + 86400, 'end': now + 9 * 86400, 'fuel': ''},
 ]
+out.events.append({'asset': 'T_X-1', 'unit': 'X-1', 'lost': 300.0, 'normal': 400.0, 'type': 'Planned', 'cause': '', 'start': now + 86400, 'end': now + 2 * 86400, 'fuel': ''})
+out.events.append({'asset': 'T_OLD-1', 'unit': 'OLD-1', 'lost': 550.0, 'normal': 550.0, 'type': 'Planned', 'cause': '', 'start': now - 9e7, 'end': now + 9e8, 'fuel': ''})
 data = grid.outages_payload()
 check('interconnector twins counted once', data['offline'][0]['name'] == 'IFA (France)' and data['offline'][0]['lost'] == 1500 and data['lost_total'] == 1500, data['offline'])
 check('future outages listed separately', len(data['upcoming']) == 1 and data['upcoming'][0]['lost'] == 400, data['upcoming'])
+check('closures left out', data['closed_count'] == 1 and data['closed_mw'] == 550 and data['lost_total'] == 1500, data)
 
 # ---- long-term history and outlook ----------------------------------------
 

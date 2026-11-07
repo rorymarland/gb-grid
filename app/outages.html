@@ -161,6 +161,7 @@
       ]));
     });
     if (!d.offline.length) body.appendChild(h('tr', null, h('td', { colspan: '6', cls: 'muted', text: d.checked ? 'No outages over 10 MW reported.' : 'Waiting for the outage notices.' })));
+    if (d.closed_count) cats.appendChild(h('span', { text: 'Not counted: ' + G.plural(d.closed_count, 'unit', 'units') + ' (' + gw(d.closed_mw) + ') out until at least two years from now, which usually means closed or mothballed.' }));
   }
 
   function renderNuclear() {

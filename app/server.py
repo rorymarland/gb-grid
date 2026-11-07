@@ -2874,9 +2874,13 @@ class Grid:
             checked = self.outages.checked if self.outages else 0
         snapshot = self.units.snapshot if self.units else None
         live = (snapshot or {}).get('stations', {})
-        groups = {}
+        groups, closed = {}, {}
         for e in events:
             asset = e['asset'] or e['unit']
+            if e['end'] is not None and e['end'] > now + 2 * 365 * 86400 and e['start'] <= now:
+                # Out for years: a closure or mothballing rather than an outage
+                closed[e['unit'] or asset] = max(closed.get(e['unit'] or asset, 0), e['lost'])
+                continue
             if asset.startswith('I_'):
                 link = asset.split('-', 1)[-1]
                 name = next((v for k, v in LINK_NAMES.items() if link.upper().startswith(k)), asset[2:])
@@ -2886,16 +2890,14 @@ class Grid:
                 sid, cat, name = self.units.describe(unit, asset) if self.units else (None, 'other', unit)
                 key = 'st:%s' % sid if sid is not None else 'unit:' + unit
             current = e['start'] <= now
-            g = groups.setdefault((key, current), {'name': name, 'sid': sid, 'cat': cat, 'lost': 0.0, 'normal': 0.0, 'units': set(),
+            g = groups.setdefault((key, current), {'name': name, 'sid': sid, 'cat': cat, 'per_unit': {}, 'units': set(),
                                                     'start': e['start'], 'end': e['end'], 'type': set(), 'cause': set()})
-            unit_key = e['unit'] or asset
-            if key.startswith('link:'):
-                if e['lost'] > g['lost']:
-                    g['lost'], g['normal'] = e['lost'], e['normal'] or 0.0  # import and export notices describe one cable
-            elif unit_key not in g['units'] or current:
-                g['lost'] += e['lost']
-                g['normal'] += e['normal'] or 0.0
-            g['units'].add(unit_key)
+            # Import and export notices describe one cable; overlapping notices for one unit don't add up
+            unit_key = 'cable' if key.startswith('link:') else (e['unit'] or asset)
+            best = g['per_unit'].get(unit_key)
+            if best is None or e['lost'] > best[0]:
+                g['per_unit'][unit_key] = (e['lost'], e['normal'] or 0.0)
+            g['units'].add(e['unit'] or asset)
             g['start'] = min(g['start'], e['start'])
             g['end'] = None if (g['end'] is None or e['end'] is None) else max(g['end'], e['end'])
             if e['type']:
@@ -2904,8 +2906,10 @@ class Grid:
                 g['cause'].add(e['cause'])
         offline, upcoming = [], []
         for (key, current), g in groups.items():
-            item = {'name': g['name'], 'sid': g['sid'], 'cat': g['cat'], 'lost': round(g['lost']), 'normal': round(g['normal']) or None,
-                    'units': len(g['units']), 'start': g['start'], 'end': g['end'], 'planned': g['type'] == {'Planned'},
+            lost = sum(v[0] for v in g['per_unit'].values())
+            normal = sum(v[1] for v in g['per_unit'].values())
+            item = {'name': g['name'], 'sid': g['sid'], 'cat': g['cat'], 'lost': round(lost), 'normal': round(normal) or None,
+                    'units': len(g['per_unit']), 'start': g['start'], 'end': g['end'], 'planned': g['type'] == {'Planned'},
                     'cause': '; '.join(sorted(g['cause']))[:120], 'mw': round(live[g['sid']]['mw']) if g['sid'] in live else None}
             (offline if current else upcoming).append(item)
         offline.sort(key=lambda i: -i['lost'])
@@ -2928,6 +2932,7 @@ class Grid:
         notices = [n for n in self.notices(30) if not n['routine']]
         notices.sort(key=lambda n: -n['published'])
         return {'margin': self.margin_summary(), 'offline': offline[:60], 'offline_count': len(offline),
+                'closed_count': len(closed), 'closed_mw': round(sum(closed.values())),
                 'upcoming': upcoming[:40], 'lost_by_cat': lost_by_cat, 'lost_total': round(sum(lost_by_cat.values())),
                 'nuclear': nuclear, 'notices': notices[:30], 'checked': int(checked) or None, 'generated': int(now)}
 
