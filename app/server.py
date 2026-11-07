@@ -3041,7 +3041,7 @@ def header_html(current):
         '<span id="live-text">Connecting to the dashboard server…</span></p>\n'
         '    <div class="tools"><a class="tool-btn" href="/display" title="A full-screen view for a spare screen or tablet">'
         'Display</a><button class="theme-btn" id="theme-btn" type="button">Theme: auto</button></div>\n'
-        '  </div>\n</header>\n<script src="{{static:base.js}}"></script>')
+        '  </div>\n</header>\n<script type="module" src="{{static:js/gb.js}}"></script>')
 
 
 class UI:
