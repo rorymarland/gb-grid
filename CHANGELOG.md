@@ -24,7 +24,8 @@ start filling in on first start.
 - **History page:** NESO's generation mix and carbon intensity since 2009 and
   wholesale prices since 2018, zoomable down to the half hour, with records,
   the latest day against a year earlier, and each year's mix. Downloads about
-  20 MB once; set `LONG_HISTORY=false` to skip it.
+  20 MB once (about 20 minutes; prices take a few hours to fill in behind it);
+  set `LONG_HISTORY=false` to skip it.
 - **The next 48 hours** on the Overview: demand, wind, solar and carbon
   intensity forecasts.
 - **Display mode** at `/display`: a kiosk view for a tablet or spare screen
