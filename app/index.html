@@ -1,145 +1,12 @@
 <!doctype html>
 <html lang="en-GB">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<!--#head-->
 <meta name="description" content="Live view of the Great Britain electricity grid">
 <title>GB grid</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2324a5da'/%3E%3C/svg%3E">
 <style>
-:root {
-  color-scheme: light;
-  --page: #edf1f5;
-  --surface: #fbfcfd;
-  --ink: #142230;
-  --ink-2: #4a5a6a;
-  --muted: #728191;
-  --hair: #d9e0e7;
-  --axis: #b6c1cc;
-  --chip: #e4eaf0;
-  --focus: #2b6cd4;
-  --wash: rgba(20, 34, 48, 0.06);
-  --c-nuclear: #6d52bc;
-  --c-wind: #24a5da;
-  --c-solar: #e5a600;
-  --c-hydro: #305eb7;
-  --c-biomass: #43963c;
-  --c-imports: #b94082;
-  --c-storage: #26bdae;
-  --c-gas: #e36927;
-  --c-other: #9aa4ae;
-  --ci-very-low: #2b9a58;
-  --ci-low: #86b43a;
-  --ci-moderate: #e1ad1f;
-  --ci-high: #e3772e;
-  --ci-very-high: #cc3f3f;
-  --good: #0ca30c;
-  --warn: #e09a00;
-  --bad: #d03b3b;
-  --line: #3c4c5c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
-    --page: #0b131c;
-    --surface: #152130;
-    --ink: #e8eef4;
-    --ink-2: #a9b6c3;
-    --muted: #7f8e9d;
-    --hair: #243447;
-    --axis: #3a4e63;
-    --chip: #1e2c3d;
-    --focus: #79a8ff;
-    --wash: rgba(232, 238, 244, 0.06);
-    --c-nuclear: #755dc0;
-    --c-wind: #2698c8;
-    --c-solar: #c08800;
-    --c-hydro: #3967c1;
-    --c-biomass: #3d8f35;
-    --c-imports: #b53c7f;
-    --c-storage: #20a89b;
-    --c-gas: #d55c13;
-    --c-other: #6e7a87;
-    --ci-very-low: #2f9a59;
-    --ci-low: #7fae36;
-    --ci-moderate: #c9a01e;
-    --ci-high: #d4702b;
-    --ci-very-high: #c84545;
-    --good: #0ca30c;
-    --warn: #fab219;
-    --bad: #e05252;
-    --line: #c3cfda;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --page: #0b131c;
-  --surface: #152130;
-  --ink: #e8eef4;
-  --ink-2: #a9b6c3;
-  --muted: #7f8e9d;
-  --hair: #243447;
-  --axis: #3a4e63;
-  --chip: #1e2c3d;
-  --focus: #79a8ff;
-  --wash: rgba(232, 238, 244, 0.06);
-  --c-nuclear: #755dc0;
-  --c-wind: #2698c8;
-  --c-solar: #c08800;
-  --c-hydro: #3967c1;
-  --c-biomass: #3d8f35;
-  --c-imports: #b53c7f;
-  --c-storage: #20a89b;
-  --c-gas: #d55c13;
-  --c-other: #6e7a87;
-  --ci-very-low: #2f9a59;
-  --ci-low: #7fae36;
-  --ci-moderate: #c9a01e;
-  --ci-high: #d4702b;
-  --ci-very-high: #c84545;
-  --good: #0ca30c;
-  --warn: #fab219;
-  --bad: #e05252;
-  --line: #c3cfda;
-}
 
-*, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--page);
-  color: var(--ink);
-  font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-button { font: inherit; color: inherit; }
-a { color: inherit; text-underline-offset: 2px; }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
-
-/* Header */
-.top { border-bottom: 1px solid var(--hair); }
-.top-inner { display: flex; align-items: center; gap: 12px 20px; min-height: 58px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -0.01em; margin: 0; }
-.brand svg { width: 26px; height: 26px; flex: none; }
-.live { margin: 0 0 0 auto; display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 13.5px; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.good { background: var(--good); }
-.dot.warn { background: var(--warn); }
-.dot.bad { background: var(--bad); }
-.dot.pulse { animation: pulse 2.6s ease-out infinite; }
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0.45); }
-  70% { box-shadow: 0 0 0 7px rgba(12, 163, 12, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0); }
-}
-.nav { display: flex; gap: 2px; background: var(--chip); border-radius: 10px; padding: 3px; }
-.nav a { text-decoration: none; font-size: 13.5px; color: var(--ink-2); padding: 4px 12px; border-radius: 8px; }
-.nav a:hover { color: var(--ink); }
-.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--hair); }
-.theme-btn { border: 1px solid var(--hair); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
-.theme-btn:hover { background: var(--wash); }
 
 /* Hero */
 .hero { padding: 44px 0 30px; }
@@ -292,27 +159,8 @@ table { border-collapse: collapse; width: 100%; }
 .feed .err { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .attrib { font-size: 12.5px; color: var(--muted); max-width: 96ch; margin: 0 0 6px; }
 
-/* Fuel and level colours */
-.f-nuclear { fill: var(--c-nuclear); } .b-nuclear { background: var(--c-nuclear); } .k-nuclear { stroke: var(--c-nuclear); }
-.f-wind { fill: var(--c-wind); } .b-wind { background: var(--c-wind); } .k-wind { stroke: var(--c-wind); }
-.f-solar { fill: var(--c-solar); } .b-solar { background: var(--c-solar); } .k-solar { stroke: var(--c-solar); }
-.f-hydro { fill: var(--c-hydro); } .b-hydro { background: var(--c-hydro); } .k-hydro { stroke: var(--c-hydro); }
-.f-biomass { fill: var(--c-biomass); } .b-biomass { background: var(--c-biomass); } .k-biomass { stroke: var(--c-biomass); }
-.f-imports { fill: var(--c-imports); } .b-imports { background: var(--c-imports); } .k-imports { stroke: var(--c-imports); }
-.f-storage { fill: var(--c-storage); } .b-storage { background: var(--c-storage); } .k-storage { stroke: var(--c-storage); }
-.f-gas { fill: var(--c-gas); } .b-gas { background: var(--c-gas); } .k-gas { stroke: var(--c-gas); }
-.f-other { fill: var(--c-other); } .b-other { background: var(--c-other); } .k-other { stroke: var(--c-other); }
-.b-line { background: var(--line); }
-.ci-very-low { fill: var(--ci-very-low); background: var(--ci-very-low); }
-.ci-low { fill: var(--ci-low); background: var(--ci-low); }
-.ci-moderate { fill: var(--ci-moderate); background: var(--ci-moderate); }
-.ci-high { fill: var(--ci-high); background: var(--ci-high); }
-.ci-very-high { fill: var(--ci-very-high); background: var(--ci-very-high); }
-.ci-none { fill: var(--axis); background: var(--axis); }
-.st-good { color: var(--good); } .st-warn { color: var(--warn); } .st-bad { color: var(--bad); } .st-idle { color: var(--muted); }
 
 .empty { color: var(--muted); font-size: 14px; padding: 18px 0; margin: 0; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 @media (max-width: 960px) {
   .split { grid-template-columns: minmax(0, 1fr); }
@@ -323,11 +171,8 @@ table { border-collapse: collapse; width: 100%; }
   .kpi:nth-child(n + 3) { border-top: 1px solid var(--hair); }
 }
 @media (max-width: 640px) {
-  .wrap { padding: 0 16px; }
   .hero { padding: 28px 0 22px; }
   .panel { padding: 18px 16px 20px; border-radius: 16px; }
-  .live { margin-left: 0; order: 3; width: 100%; }
-  .theme-btn { margin-left: auto; }
   .kpi { padding: 14px 14px 12px; }
   .kpi-value { font-size: 28px; }
   .controls { margin-left: 0; }
@@ -343,13 +188,6 @@ table { border-collapse: collapse; width: 100%; }
   .kpi { border-left: 0; }
   .kpi:nth-child(n + 2) { border-top: 1px solid var(--hair); }
 }
-@media (max-width: 480px) {
-  .brand span { display: none; }
-  .top-inner { column-gap: 10px; }
-  .nav a { padding: 4px 10px; }
-  .theme-word { display: none; }
-  .theme-btn { padding: 4px 10px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .dot.pulse { animation: none; }
   * { transition: none !important; scroll-behavior: auto !important; }
@@ -360,21 +198,7 @@ table { border-collapse: collapse; width: 100%; }
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="wrap top-inner">
-    <p class="brand">
-      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="0.5" y="0.5" width="25" height="25" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.25"/><path d="M4 13c1.5-5 3-5 4.5 0s3 5 4.5 0 3-5 4.5 0 3 5 4.5 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <span>GB grid</span>
-    </p>
-    <nav class="nav" aria-label="Views">
-      <a href="/" aria-current="page">Overview</a>
-      <a href="/map">Map</a>
-      <a href="/stations">Stations</a>
-    </nav>
-    <p class="live" aria-live="polite"><span class="dot" id="live-dot"></span><span id="live-text">Connecting to the dashboard server…</span></p>
-    <button class="theme-btn" id="theme-btn" type="button">Theme: auto</button>
-  </div>
-</header>
+<!--#header-->
 
 <main class="wrap">
   <section class="hero" aria-labelledby="hero-title">
@@ -469,8 +293,7 @@ table { border-collapse: collapse; width: 100%; }
 <footer class="wrap foot">
   <h2>Data feeds</h2>
   <ul class="feeds" id="feeds"></ul>
-  <p class="attrib">Contains BMRS data © Elexon Limited copyright and database right <span id="year">2026</span> (<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" rel="noopener">licence</a>). Carbon intensity from the <a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>. Embedded wind and solar estimates from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from <a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>.</p>
-  <p class="attrib">A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley's <a href="https://grid.iamkate.com/" rel="noopener">National Grid: Live</a>. All times are UK time.</p>
+  <!--#credits-->
 </footer>
 
 <script>
@@ -1802,10 +1625,10 @@ table { border-collapse: collapse; width: 100%; }
     renderHeader();
     renderHero(live);
     renderKpis(live);
-    if (changed('mix', [live.time, live.sources, live.groups, width, theme])) renderMix(live);
-    if (changed('forecast', [live.carbon_past, live.forecast, live.region, width, theme])) renderForecast(live);
-    if (changed('sources', [live.time, live.sources, live.supply_gw, live.exports_gw, live.storing_gw, width, theme])) renderSources(live);
-    if (changed('flows', [live.time, live.links, live.countries, live.storage, width, theme])) renderFlows(live);
+    if (changed('mix', [live.time, live.sources, live.groups, width, GB.theme])) renderMix(live);
+    if (changed('forecast', [live.carbon_past, live.forecast, live.region, width, GB.theme])) renderForecast(live);
+    if (changed('sources', [live.time, live.sources, live.supply_gw, live.exports_gw, live.storing_gw, width, GB.theme])) renderSources(live);
+    if (changed('flows', [live.time, live.links, live.countries, live.storage, width, GB.theme])) renderFlows(live);
     renderFeeds(live);
     updateTitleAndIcon(live);
     renderRangeTabs();
@@ -1820,30 +1643,7 @@ table { border-collapse: collapse; width: 100%; }
     renderHistory();
   }
 
-  var themes = ['auto', 'light', 'dark'];
-  var theme = 'auto';
-  try { theme = localStorage.getItem('gb-grid-theme') || 'auto'; } catch (error) { theme = 'auto'; }
-  function applyTheme(name) {
-    theme = themes.indexOf(name) >= 0 ? name : 'auto';
-    if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', theme);
-    var button = byId('theme-btn');
-    clear(button);
-    button.appendChild(h('span', { cls: 'theme-word', text: 'Theme: ' }));
-    button.appendChild(document.createTextNode(theme));
-    button.setAttribute('aria-label', 'Colour theme is ' + theme + '. Select to change.');
-  }
-  applyTheme(theme);
-  byId('theme-btn').addEventListener('click', function () {
-    applyTheme(themes[(themes.indexOf(theme) + 1) % themes.length]);
-    try { localStorage.setItem('gb-grid-theme', theme); } catch (error) { /* storage unavailable */ }
-    renderAll();
-  });
-  if (window.matchMedia) {
-    var scheme = window.matchMedia('(prefers-color-scheme: dark)');
-    var onScheme = function () { if (theme === 'auto') renderAll(); };
-    if (scheme.addEventListener) scheme.addEventListener('change', onScheme);
-  }
+  window.addEventListener('gb:theme', renderAll);
 
   document.addEventListener('click', function (event) {
     var button = event.target.closest ? event.target.closest('button.info') : null;
@@ -1878,7 +1678,6 @@ table { border-collapse: collapse; width: 100%; }
     else tick();
   });
 
-  byId('year').textContent = String(new Date().getFullYear());
   lastWidth = document.documentElement.clientWidth;
   setInterval(renderHeader, 1000);
   setInterval(function () { if (state.live) { renderForecast(state.live); renderFeeds(state.live); } }, 60000);

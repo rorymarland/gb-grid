@@ -23,7 +23,7 @@ from server import settlement_start, uk_midnight_utc  # noqa: E402  (reuse the c
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9100
 INTER = ['INTFR', 'INTIRL', 'INTNED', 'INTEW', 'INTNEM', 'INTIFA2', 'INTNSL', 'INTELEC', 'INTVKL', 'INTGRNL']
 FAIL = set()  # names of endpoints to fail, set via /control?fail=...
-MODE = {'region': 'normal'}  # /control?region=normal|zero|low|empty|allregions
+MODE = {'region': 'normal', 'warn': 'none'}  # /control?region=normal|zero|low|empty|allregions&warn=none|emn|cancelled|nrapm
 
 
 def iso(t):
@@ -179,6 +179,41 @@ def index(v):
     return 'very low' if v < 40 else 'low' if v < 120 else 'moderate' if v < 200 else 'high' if v < 280 else 'very high'
 
 
+def mock_warnings(start, end):
+    """System warnings in Elexon's shape: a daily SO-SO trade notice, plus an
+    Electricity Margin Notice (or its cancellation) when MODE['warn'] asks."""
+    now = _clock.time()
+    out = []
+    day = int(now // 86400) * 86400
+    for back in range(0, 40):
+        t = day - back * 86400 + 13 * 3600
+        if start <= t <= end and t <= now:
+            out.append({'publishTime': iso(t), 'warningType': 'SO-SO TRADES', 'warningText':
+                        'NATIONAL ENERGY SYSTEM OPERATOR NOTIFICATION of excess energy prices used for settlement '
+                        'outside of BALIT for SO to SO Transactions\r\\nover the National Grid/RTE  Interconnector.'})
+    local = datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=0)
+    stamp = local.strftime('%d/%m/%Y')
+    if MODE['warn'] in ('emn', 'cancelled'):
+        published = now - 3600
+        out.append({'publishTime': iso(published), 'warningType': 'ELECTRICITY MARGIN NOTICE', 'warningText':
+                    'From : Power System Manager – NESO Electricity Control Centre\r\\n\r\\nELECTRICITY MARGIN NOTICE \r\\n\r\\n'
+                    'An ELECTRICITY MARGIN NOTICE has been issued by the National Energy System Operator to encourage '
+                    'market actions to increase System Margins.\r\\n \r\\nFor the period:\r\\nfrom 16:00 hrs to 23:00 hrs on '
+                    'Saturday   %s  \r\\n\r\\nThere is a reduced system margin. System margin shortfall 412 MW\r\\n' % stamp})
+        if MODE['warn'] == 'cancelled':
+            out.append({'publishTime': iso(now - 600), 'warningType': 'ELECTRICITY MARGIN NOTICE', 'warningText':
+                        'From : Power System Manager\r\\n\r\\nNOTIFICATION CANCELLATION of GB TRANSMISSION SYSTEM WARNING '
+                        '\r\\n\r\\nThe GB Transmission System Warning\r\\n\r\\nELECTRICITY MARGIN NOTICE\r\\n\r\\nissued for the period '
+                        'from  16:00 hrs to 23:00 hrs on\r\\nSaturday   %s has been cancelled \r\\n' % stamp})
+    if MODE['warn'] == 'nrapm':
+        out.append({'publishTime': iso(now - 1800), 'warningType': 'NEGATIVE RESERVE ACTIVE POWER MARGIN', 'warningText':
+                    'NATIONAL ELECTRICITY TRANSMISSION SYSTEM WARNING:\r\\n\r\\nInadequate Localised Negative Reserve Active '
+                    'Power Margin.\r\\n\r\\nnotification of Inadequate Localised Negative Reserve Active Power Margin (NRAPM) in '
+                    'the following regions:\r\\n\r\\nBEAULY to DOUNREAY region (Scotland) from 23:00 hrs to 05:00 hrs on '
+                    'Saturday %s\r\\n' % stamp})
+    return [w for w in out if start <= parse(w['publishTime']) <= end]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -204,6 +239,7 @@ class Handler(BaseHTTPRequestHandler):
             FAIL.clear()
             FAIL.update(x for x in q.get('fail', '').split(',') if x)
             MODE['region'] = q.get('region', 'normal')
+            MODE['warn'] = q.get('warn', 'none')
             return self.send(200, {'fail': sorted(FAIL), 'mode': MODE})
         for name in FAIL:
             if name in path:
@@ -329,6 +365,8 @@ class Handler(BaseHTTPRequestHandler):
                                      'acceptanceTime': iso(a - 120), 'deemedBoFlag': False, 'soFlag': True,
                                      'storFlag': False, 'rrFlag': False})
             return self.send(200, {'data': rows})
+        if path == '/bmrs/api/v1/system/warnings':
+            return self.send(200, {'data': mock_warnings(parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo']))})
         if path == '/pvlive/api/v4/pes/0':
             start, end = parse(q['start']), parse(q['end'])
             import time as _time

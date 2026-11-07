@@ -1,100 +1,13 @@
 <!doctype html>
 <html lang="en-GB">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<!--#head-->
 <title>GB grid map</title>
 <link id="favicon" rel="icon" href="data:,">
 <style>
-:root {
-  --page: #edf1f5;
-  --surface: #fbfcfd;
-  --ink: #142230;
-  --ink-2: #4a5a6a;
-  --muted: #728191;
-  --hair: #d9e0e7;
-  --axis: #b6c1cc;
-  --chip: #e4eaf0;
-  --focus: #2b6cd4;
-  --wash: rgba(20, 34, 48, 0.06);
-  --sea: #dde5ec;
-  --land: #fbfcfd;
-  --land-near: #eef2f5;
-  --coast: #aebdca;
-  --coast-near: #c9d3dc;
-  --c-nuclear: #6d52bc;
-  --c-wind: #24a5da;
-  --c-solar: #e5a600;
-  --c-hydro: #305eb7;
-  --c-biomass: #43963c;
-  --c-imports: #b94082;
-  --c-storage: #26bdae;
-  --c-gas: #e36927;
-  --c-other: #9aa4ae;
-  --good: #0ca30c;
-  --warn: #e09a00;
-  --bad: #d03b3b;
-  --line: #3c4c5c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    --page: #0b131c; --surface: #152130; --ink: #e8eef4; --ink-2: #a9b6c3; --muted: #7f8e9d;
-    --hair: #243447; --axis: #3a4e63; --chip: #1e2c3d; --focus: #79a8ff; --wash: rgba(232, 238, 244, 0.06);
-    --sea: #0c1621; --land: #1c2a3a; --land-near: #142130; --coast: #3a4f65; --coast-near: #26384b;
-    --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #3967c1; --c-biomass: #3d8f35;
-    --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-other: #6e7a87;
-    --good: #0ca30c; --warn: #fab219; --bad: #e05252; --line: #c3cfda;
-  }
-}
-:root[data-theme="dark"] {
-  --page: #0b131c; --surface: #152130; --ink: #e8eef4; --ink-2: #a9b6c3; --muted: #7f8e9d;
-  --hair: #243447; --axis: #3a4e63; --chip: #1e2c3d; --focus: #79a8ff; --wash: rgba(232, 238, 244, 0.06);
-  --sea: #0c1621; --land: #1c2a3a; --land-near: #142130; --coast: #3a4f65; --coast-near: #26384b;
-  --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #3967c1; --c-biomass: #3d8f35;
-  --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-other: #6e7a87;
-  --good: #0ca30c; --warn: #fab219; --bad: #e05252; --line: #c3cfda;
-}
 
-*, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--page);
-  color: var(--ink);
-  font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-button, input { font: inherit; color: inherit; }
-a { color: inherit; text-underline-offset: 2px; }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-[hidden] { display: none !important; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-/* Header (shared with the overview) */
-.top { border-bottom: 1px solid var(--hair); background: var(--page); }
-.top-inner { display: flex; align-items: center; gap: 12px 20px; min-height: 58px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+/* Header: the map view uses the full window width */
 body.mode-map .top-inner { max-width: none; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -0.01em; margin: 0; }
-.brand svg { width: 26px; height: 26px; flex: none; }
-.nav { display: flex; gap: 2px; background: var(--chip); border-radius: 10px; padding: 3px; }
-.nav a { text-decoration: none; font-size: 13.5px; color: var(--ink-2); padding: 4px 12px; border-radius: 8px; }
-.nav a:hover { color: var(--ink); }
-.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--hair); }
-.live { margin: 0 0 0 auto; display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 13.5px; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.good { background: var(--good); }
-.dot.warn { background: var(--warn); }
-.dot.bad { background: var(--bad); }
-.dot.pulse { animation: pulse 2.6s ease-out infinite; }
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0.45); }
-  70% { box-shadow: 0 0 0 7px rgba(12, 163, 12, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0); }
-}
-.theme-btn { border: 1px solid var(--hair); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
-.theme-btn:hover { background: var(--wash); }
 
 /* Map view layout: the map fills the window beside a scrolling side panel */
 @media (min-width: 901px) {
@@ -133,16 +46,6 @@ body.mode-map .top-inner { max-width: none; }
 .link-label { font-size: 11.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--sea); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
 .link-label .v { font-weight: 650; fill: var(--ink); }
 @keyframes flow { to { stroke-dashoffset: -18.2; } }
-.f-nuclear { fill: var(--c-nuclear); } .f-wind { fill: var(--c-wind); } .f-solar { fill: var(--c-solar); }
-.f-hydro { fill: var(--c-hydro); } .f-biomass { fill: var(--c-biomass); } .f-imports { fill: var(--c-imports); }
-.f-storage { fill: var(--c-storage); } .f-gas { fill: var(--c-gas); } .f-other { fill: var(--c-other); }
-.k-nuclear { stroke: var(--c-nuclear); } .k-wind { stroke: var(--c-wind); } .k-solar { stroke: var(--c-solar); }
-.k-hydro { stroke: var(--c-hydro); } .k-biomass { stroke: var(--c-biomass); } .k-storage { stroke: var(--c-storage); }
-.k-gas { stroke: var(--c-gas); } .k-other { stroke: var(--c-other); }
-.b-nuclear { background: var(--c-nuclear); } .b-wind { background: var(--c-wind); } .b-solar { background: var(--c-solar); }
-.b-hydro { background: var(--c-hydro); } .b-biomass { background: var(--c-biomass); } .b-imports { background: var(--c-imports); }
-.b-storage { background: var(--c-storage); } .b-gas { background: var(--c-gas); } .b-other { background: var(--c-other); }
-.b-line { background: var(--line); }
 
 /* Map controls and keys */
 .zoom { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
@@ -170,16 +73,6 @@ html.fs-lock, html.fs-lock body { overflow: hidden; }
 .map-msg { position: absolute; right: 58px; top: 12px; max-width: min(360px, calc(100% - 80px)); background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; color: var(--ink-2); }
 .hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px; pointer-events: none; }
 
-/* Tooltip (same as the overview) */
-.tip { position: absolute; z-index: 10; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--hair); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 8px 28px rgba(8, 18, 28, 0.16); min-width: 180px; max-width: 290px; }
-.tip .t { font-weight: 650; margin-bottom: 6px; font-size: 13px; }
-.tip .row { display: grid; grid-template-columns: 12px auto 1fr; gap: 9px; align-items: center; line-height: 1.65; }
-.tip .key { height: 10px; width: 10px; border-radius: 3px; }
-.tip .key.none { background: transparent; }
-.tip .v { font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.tip .l { color: var(--ink-2); }
-.tip .sep { border-top: 1px solid var(--hair); margin: 5px 0; }
-.tip .note { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
 
 /* Side panel */
 .side h1 { font-size: 23px; line-height: 1.2; font-weight: 650; letter-spacing: -0.018em; margin: 0 0 6px; }
@@ -309,22 +202,12 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   #view-map.is-fs .fs-key { display: flex; }
 }
 @media (max-width: 640px) {
-  .wrap { padding: 0 16px; }
-  .live { margin-left: 0; order: 3; width: 100%; }
-  .theme-btn { margin-left: auto; }
   .side { padding: 18px 16px 30px; }
   .panel { padding: 18px 16px 20px; border-radius: 16px; }
   .nation { grid-template-columns: 82px minmax(0, 1fr) 64px; gap: 10px; }
   .hide-sm { display: none; }
   .search { min-width: 0; flex: 1 1 100%; }
   .hint { display: none; }
-}
-@media (max-width: 480px) {
-  .brand span { display: none; }
-  .top-inner { column-gap: 10px; }
-  .nav a { padding: 4px 10px; }
-  .theme-word { display: none; }
-  .theme-btn { padding: 4px 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dot.pulse { animation: none; }
@@ -336,21 +219,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 </style>
 </head>
 <body class="mode-map">
-<header class="top">
-  <div class="wrap top-inner">
-    <p class="brand">
-      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="0.5" y="0.5" width="25" height="25" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.25"/><path d="M4 13c1.5-5 3-5 4.5 0s3 5 4.5 0 3-5 4.5 0 3 5 4.5 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <span>GB grid</span>
-    </p>
-    <nav class="nav" aria-label="Views">
-      <a href="/">Overview</a>
-      <a href="/map" data-view="map">Map</a>
-      <a href="/stations" data-view="stations">Stations</a>
-    </nav>
-    <p class="live" aria-live="polite"><span class="dot" id="live-dot"></span><span id="live-text">Connecting to the dashboard server…</span></p>
-    <button class="theme-btn" id="theme-btn" type="button">Theme: auto</button>
-  </div>
-</header>
+<!--#header-->
 
 <main id="view-map">
   <div class="map-layout">
@@ -390,7 +259,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
           <p>Locations come from the open Power Station Dictionary plus hand-added recent stations. Interconnector flows are measured, not modelled.</p>
         </div>
       </div>
-      <p class="credit">Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> (<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" rel="noopener">licence</a>). Station locations: <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>
+      <!--#credits-short-->
     </aside>
   </div>
 </main>
@@ -445,8 +314,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     <p>Station locations come from the Power Station Dictionary (Open Climate Fix and others, MIT licence) with recent stations added by hand. Map outlines are from Natural Earth. Northern Ireland is part of the all-island grid with Ireland, so it appears here only through the Moyle interconnector.</p>
   </section>
   <footer class="foot">
-    <p>Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> (<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" rel="noopener">licence</a>). Carbon intensity from the <a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a> and embedded generation from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar from <a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. Map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>
-    <p>A self-hosted dashboard, not an official Elexon or NESO service. All times are UK time.</p>
+    <!--#credits-->
   </footer>
 </main>
 
@@ -1870,26 +1738,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 
   /* ---------- theme ---------- */
 
-  var themes = ['auto', 'light', 'dark'];
-  var theme = 'auto';
-  try { theme = localStorage.getItem('gb-grid-theme') || 'auto'; } catch (error) { theme = 'auto'; }
-  function applyTheme(name) {
-    theme = themes.indexOf(name) >= 0 ? name : 'auto';
-    if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', theme);
-    var button = byId('theme-btn');
-    clear(button);
-    button.appendChild(h('span', { cls: 'theme-word', text: 'Theme: ' }));
-    button.appendChild(document.createTextNode(theme));
-    button.setAttribute('aria-label', 'Colour theme is ' + theme + '. Select to change.');
-  }
-  applyTheme(theme);
-  byId('theme-btn').addEventListener('click', function () {
-    applyTheme(themes[(themes.indexOf(theme) + 1) % themes.length]);
-    try { localStorage.setItem('gb-grid-theme', theme); } catch (error) { /* storage unavailable */ }
-    signatures = {};
-    render();
-  });
+  window.addEventListener('gb:theme', function () { signatures = {}; render(); });
 
   var lastWidth = 0, resizeTimer = null;
   window.addEventListener('resize', function () {
@@ -1903,7 +1752,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     }, 160);
   });
 
-  Array.prototype.forEach.call(document.querySelectorAll('.year'), function (node) { node.textContent = String(new Date().getFullYear()); });
   initMap();
   setView(viewFromPath(), false);
   tick();

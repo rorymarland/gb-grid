@@ -79,6 +79,14 @@ def main():
     for unit in data['unplaced'][:30]:
         print('  %-14s %-8s %7.1f MW  %s' % (unit['unit'], unit['cat'], unit['mw'], unit['name']))
 
+    try:
+        alerts = get(base, '/api/alerts')
+        print('== Grid notices in force: %d' % len(alerts.get('active', [])))
+        for notice in alerts.get('active', []):
+            print('  %s: %s' % (notice['title'], notice['summary']))
+    except Exception as error:
+        print('== Grid notices unavailable:', error)
+
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))
     return 0

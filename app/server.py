@@ -89,10 +89,13 @@ POLL = {
     'ddu': env_int('POLL_DEMAND_UPDATE_SECONDS', 3600, 600, 86400),
     'region': env_int('POLL_CARBON_SECONDS', 300, 60, 7200),
     'units': env_int('POLL_UNITS_SECONDS', 60, 30, 3600),
+    'warnings': env_int('POLL_WARNINGS_SECONDS', 300, 60, 3600),
 }
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
 ACCESS_LOG = env_str('ACCESS_LOG', 'false').lower() in ('1', 'true', 'yes', 'on')
+UI_RELOAD = env_str('UI_RELOAD', 'false').lower() in ('1', 'true', 'yes', 'on')  # development: reread pages per request
+STATIC_DIR = os.path.join(APP_DIR, 'static')
 
 ELEXON = env_str('ELEXON_BASE_URL', 'https://data.elexon.co.uk/bmrs/api/v1').rstrip('/')
 CARBON = env_str('CARBON_BASE_URL', 'https://api.carbonintensity.org.uk').rstrip('/')
@@ -326,6 +329,8 @@ UPSERT_FREQ = ('INSERT INTO freq (t, hz) VALUES (?, ?) '
                'ON CONFLICT (t) DO UPDATE SET hz = excluded.hz WHERE freq.hz IS NOT excluded.hz')
 UPSERT_ST = ('INSERT INTO st (t, id, mw) VALUES (?, ?, ?) '
              'ON CONFLICT (id, t) DO UPDATE SET mw = excluded.mw WHERE st.mw IS NOT excluded.mw')
+UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
+               'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
 STATION_HISTORY_DAYS = 3
 
 
@@ -358,6 +363,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
             CREATE TABLE IF NOT EXISTS st (t INTEGER NOT NULL, id INTEGER NOT NULL,
                 mw REAL NOT NULL, PRIMARY KEY (id, t)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS warn (t INTEGER NOT NULL, kind TEXT NOT NULL,
+                body TEXT NOT NULL, PRIMARY KEY (t, kind)) WITHOUT ROWID;
         ''')
 
     def write(self, sql, rows, history=True):
@@ -406,6 +413,7 @@ class Store:
             self.db.execute('DELETE FROM ci WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - 26 * 3600,))
             self.db.execute('DELETE FROM st WHERE t < ?', (time.time() - STATION_HISTORY_DAYS * 86400,))
+            self.db.execute('DELETE FROM warn WHERE t < ?', (time.time() - 400 * 86400,))
             removed = self.db.total_changes - before
         if removed:
             log.info('Pruned %d old rows', removed)
@@ -425,6 +433,7 @@ SOURCE_LABELS = {
     'embedded': 'Embedded wind and solar (NESO forecast)',
     'ddu': 'Embedded history (NESO Demand Data Update)',
     'units': 'Power stations (Elexon PN and BOALF)',
+    'warnings': 'Grid notices (Elexon system warnings)',
 }
 
 
@@ -840,6 +849,32 @@ class Ingest:
             'etag': response_headers.get('ETag'),
             'modified': response_headers.get('Last-Modified'),
         }
+
+    # ---- NESO system warnings, published through Elexon ------------------
+
+    def system_warnings(self, start, end, timeout=60):
+        url = (ELEXON + '/system/warnings?publishDateTimeFrom=' + iso_minute(start)
+               + '&publishDateTimeTo=' + iso_minute(end))
+        payload = get_json(url, timeout=timeout)
+        items = payload.get('data') if isinstance(payload, dict) else payload
+        if not isinstance(items, list):
+            raise FetchError('Unexpected system warnings response shape')
+        rows = []
+        for item in items:
+            try:
+                t = parse_time(item['publishTime'])
+                kind = str(item['warningType']).strip().upper()
+                body = str(item.get('warningText') or '').replace('\r', '').replace('\\n', '\n').strip()
+            except (KeyError, TypeError, ValueError):
+                continue
+            rows.append((t, kind, body))
+        self.store.write(UPSERT_WARN, rows, history=False)
+        return len(rows)
+
+    def poll_warnings(self):
+        now = time.time()
+        last = self.store.scalar('SELECT MAX(t) FROM warn')
+        self.system_warnings(max(last - 6 * 3600, now - 30 * 86400) if last else now - 30 * 86400, now + 60)
 
 
 # --------------------------------------------------------------------------
@@ -1348,6 +1383,116 @@ def run_maintenance(store, stop):
 
 
 # --------------------------------------------------------------------------
+# Grid notices: NESO's system warnings in plain English
+# --------------------------------------------------------------------------
+
+# Warning type -> (title, level, what it means). "strong" notices get a red banner.
+NOTICE_KINDS = {
+    'ELECTRICITY MARGIN NOTICE': ('Electricity Margin Notice', 'warning',
+                                  'Spare generating capacity is forecast to fall below the margin NESO needs'),
+    'CAPACITY MARKET NOTICE': ('Capacity Market Notice', 'warning',
+                               'Spare capacity is forecast to fall below the Capacity Market threshold'),
+    'HIGH RISK OF DEMAND REDUCTION': ('High risk of demand reduction', 'strong',
+                                      'There is a high risk that some demand will have to be disconnected'),
+    'DEMAND CONTROL IMMINENT': ('Demand control imminent', 'strong',
+                                'NESO expects to order controlled disconnections of demand'),
+    'NEGATIVE RESERVE ACTIVE POWER MARGIN': ('Negative reserve warning', 'warning',
+                                             'NESO may not have enough room to turn generation down'),
+    'DEMAND FLEXIBILITY SERVICE': ('Demand Flexibility Service', 'warning',
+                                   'Households and businesses are being paid to use less electricity'),
+}
+# Routine messages that never need a banner
+ROUTINE_NOTICES = ('SO-SO TRADES', 'IT SYSTEMS OUTAGE')
+NOTICE_PERIOD = re.compile(r'from\s+(\d{1,2})[:.]?(\d{2})\s*(?:hrs?)?\s+to\s+(\d{1,2})[:.]?(\d{2})\s*(?:hrs?)?\s+on\s+'
+                           r'(?:[A-Za-z]+\s+)?(\d{1,2})/(\d{1,2})/(\d{4})', re.I)
+NOTICE_BETWEEN = re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})\s+between\s+(\d{1,2}):(\d{2})\s+and\s+(\d{1,2}):(\d{2})', re.I)
+NOTICE_COMMENCE = re.compile(r'Commencement time of notice\s*:\s*(\d{1,2}):(\d{2})\s+on\s+(\d{1,2})/(\d{1,2})/(\d{4})', re.I)
+NOTICE_SHORTFALL = re.compile(r'shortfall\s+(\d[\d,]*)\s*MW', re.I)
+NOTICE_REGION = re.compile(r'(?:regions?:\s*|\bFor\s+)([A-Za-z][A-Za-z ]{2,40}?)\s+region', re.I)
+
+
+def uk_offset(t):
+    """Seconds Europe/London is ahead of UTC at epoch t (BST starts and ends at 01:00 UTC)."""
+    year = datetime.fromtimestamp(t, timezone.utc).year
+    start = _last_sunday(year, 3)
+    end = _last_sunday(year, 10)
+    starts = int(datetime(start.year, start.month, start.day, 1, tzinfo=timezone.utc).timestamp())
+    ends = int(datetime(end.year, end.month, end.day, 1, tzinfo=timezone.utc).timestamp())
+    return 3600 if starts <= t < ends else 0
+
+
+def uk_clock(t):
+    """(local date, 'HH:MM') in Europe/London for UTC epoch t."""
+    local = datetime.fromtimestamp(t + uk_offset(t), timezone.utc)
+    return local.date(), local.strftime('%H:%M')
+
+
+def local_epoch(day, hours, minutes):
+    """UTC epoch of a Europe/London wall-clock time (the earlier one when ambiguous)."""
+    base = int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp()) + int(hours) * 3600 + int(minutes) * 60
+    return base - 3600 if uk_offset(base - 3600) else base
+
+
+def describe_notice(t, kind, body, now=None):
+    """Plain-English summary of one system warning, with its period if stated."""
+    now = time.time() if now is None else now
+    title, level, meaning = NOTICE_KINDS.get(kind, (kind.title(), 'warning', None))
+    text = body or ''
+    start = end = None
+    match = NOTICE_PERIOD.search(text)
+    if match:
+        h0, m0, h1, m1, dd, mm, yyyy = (int(g) for g in match.groups())
+        try:
+            day = date(yyyy, mm, dd)
+            start, end = local_epoch(day, h0, m0), local_epoch(day, h1, m1)
+            if end <= start:
+                end = local_epoch(day + timedelta(days=1), h1, m1)
+        except ValueError:
+            start = end = None
+    else:
+        match = NOTICE_BETWEEN.search(text)
+        if match:
+            dd, mm, yyyy, h0, m0, h1, m1 = (int(g) for g in match.groups())
+            try:
+                day = date(yyyy, mm, dd)
+                start, end = local_epoch(day, h0, m0), local_epoch(day, h1, m1)
+            except ValueError:
+                start = end = None
+        else:
+            match = NOTICE_COMMENCE.search(text)
+            if match:
+                h0, m0, dd, mm, yyyy = (int(g) for g in match.groups())
+                try:
+                    start = local_epoch(date(yyyy, mm, dd), h0, m0)
+                except ValueError:
+                    start = None
+    upper = text.upper()
+    cancelled = 'CANCELLATION' in upper or 'HAS BEEN CANCELLED' in upper or 'NOTICE CANCELLED' in upper
+    if meaning is None:
+        first = next((line.strip() for line in text.split('\n')
+                      if line.strip() and not line.strip().upper().startswith('FROM')), '')
+        meaning = first[:160].rstrip('.') or title
+    phrase = meaning
+    region = NOTICE_REGION.search(text) if kind == 'NEGATIVE RESERVE ACTIVE POWER MARGIN' else None
+    if region:
+        phrase += ' in the ' + ' '.join(region.group(1).split()).title().replace(' To ', ' to ') + ' area'
+    today = uk_clock(now)[0]
+    if start is not None:
+        start_day, start_clock = uk_clock(start)
+        when = '' if start_day == today else ' tomorrow' if start_day == today + timedelta(days=1) \
+            else ' on ' + start_day.strftime('%a ') + str(start_day.day) + start_day.strftime(' %b')
+        phrase += (' from ' + start_clock + (' to ' + uk_clock(end)[1] if end else '') + when)
+    shortfall = NOTICE_SHORTFALL.search(text)
+    if shortfall:
+        phrase += ', with a shortfall of ' + shortfall.group(1) + ' MW'
+    return {
+        'id': kind[:24] + '-' + str(int(t)), 'kind': kind, 'title': title, 'level': level,
+        'summary': phrase + '.', 'text': text, 'published': int(t), 'start': start, 'end': end,
+        'cancelled': cancelled, 'routine': kind in ROUTINE_NOTICES,
+    }
+
+
+# --------------------------------------------------------------------------
 # Derived views for the API
 # --------------------------------------------------------------------------
 
@@ -1834,6 +1979,30 @@ class Grid:
             result[key] = item
         return result
 
+    # ---- /api/alerts: grid notices in force now --------------------------
+
+    def notices(self, days=30):
+        rows = self.store.query('SELECT t, kind, body FROM warn WHERE t >= ? ORDER BY t', (time.time() - days * 86400,))
+        return [describe_notice(t, kind, body) for t, kind, body in rows]
+
+    def alerts(self):
+        now = time.time()
+        latest = {}
+        for notice in self.notices(7):
+            if notice['routine'] or notice['kind'] == 'OTHER':
+                continue
+            latest[notice['kind']] = notice  # oldest first, so the latest message per kind wins
+        active = []
+        for notice in latest.values():
+            if notice['cancelled']:
+                continue
+            hours = 24 if notice['kind'] == 'CAPACITY MARKET NOTICE' else 12
+            end = notice['end'] or max(notice['start'] or 0, notice['published']) + hours * 3600
+            if now <= end + 900:
+                active.append(notice)
+        active.sort(key=lambda n: (n['level'] != 'strong', -n['published']))
+        return {'active': active, 'generated': int(now)}
+
 
 # --------------------------------------------------------------------------
 # HTTP server
@@ -1842,8 +2011,7 @@ class Grid:
 class App:
     store = None
     grid = None
-    ui = (b'', '')
-    map_ui = (b'', '')
+    ui = None
     geo = (b'', '')
 
 
@@ -1857,9 +2025,118 @@ def load_file(path, variable, fallback):
     return body, '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
 
 
-def load_ui():
-    return load_file(UI_PATH, 'UI_PATH', b'<!doctype html><title>GB Grid</title>'
-                     b'<p>The dashboard page is missing. Check UI_PATH points at index.html.</p>')
+# Pages: (key, path, tab label, file). The tabs appear in this order.
+PAGES = [
+    ('overview', '/', 'Overview', 'index.html'),
+    ('map', '/map', 'Map', 'map.html'),
+    ('stations', '/stations', 'Stations', 'map.html'),
+]
+STATIC_TYPES = {
+    '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
+    '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
+}
+MISSING_PAGE = (b'<!doctype html><title>GB Grid</title>'
+                b'<p>This page is missing from the image. Rebuild or pull it again.</p>')
+BRAND_SVG = ('<svg viewBox="0 0 26 26" aria-hidden="true"><rect x="0.5" y="0.5" width="25" height="25" rx="7" '
+             'fill="none" stroke="currentColor" stroke-opacity="0.25"/><path d="M4 13c1.5-5 3-5 4.5 0s3 5 4.5 0 3-5 '
+             '4.5 0 3 5 4.5 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>')
+HEAD_HTML = (
+    '<meta charset="utf-8">\n'
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+    '<meta name="color-scheme" content="light dark">\n'
+    '<link rel="stylesheet" href="{{static:base.css}}">\n'
+    "<script>try{var t=localStorage.getItem('gb-grid-theme');if(t==='light'||t==='dark')"
+    "document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>")
+ELEXON_CREDIT = ('Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> '
+                 '(<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" '
+                 'rel="noopener">licence</a>).')
+NESO_CREDIT = ('Supported by National Energy SO Open Data '
+               '(<a href="https://www.neso.energy/data-portal/neso-open-licence" rel="noopener">licence</a>).')
+CREDITS_HTML = (
+    '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
+    '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
+    'from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
+    'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
+    'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
+    '<p class="credit">A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley’s '
+    '<a href="https://grid.iamkate.com/" rel="noopener">National Grid: Live</a>. All times are UK time.</p>')
+CREDITS_SHORT_HTML = (
+    '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Station locations: '
+    '<a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. '
+    'Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>')
+
+
+def header_html(current):
+    tabs = ''.join('<a href="%s"%s%s>%s</a>' % (
+        path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
+        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES)
+    return (
+        '<div class="alert-bar" id="alert-bar" role="region" aria-label="Grid notices" hidden></div>\n'
+        '<header class="top">\n  <div class="wrap top-inner">\n'
+        '    <a class="brand" href="/" aria-label="GB grid overview">' + BRAND_SVG + '<span>GB grid</span></a>\n'
+        '    <nav class="nav" aria-label="Pages">' + tabs + '</nav>\n'
+        '    <p class="live"><span class="dot" id="live-dot"></span>'
+        '<span id="live-text">Connecting to the dashboard server…</span></p>\n'
+        '    <div class="tools"><button class="theme-btn" id="theme-btn" type="button">Theme: auto</button></div>\n'
+        '  </div>\n</header>\n<script src="{{static:base.js}}"></script>')
+
+
+class UI:
+    """The pages, with the shared head, header and credits filled in, and the static files."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.pages, self.static = {}, {}
+        self.load()
+
+    @staticmethod
+    def _static_url(name, static):
+        item = static.get(name)
+        return '/static/' + name + ('?v=' + item[1].strip('"')[:10] if item else '')
+
+    def load(self):
+        static = {}
+        try:
+            names = sorted(os.listdir(STATIC_DIR))
+        except OSError:
+            names = []
+        for name in names:
+            kind = STATIC_TYPES.get(os.path.splitext(name)[1].lower())
+            path = os.path.join(STATIC_DIR, name)
+            if kind and os.path.isfile(path):
+                body, etag = load_file(path, 'the static folder', b'')
+                static[name] = (body, etag, kind)
+        sources, pages = {}, {}
+        for key, path, label, filename in PAGES:
+            if filename not in sources:
+                source = (UI_PATH if filename == 'index.html' else MAP_UI_PATH if filename == 'map.html'
+                          else os.path.join(APP_DIR, filename))
+                sources[filename] = load_file(source, 'the app folder', MISSING_PAGE)[0].decode('utf-8', 'replace')
+            html = sources[filename].replace('<!--#head-->', HEAD_HTML).replace('<!--#header-->', header_html(key))
+            html = html.replace('<!--#credits-->', CREDITS_HTML).replace('<!--#credits-short-->', CREDITS_SHORT_HTML)
+            html = re.sub(r'\{\{static:([\w.-]+)\}\}', lambda m: self._static_url(m.group(1), static), html)
+            body = html.encode('utf-8')
+            pages[key] = (body, '"' + hashlib.sha1(body).hexdigest()[:16] + '"')
+        with self.lock:
+            self.static, self.pages = static, pages
+
+    def page(self, key):
+        if UI_RELOAD:
+            self.load()
+        with self.lock:
+            return self.pages.get(key)
+
+    def asset(self, name):
+        if UI_RELOAD:
+            self.load()
+        with self.lock:
+            return self.static.get(name)
+
+
+PAGE_PATHS = {path: key for key, path, _, _ in PAGES}
+PAGE_PATHS['/index.html'] = 'overview'
+STATIC_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1879,14 +2156,21 @@ class Handler(BaseHTTPRequestHandler):
         parts = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(parts.query)
         try:
-            if parts.path in ('/', '/index.html'):
-                body, etag = App.ui
+            if parts.path in PAGE_PATHS:
+                body, etag = App.ui.page(PAGE_PATHS[parts.path])
                 self.respond(200, body, 'text/html; charset=utf-8', send_body, etag=etag, cache='no-cache')
-            elif parts.path in ('/map', '/stations'):
-                body, etag = App.map_ui
-                self.respond(200, body, 'text/html; charset=utf-8', send_body, etag=etag, cache='no-cache')
-            elif parts.path in ('/map/', '/stations/'):
+            elif len(parts.path) > 1 and parts.path.endswith('/') and parts.path.rstrip('/') in PAGE_PATHS:
                 self.redirect(parts.path.rstrip('/'), send_body)
+            elif parts.path.startswith('/static/'):
+                name = parts.path[len('/static/'):]
+                item = App.ui.asset(name) if STATIC_NAME.match(name) else None
+                if item is None:
+                    self.respond(404, b'Not found\n', 'text/plain; charset=utf-8', send_body)
+                else:
+                    cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'no-cache'
+                    self.respond(200, item[0], item[2], send_body, etag=item[1], cache=cache)
+            elif parts.path == '/api/alerts':
+                self.respond_json(App.grid.alerts(), send_body)
             elif parts.path == '/geo.json':
                 body, etag = App.geo
                 self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
@@ -1980,9 +2264,7 @@ def main():
     ingest = Ingest(store, status)
     fleet = Fleet(STATIONS_PATH)
     units = Units(store, fleet)
-    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units), load_ui()
-    App.map_ui = load_file(MAP_UI_PATH, 'MAP_UI_PATH', b'<!doctype html><title>GB Grid</title>'
-                           b'<p>The map page is missing. Check MAP_UI_PATH points at map.html.</p>')
+    App.store, App.grid, App.ui = store, Grid(store, status, fleet, units), UI()
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     stop = threading.Event()
 
@@ -1995,6 +2277,7 @@ def main():
         ('embedded', ingest.poll_embedded),
         ('ddu', ingest.poll_ddu),
         ('units', units.poll),
+        ('warnings', ingest.poll_warnings),
     ]
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))

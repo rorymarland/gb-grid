@@ -30,6 +30,7 @@ services:
       POLL_EMBEDDED_SECONDS: ${POLL_EMBEDDED_SECONDS:-1800}
       POLL_DEMAND_UPDATE_SECONDS: ${POLL_DEMAND_UPDATE_SECONDS:-3600}
       POLL_UNITS_SECONDS: ${POLL_UNITS_SECONDS:-60}
+      POLL_WARNINGS_SECONDS: ${POLL_WARNINGS_SECONDS:-300}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ACCESS_LOG: ${ACCESS_LOG:-false}
     # Hardening: nothing in the container needs to write outside /data and
