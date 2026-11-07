@@ -93,6 +93,7 @@ a { color: inherit; text-underline-offset: 2px; }
 /* Header: brand, page tabs, live status, tools. One row on wide screens;
    below that the tabs get a row of their own and scroll sideways. */
 .top { border-bottom: 1px solid var(--hair); background: var(--page); }
+.top .wrap.top-inner { max-width: none; }  /* the header spans the window on every page; content stays centred */
 .top-inner {
   display: grid; align-items: center; column-gap: 18px; row-gap: 8px; min-height: 58px;
   padding-top: 8px; padding-bottom: 8px;

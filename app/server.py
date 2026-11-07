@@ -3001,6 +3001,8 @@ HEAD_HTML = (
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
     '<meta name="color-scheme" content="light dark">\n'
     '<link rel="stylesheet" href="{{static:base.css}}">\n'
+    '<link rel="icon" href="{{static:favicon.svg}}" type="image/svg+xml">\n'
+    '<link rel="apple-touch-icon" href="{{static:icon-180.png}}">\n'
     "<script>try{var t=localStorage.getItem('gb-grid-theme'),m=location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];"
     "if(t==='light'||t==='dark')"
     "document.documentElement.setAttribute('data-theme',t)}catch(e){}"
@@ -3173,8 +3175,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json({'healthy': healthy, 'sources': status}, send_body, code=200 if healthy else 503)
             elif parts.path == '/healthz':
                 self.respond(200, b'ok\n', 'text/plain; charset=utf-8', send_body, cache='no-store')
-            elif parts.path == '/favicon.ico':
-                self.respond(204, b'', 'image/x-icon', send_body, cache='max-age=86400')
+            elif parts.path == '/favicon.ico':  # for clients that ignore the page's icon link
+                item = App.ui.asset('icon-180.png')
+                if item:
+                    self.respond(200, item[0], 'image/png', send_body, etag=item[1], cache='max-age=86400')
+                else:
+                    self.respond(204, b'', 'image/x-icon', send_body, cache='max-age=86400')
             else:
                 self.respond(404, b'Not found\n', 'text/plain; charset=utf-8', send_body)
         except (BrokenPipeError, ConnectionResetError):
