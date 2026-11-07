@@ -72,6 +72,31 @@ html.fs-lock, html.fs-lock body { overflow: hidden; }
 .fs-key .sw { width: 9px; height: 9px; border-radius: 2px; }
 .map-msg { position: absolute; right: 58px; top: 12px; max-width: min(360px, calc(100% - 80px)); background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; color: var(--ink-2); }
 .hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px; pointer-events: none; }
+.stage .size-key, .stage .hint { bottom: 78px; }
+
+/* Time machine: replay the stored history along the bottom of the map */
+.tbar { position: absolute; left: 12px; right: 12px; bottom: 12px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 0 10px; background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 7px 10px 5px; box-shadow: 0 6px 22px rgba(8, 18, 28, 0.10); }
+.tb-btn { height: 32px; min-width: 32px; border: 1px solid var(--hair); background: var(--page); color: var(--ink); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tb-btn:hover { background-image: linear-gradient(var(--wash), var(--wash)); }
+.tb-btn svg { flex: none; }
+.tb-play { width: 32px; padding: 0; }
+.tb-track { position: relative; min-width: 0; padding-bottom: 15px; }
+.tb-track input { display: block; width: 100%; margin: 6px 0 0; height: 18px; accent-color: var(--line); cursor: pointer; background: transparent; }
+.tb-days { position: absolute; left: 8px; right: 8px; bottom: 0; height: 14px; pointer-events: none; }
+.tb-days span { position: absolute; top: 0; font-size: 11px; line-height: 14px; color: var(--muted); padding-left: 4px; white-space: nowrap; }
+.tb-days span::before { content: ""; position: absolute; left: 0; top: -3px; height: 15px; border-left: 1px solid var(--axis); }
+.tb-days .gap { position: absolute; top: -12px; height: 6px; left: 0; background: repeating-linear-gradient(90deg, var(--axis) 0 3px, transparent 3px 6px); opacity: 0.6; }
+.tb-live[aria-pressed="true"] { background: var(--chip); border-color: transparent; font-weight: 600; cursor: default; }
+.tb-live[aria-pressed="false"] { color: var(--ink); }
+.tb-live .dot { width: 8px; height: 8px; }
+.tb-status { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+.replay-when { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--ink); color: var(--page); border-radius: 999px; padding: 5px 14px; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 16px rgba(8, 18, 28, 0.18); }
+.replay-when small { font-weight: 500; opacity: 0.75; margin-left: 6px; font-size: 12px; }
+@media (max-width: 640px) {
+  .tbar { grid-template-columns: auto minmax(0, 1fr) auto; left: 8px; right: 8px; bottom: 8px; padding: 6px 8px 4px; }
+  .tb-speed, .tb-back { display: none; }
+  .stage .size-key { display: none; }
+}
 
 
 /* Side panel */
@@ -200,6 +225,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   #view-map.is-fs .stage { height: 100%; min-height: 0; }
   #view-map.is-fs .side { display: none; }
   #view-map.is-fs .fs-key { display: flex; }
+  #view-map.is-fs .replay-when { display: none; }
 }
 @media (max-width: 640px) {
   .side { padding: 18px 16px 30px; }
@@ -237,6 +263,16 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
       <div class="fs-key" id="fs-key" aria-hidden="true"></div>
       <div class="size-key" id="size-key" aria-hidden="true"></div>
       <p class="map-msg" id="map-msg" hidden></p>
+      <p class="replay-when" id="replay-when" hidden></p>
+      <div class="tbar" id="tbar" role="group" aria-label="Time machine">
+        <button type="button" class="tb-btn tb-play" id="tb-play" aria-label="Play the last day" title="Play (Space)"></button>
+        <button type="button" class="tb-btn tb-speed" id="tb-speed" aria-label="Playback speed, 1 hour per second">1 h/s</button>
+        <div class="tb-track">
+          <input type="range" id="tb-range" min="0" max="1007" value="1007" step="1" aria-label="Time on the map">
+          <div class="tb-days" id="tb-days" aria-hidden="true"></div>
+        </div>
+        <button type="button" class="tb-btn tb-live" id="tb-live" aria-pressed="true"><span class="dot good"></span>Live</button>
+      </div>
       <p class="hint" id="hint" aria-hidden="true">Scroll or pinch to zoom, drag to move</p>
     </section>
     <aside class="side" id="side" aria-label="Generation summary">
@@ -506,8 +542,11 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
       state.lastOk = Date.now();
       if (text !== state.text) {
         state.text = text;
-        state.data = JSON.parse(text);
-        render();
+        state.live = JSON.parse(text);
+        if (R.index === null) {
+          state.data = state.live;
+          render();
+        }
       }
     }).catch(function () {
       state.failures += 1;
@@ -519,14 +558,14 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   function schedule() {
     clearTimeout(state.timer);
     if (document.hidden) return;
-    var seconds = (state.data && state.data.refresh_seconds) || 10;
+    var seconds = (state.live && state.live.refresh_seconds) || 10;
     if (state.failures) seconds = Math.min(60, seconds * Math.pow(2, state.failures - 1));
     state.timer = setTimeout(tick, seconds * 1000);
   }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
 
   function renderHeader() {
-    var data = state.data, dot = byId('live-dot'), text = byId('live-text');
+    var data = state.live, dot = byId('live-dot'), text = byId('live-text');
     var cls = 'dot', message;
     var offline = state.failures > 0 && (!state.lastOk || Date.now() - state.lastOk > 25000);
     if (offline) {
@@ -557,6 +596,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   function viewFromPath() { return /^\/stations/.test(location.pathname) ? 'stations' : 'map'; }
   function setView(view, push) {
     if (view !== 'map' && isFullscreen()) exitFullscreen();
+    if (view !== 'map' && R.index !== null) goLive(true);
     state.view = view;
     document.body.className = 'mode-' + view;
     byId('view-map').hidden = view !== 'map';
@@ -657,7 +697,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     byId('zoom-out').addEventListener('click', function () { interacted(); M.tip.hide(); zoomAt([M.W / 2, M.H / 2], M.s / 1.6); });
     byId('zoom-reset').addEventListener('click', function () { M.moved = false; fitDefault(); requestRedraw(); });
     byId('fs-btn').addEventListener('click', toggleFullscreen);
-    if (window.ResizeObserver) new ResizeObserver(function () { mapResize(); }).observe(M.stage);
+    if (window.ResizeObserver) new ResizeObserver(function () { mapResize(); drawDays(); }).observe(M.stage);
     else window.addEventListener('resize', mapResize);
   }
 
@@ -738,7 +778,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 
   function renderFsKey(data) {
     var host = clear(byId('fs-key'));
-    if (data.model) host.appendChild(h('span', { cls: 'when-chip', text: 'GW at ' + hm(data.model.time || data.model.at) }));
+    if (data.model) host.appendChild(h('span', { cls: 'when-chip', text: 'GW at ' + stamp(data.model.time || data.model.at) }));
     (state.fuelOrder || CATS).forEach(function (key) {
       var total = catTotal(category(data, key));
       if (total < 50) return;
@@ -858,6 +898,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     }
   }
   function onKey(e) {
+    if (e.target !== M.stage) return;
     var step = 70, handled = true;
     if (e.key === 'ArrowLeft') M.tx += step;
     else if (e.key === 'ArrowRight') M.tx -= step;
@@ -867,6 +908,8 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     else if (e.key === '-' || e.key === '_') { zoomAt([M.W / 2, M.H / 2], M.s / 1.5); return e.preventDefault(); }
     else if (e.key === '0') { M.moved = false; fitDefault(); requestRedraw(); return e.preventDefault(); }
     else if (e.key === 'Escape') { if (!FS.pseudo) select(null); return; }
+    else if (e.key === ' ') { togglePlay(); return e.preventDefault(); }
+    else if (e.key === ',' || e.key === '.') { stepFrame(e.key === ',' ? -1 : 1); return e.preventDefault(); }
     else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleFullscreen(); return e.preventDefault(); }
     else handled = false;
     if (handled) { e.preventDefault(); interacted(); M.tip.hide(); M.moved = true; clampView(); requestRedraw(); }
@@ -934,7 +977,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     if (st.cap) rows.push({ value: load === null ? '–' : Math.round(load) + '%', label: 'of ' + mw(st.cap) + ' MW capacity' });
     rows.push({ sep: true });
     rows.push({ value: NAMES[st.c] || st.c, label: where(st) });
-    rows.push({ value: st.on + ' of ' + st.u, label: st.u === 1 ? 'unit running' : 'units running' });
+    if (!st.replay) rows.push({ value: st.on + ' of ' + st.u, label: st.u === 1 ? 'unit running' : 'units running' });
     if (st.i) rows.push({ value: String(st.i), label: st.i === 1 ? 'unit following a grid instruction' : 'units following grid instructions' });
     return rows;
   }
@@ -1214,7 +1257,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
       x += width + 12;
     });
     var svg = s('svg', { width: Math.ceil(x - 12), height: Math.ceil(2 * rMax + 34) });
-    svg.appendChild(s('text', { x: 0, y: 11, text: 'Output now', 'font-weight': '600' }));
+    svg.appendChild(s('text', { x: 0, y: 11, text: 'Output', 'font-weight': '600' }));
     items.forEach(function (item) {
       var base = 18 + 2 * rMax;
       svg.appendChild(s('circle', { cx: item.cx.toFixed(1), cy: (base - item.r).toFixed(1), r: item.r.toFixed(1) }));
@@ -1246,8 +1289,8 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     var model = data.model;
     var when = byId('when');
     if (model) {
-      when.textContent = 'At ' + hm(model.time || model.at) + '. Each circle is a power station, sized by what it’s generating.' +
-        (model.basis === 'measured' ? '' : ' Measured totals are delayed, so these are the stations’ own plans.');
+      when.textContent = (data.replay ? 'Replaying ' + stamp(model.time) + '. Drag the slider or press play to move through time. ' : 'At ' + hm(model.time || model.at) + '. ') + 'Each circle is a power station, sized by what it’s generating.' +
+        (model.basis === 'scheduled' ? ' Measured totals are delayed, so these are the stations’ own plans.' : '');
     } else {
       when.textContent = 'Waiting for the first station data…';
     }
@@ -1274,7 +1317,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   function renderFuels(data) {
     var host = clear(byId('fuels'));
     var rows = CATS.map(function (key) { return category(data, key) || { key: key, label: NAMES[key] }; });
-    if (!state.fuelOrder || state.fuelOrderTime !== data.time) {
+    if (!state.fuelOrder || (state.fuelOrderTime !== data.time && !data.replay)) {
       state.fuelOrder = rows.slice().sort(function (a, b) { return catTotal(b) - catTotal(a); }).map(function (c) { return c.key; });
       state.fuelOrderTime = data.time;
     }
@@ -1391,7 +1434,7 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     var big = st.mw <= -1 ? [mw(-st.mw), h('small', { text: 'MW being stored' })] : [mw(Math.max(0, st.mw)), h('small', { text: 'MW now' })];
     host.appendChild(h('div', { cls: 'big' }, big));
     host.appendChild(h('p', { cls: 'cap', text: (st.cap ? (load === null ? '' : Math.round(load) + '% of its ' + mw(st.cap) + ' MW capacity. ') : '') +
-      st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '.' }));
+      (st.replay ? 'Replaying ' + stamp(state.data.time) + '.' : st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '.') }));
     var box = h('div', { cls: 'chart-box' });
     host.appendChild(box);
     loadStationChart(st, box);
@@ -1735,6 +1778,204 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
     e.currentTarget.setAttribute('aria-expanded', String(open));
     byId('how').hidden = !open;
   });
+
+  /* ---------- time machine ---------- */
+
+  var R = { data: null, loading: false, fetched: 0, index: null, playing: false, speed: 0, raf: 0, last: 0, acc: 0, drawn: 0, error: null, pending: null };
+  /* Frames are ten minutes apart, so 6 frames a second plays an hour a second */
+  var SPEEDS = [[6, '1 h/s', '1 hour'], [24, '4 h/s', '4 hours'], [72, '12 h/s', '12 hours']];
+  var PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 2.2v9.6L11.6 7z" fill="currentColor"/></svg>';
+  var PAUSE_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.4 2.5h2.5v9H3.4zM8.1 2.5h2.5v9H8.1z" fill="currentColor"/></svg>';
+  var weekdayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: TZ });
+  var weekdayNarrow = new Intl.DateTimeFormat('en-GB', { weekday: 'narrow', timeZone: TZ });
+
+  function stamp(t) { return GB.when(t); }
+
+  function replayDomain() {
+    if (R.data && R.data.t.length > 1) return { t0: R.data.t[0], t1: R.data.t[R.data.t.length - 1] };
+    var now = Math.floor(Date.now() / 1000);
+    return { t0: now - 7 * 86400, t1: now };
+  }
+
+  function loadReplay(then) {
+    if (R.data && Date.now() - R.fetched < 10 * 60 * 1000) { then(); return; }
+    R.pending = then;
+    if (R.loading) return;
+    R.loading = true;
+    renderBar();
+    fetchText('/api/replay').then(function (text) {
+      R.data = JSON.parse(text);
+      R.fetched = Date.now();
+      R.error = null;
+      byId('tb-range').max = String(Math.max(0, R.data.t.length - 1));
+      drawDays();
+    }).catch(function () {
+      R.error = 'Couldn’t load the history. Try again in a moment.';
+    }).then(function () {
+      R.loading = false;
+      var next = R.pending;
+      R.pending = null;
+      if (R.data && R.data.t.length > 1 && next) next();
+      else if (R.data && R.data.t.length <= 1) R.error = 'History builds up as the dashboard runs. Check back in an hour.';
+      renderBar();
+    });
+  }
+
+  /* A map data object for one moment in the past, shaped like /api/map */
+  function frameData(i) {
+    var live = state.live, d = R.data, t = d.t[i];
+    var stations = [], mapped = {}, counts = {};
+    (live.stations || []).forEach(function (st) {
+      var series = d.stations[st.id];
+      var v = series ? series[i] : null;
+      if (v === null || v === undefined) return;
+      var copy = {};
+      Object.keys(st).forEach(function (k) { copy[k] = st[k]; });
+      copy.mw = v;
+      copy.i = 0;
+      copy.replay = true;
+      stations.push(copy);
+      if (v > 0) mapped[st.c] = (mapped[st.c] || 0) + v;
+      if (v >= 1) counts[st.c] = (counts[st.c] || 0) + 1;
+    });
+    stations.sort(function (a, b) { return Math.abs(b.mw) - Math.abs(a.mw); });
+    var links = (live.links || []).map(function (link) {
+      var copy = {};
+      Object.keys(link).forEach(function (k) { copy[k] = link[k]; });
+      var series = d.links[link.code];
+      copy.mw = series ? series[i] : null;
+      return copy;
+    });
+    function total(key) { var series = d.totals[key]; return series ? series[i] : null; }
+    var measured = { wind: total('wind'), solar: num(total('solar')) ? 0 : null, nuclear: total('nuclear'), gas: total('gas'),
+      biomass: total('biomass'), hydro: total('hydro'), storage: total('storage'), other: total('other') };
+    var embedded = { wind: total('wind_embedded'), solar: total('solar') };
+    var categories = CATS.map(function (key) {
+      return { key: key, label: NAMES[key], measured: measured[key], embedded: num(embedded[key]) ? embedded[key] : null,
+        mapped: mapped[key] || 0, unplaced: null, stations: counts[key] || 0 };
+    });
+    var demand = total('demand'), exports = total('exports');
+    return {
+      replay: true, time: t, status: live.status, refresh_seconds: live.refresh_seconds,
+      model: { basis: 'replay', at: t, time: t, period: null, scale: {}, counts: { units: 0, placed: 0, instructed: 0 }, unplaced_count: 0 },
+      stations: stations, links: links, categories: categories, unplaced: [],
+      demand_gw: num(demand) ? demand / 1000 : null, exports_gw: num(exports) ? Math.abs(exports) / 1000 : null
+    };
+  }
+
+  function showFrame(i) {
+    if (!R.data || R.data.t.length < 2 || !state.live) return;
+    R.index = clamp(Math.round(i), 0, R.data.t.length - 1);
+    state.data = frameData(R.index);
+    render();
+    renderBar();
+  }
+
+  function goLive(quiet) {
+    stopPlay();
+    R.index = null;
+    if (state.live) {
+      state.data = state.live;
+      if (!quiet) render();
+    }
+    renderBar();
+  }
+
+  function startPlay() {
+    loadReplay(function () {
+      var last = R.data.t.length - 1;
+      if (R.index === null || R.index >= last) showFrame(Math.max(0, last - Math.round(86400 / R.data.step)));
+      R.playing = true;
+      R.last = 0;
+      R.acc = 0;
+      R.raf = requestAnimationFrame(playStep);
+      renderBar();
+    });
+  }
+  function stopPlay() {
+    if (!R.playing) return;
+    R.playing = false;
+    cancelAnimationFrame(R.raf);
+    R.raf = 0;
+    renderBar();
+  }
+  function togglePlay() { if (R.playing) stopPlay(); else startPlay(); }
+  function playStep(now) {
+    if (!R.playing) return;
+    if (R.last) R.acc += (now - R.last) / 1000 * SPEEDS[R.speed][0];
+    R.last = now;
+    if (R.acc >= 1 && now - R.drawn >= 70) {
+      var steps = Math.floor(R.acc);
+      R.acc -= steps;
+      R.drawn = now;
+      if (R.index + steps >= R.data.t.length - 1) { goLive(); return; }
+      showFrame(R.index + steps);
+    }
+    R.raf = requestAnimationFrame(playStep);
+  }
+  function stepFrame(delta) {
+    loadReplay(function () {
+      stopPlay();
+      showFrame((R.index === null ? R.data.t.length - 1 : R.index) + delta);
+    });
+  }
+
+  function renderBar() {
+    var live = R.index === null;
+    var play = byId('tb-play');
+    play.innerHTML = R.playing ? PAUSE_ICON : PLAY_ICON;
+    play.setAttribute('aria-label', R.playing ? 'Pause' : live ? 'Play the last day' : 'Play from here');
+    var speed = byId('tb-speed');
+    speed.textContent = SPEEDS[R.speed][1];
+    speed.setAttribute('aria-label', 'Playback speed: ' + SPEEDS[R.speed][2] + ' of history a second. Select to change.');
+    var liveBtn = clear(byId('tb-live'));
+    liveBtn.setAttribute('aria-pressed', String(live));
+    liveBtn.appendChild(h('span', { cls: live ? 'dot good' : 'dot' }));
+    if (!live) liveBtn.appendChild(h('span', { cls: 'tb-back', text: 'Back to ' }));
+    liveBtn.appendChild(document.createTextNode(live ? 'Live' : 'live'));
+    var range = byId('tb-range');
+    range.value = live ? range.max : String(R.index);
+    range.setAttribute('aria-valuetext', live ? 'Live' : stamp(R.data.t[R.index]));
+    var pill = clear(byId('replay-when'));
+    var message = R.loading ? 'Loading the stored history…' : R.error;
+    if (!live) {
+      pill.appendChild(document.createTextNode(stamp(R.data.t[R.index])));
+      pill.appendChild(h('small', { text: R.playing ? 'playing' : 'replay' }));
+    } else if (message) {
+      pill.appendChild(document.createTextNode(message));
+    }
+    pill.hidden = live && !message;
+  }
+
+  function drawDays() {
+    var host = clear(byId('tb-days'));
+    var dom = replayDomain(), span = dom.t1 - dom.t0;
+    if (span <= 0) return;
+    var narrow = host.clientWidth / (span / 86400) < 46;
+    for (var t = Math.ceil(dom.t0 / 3600) * 3600; t <= dom.t1; t += 3600) {
+      if (hm(t) !== '00:00') continue;
+      var pct = 100 * (t - dom.t0) / span;
+      if (pct > 2 && pct < 95) host.appendChild(h('span', { style: 'left:' + pct.toFixed(2) + '%', text: (narrow ? weekdayNarrow : weekdayFmt).format(new Date(t * 1000)) }));
+    }
+  }
+
+  (function setupTimeMachine() {
+    var range = byId('tb-range');
+    range.addEventListener('pointerdown', function () { stopPlay(); loadReplay(function () {}); });
+    range.addEventListener('input', function () {
+      var value = +range.value;
+      stopPlay();
+      loadReplay(function () {
+        if (R.index === null && value >= R.data.t.length - 1) return;
+        showFrame(Math.min(+range.value, R.data.t.length - 1));
+      });
+    });
+    byId('tb-play').addEventListener('click', togglePlay);
+    byId('tb-speed').addEventListener('click', function () { R.speed = (R.speed + 1) % SPEEDS.length; renderBar(); });
+    byId('tb-live').addEventListener('click', function () { if (R.index !== null) goLive(); });
+    renderBar();
+    drawDays();
+  })();
 
   /* ---------- theme ---------- */
 

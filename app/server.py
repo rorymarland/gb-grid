@@ -331,7 +331,7 @@ UPSERT_ST = ('INSERT INTO st (t, id, mw) VALUES (?, ?, ?) '
              'ON CONFLICT (id, t) DO UPDATE SET mw = excluded.mw WHERE st.mw IS NOT excluded.mw')
 UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
                'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
-STATION_HISTORY_DAYS = 3
+STATION_HISTORY_DAYS = 7
 
 
 class Store:
@@ -1952,6 +1952,61 @@ class Grid:
         }
         return payload
 
+    # ---- /api/replay: the map's time machine -----------------------------
+
+    def replay(self):
+        latest = self.store.scalar('SELECT MAX(t) FROM st')
+        return self.cached(('replay',), latest, lambda: self._build_replay(latest))
+
+    def _build_replay(self, latest, step=600):
+        """Station output, interconnector flows and national totals every ten
+        minutes over the stored station history (up to STATION_HISTORY_DAYS)."""
+        if not latest:
+            return {'step': step, 't': [], 'stations': {}, 'links': {}, 'totals': {}}
+        end = floor_to(latest, step)
+        first = self.store.scalar('SELECT MIN(t) FROM st') or end
+        start = max(floor_to(first, step), end - STATION_HISTORY_DAYS * 86400 + step)
+        times = list(range(start, end + 1, step))
+        index = {t: i for i, t in enumerate(times)}
+        stations = {}
+        for sid, bucket, mw in self.store.query(
+                'SELECT id, (t / ?) * ? AS b, AVG(mw) FROM st WHERE t >= ? AND t < ? GROUP BY id, b',
+                (step, step, start, end + step)):
+            series = stations.get(sid)
+            if series is None:
+                series = stations[sid] = [None] * len(times)
+            i = index.get(bucket)
+            if i is not None:
+                series[i] = int(round(mw))
+        fuels_by_bucket = {}
+        for bucket, fuel, mw in self.store.query(
+                'SELECT (t / ?) * ? AS b, fuel, AVG(mw) FROM gen WHERE t >= ? AND t < ? GROUP BY b, fuel',
+                (step, step, start, end + step)):
+            fuels_by_bucket.setdefault(bucket, {})[fuel] = mw
+        wind_table, solar_table, _, _ = self.load_embedded(start, end + step)
+        keys = ['wind', 'wind_embedded', 'solar', 'nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other',
+                'imports', 'exports', 'demand']
+        totals = {key: [None] * len(times) for key in keys}
+        links = {}
+        for i, t in enumerate(times):
+            fuels = fuels_by_bucket.get(t)
+            if not fuels or len(fuels) < 8:
+                continue
+            middle = t + step // 2
+            m = self.mix(fuels, self.interpolate(wind_table, middle), self.interpolate(solar_table, middle))
+            values = {
+                'wind': m['wind_transmission'], 'wind_embedded': m['wind_embedded'], 'solar': m['solar'],
+                'nuclear': m['nuclear'], 'gas': m['gas'], 'biomass': m['biomass'], 'hydro': m['hydro'],
+                'storage': m['storage_out'], 'other': m['coal'] + m['oil'] + m['other'],
+                'imports': m['imports'], 'exports': m['exports'], 'demand': m['demand'],
+            }
+            for key in keys:
+                totals[key][i] = int(round(values[key]))
+            for code, mw in m['links'].items():
+                links.setdefault(code, [None] * len(times))[i] = int(round(mw))
+        return {'step': step, 't': times, 'stations': {str(k): v for k, v in stations.items()},
+                'links': links, 'totals': totals, 'generated': int(time.time())}
+
     def station_history(self, sid):
         station = self.fleet.stations.get(sid) if self.fleet else None
         if station is None:
@@ -2169,6 +2224,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'no-cache'
                     self.respond(200, item[0], item[2], send_body, etag=item[1], cache=cache)
+            elif parts.path == '/api/replay':
+                self.respond_json(App.grid.replay(), send_body)
             elif parts.path == '/api/alerts':
                 self.respond_json(App.grid.alerts(), send_body)
             elif parts.path == '/geo.json':
