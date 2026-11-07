@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.1.0 (unreleased)
+## 1.1.0 (2026-11-07)
 
 New pages and views. Existing settings and data keep working; the new feeds
 start filling in on first start.
