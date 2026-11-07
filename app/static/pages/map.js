@@ -1,4 +1,5 @@
 import G from '/static/js/gb.js';
+import { createStationMap, isIdle, linkWords } from '/static/js/stationmap.js';
 
 var byId = G.byId, clear = G.clear, add = G.add, h = G.h, s = G.s, num = G.num, clamp = G.clamp, hm = G.hm, niceStep = G.niceStep, fetchText = G.fetchText, plural = G.plural, makeTip = G.makeTip, textWidth = G.textWidth, ago = G.ago;
 
@@ -6,15 +7,6 @@ var NS = 'http://www.w3.org/2000/svg';
 var TZ = 'Europe/London';
 var CATS = ['wind', 'solar', 'nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other'];
 var NAMES = { wind: 'Wind', solar: 'Solar', nuclear: 'Nuclear', gas: 'Gas', biomass: 'Biomass', hydro: 'Hydro', storage: 'Storage', other: 'Other' };
-/* Great Britain plus its offshore wind farms, in map km (y down) */
-var FOCUS = { x0: -430, x1: 340, y0: -1330, y1: -5 };
-/* Where each interconnector's far-end label sits: dx, dy (px), anchor */
-var LINK_LABEL = {
-  INTFR: [9, 16, 'start'], INTELEC: [9, -10, 'start'], INTNEM: [8, 4, 'start'], INTNED: [8, 4, 'start'],
-  INTIFA2: [0, 20, 'middle'], INTNSL: [8, 4, 'start'], INTVKL: [8, 4, 'start'], INTIRL: [-8, 4, 'end'],
-  INTEW: [-8, 4, 'end'], INTGRNL: [-8, 4, 'end']
-};
-var LINK_BEND = { INTFR: -0.16, INTELEC: 0.16, INTNEM: 0.06, INTNED: -0.06 };
 
 var state = {
   data: null, text: '', failures: 0, lastOk: 0, timer: null, view: 'map',
@@ -75,7 +67,6 @@ function generationTotal(data) {
   CATS.forEach(function (key) { total += catTotal(category(data, key)); });
   return total;
 }
-function isIdle(st) { return Math.abs(st.mw) < 1; }
 function loadOf(st) { return st.cap && st.mw > 0 ? Math.min(100, 100 * st.mw / st.cap) : null; }
 function where(st) { return st.off ? 'Offshore, ' + (st.na || 'GB') : (st.na || ''); }
 
@@ -152,7 +143,7 @@ function setView(view, push) {
   });
   if (push) history.pushState({ view: view }, '', view === 'map' ? '/map' : '/stations');
   signatures = {};
-  if (view === 'map') { mapResize(); }
+  if (view === 'map' && map) { map.resize(); }
   render();
   if (push) window.scrollTo(0, 0);
 }
@@ -169,7 +160,7 @@ function render() {
   if (!data) return;
   updateTitle(data);
   if (state.view === 'map') {
-    drawMapData();
+    map.setData(data);
     renderSide();
   } else {
     renderStationsView();
@@ -183,82 +174,54 @@ function updateTitle(data) {
 
 /* ---------- the map ---------- */
 
-var M = {
-  ready: false, s: 1, tx: 0, ty: 0, W: 0, H: 0, minS: 0.1, maxS: 10, fitS: 1, moved: false,
-  nodes: {}, order: [], screen: [], links: [], linkNodes: {}, hoverId: null, hoverLink: null, raf: 0, K: 0.42
-};
+var map = null, tip = null;
 
 function initMap() {
-  M.stage = byId('stage');
-  M.svg = byId('map');
-  M.gLand = s('g');
-  M.gGeoLabels = s('g');
-  M.gLinks = s('g');
-  M.gStations = s('g');
-  M.gLabels = s('g');
-  M.gEnds = s('g');
-  [M.gLand, M.gGeoLabels, M.gLinks, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
-  M.tip = makeTip(M.stage);
-  fetch('/geo.json').then(function (r) { return r.json(); }).then(function (geo) {
-    M.geo = geo;
-    var inner = s('g', { transform: 'scale(0.5)' });
-    geo.units.forEach(function (unit) {
-      inner.appendChild(s('path', { d: unit.d, 'class': unit.kind === 'gb' ? 'land' : 'land-near', 'fill-rule': 'evenodd' }));
-    });
-    M.gLand.appendChild(inner);
-    M.geoLabels = geo.labels.map(function (label) {
-      var node = s('text', { 'class': 'geo-label ' + (label.k === 'gb' ? 'gb' : label.k === 'sea' ? 'sea' : ''), text: label.t });
-      M.gGeoLabels.appendChild(node);
-      return { node: node, x: label.x, y: label.y };
-    });
-    M.ready = true;
-    mapResize();
-    drawMapData();
-  }).catch(function () {
-    showMapMessage('Couldn’t load the map outline. Reload the page to try again.');
+  var stage = byId('stage');
+  tip = makeTip(stage);
+  map = createStationMap({
+    stage: stage, svg: byId('map'), interactive: true, sizeKey: byId('size-key'),
+    active: function () { return state.view === 'map'; },
+    visible: function (st) { return !state.hidden[st.c] && (state.showIdle || !isIdle(st)); },
+    selected: function () { return state.selected; },
+    dimmed: function (st) { return Boolean(state.highlight && state.highlight !== st.c); },
+    onHover: function (hit, p) {
+      if (!hit) tip.hide();
+      else if (hit.station) showStationTip(hit.station, p);
+      else showLinkTip(hit.link, p);
+    },
+    onClick: function (hit, p) {
+      if (hit && hit.station) { select(hit.station.id); showStationTip(hit.station, p); }
+      else if (hit && hit.link) showLinkTip(hit.link, p);
+      else { tip.hide(); select(null); }
+    },
+    onInteract: interacted,
+    onKey: function (e) {
+      if (e.key === 'Escape') { if (!FS.pseudo) select(null); return true; }
+      if (e.key === ' ') { togglePlay(); e.preventDefault(); return true; }
+      if (e.key === ',' || e.key === '.') { stepFrame(e.key === ',' ? -1 : 1); e.preventDefault(); return true; }
+      if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleFullscreen(); e.preventDefault(); return true; }
+      return false;
+    },
+    onMessage: showMapMessage,
+    onResize: drawDays
   });
-
-  M.svg.addEventListener('wheel', onWheel, { passive: false });
-  M.svg.addEventListener('pointerdown', onDown);
-  M.svg.addEventListener('pointermove', onMove);
-  M.svg.addEventListener('pointerup', onUp);
-  M.svg.addEventListener('pointercancel', onUp);
-  M.svg.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse' && !drag) setHover(null, null); });
-  M.svg.addEventListener('dblclick', function (e) { e.preventDefault(); zoomAt(pos(e), M.s * 2); });
-  M.stage.addEventListener('keydown', onKey);
-  byId('zoom-in').addEventListener('click', function () { interacted(); M.tip.hide(); zoomAt([M.W / 2, M.H / 2], M.s * 1.6); });
-  byId('zoom-out').addEventListener('click', function () { interacted(); M.tip.hide(); zoomAt([M.W / 2, M.H / 2], M.s / 1.6); });
-  byId('zoom-reset').addEventListener('click', function () { M.moved = false; fitDefault(); requestRedraw(); });
+  byId('zoom-in').addEventListener('click', function () { map.zoomBy(1.6); });
+  byId('zoom-out').addEventListener('click', function () { map.zoomBy(1 / 1.6); });
+  byId('zoom-reset').addEventListener('click', function () { map.reset(); });
   byId('fs-btn').addEventListener('click', toggleFullscreen);
-  if (window.ResizeObserver) new ResizeObserver(function () { mapResize(); drawDays(); }).observe(M.stage);
-  else window.addEventListener('resize', mapResize);
+}
+
+function interacted() {
+  var hint = byId('hint');
+  if (!hint.hidden) hint.hidden = true;
+  tip.hide();
 }
 
 function showMapMessage(text) {
   var node = byId('map-msg');
   node.hidden = !text;
   if (text) node.textContent = text;
-}
-
-function mapResize() {
-  if (!M.stage || state.view !== 'map') return;
-  var W = M.stage.clientWidth, H = M.stage.clientHeight;
-  if (!W || !H) return;
-  var first = !M.W;
-  var centre = !first && M.moved ? [(M.W / 2 - M.tx) / M.s, (M.H / 2 - M.ty) / M.s] : null;
-  M.W = W; M.H = H;
-  M.K = 0.42 * clamp(Math.min(W, H * 0.8) / 760, 0.72, 1.12);
-  if (!M.geo) return;
-  var box = M.geo.box;
-  M.minS = Math.max(W / box[2], H / box[3]);
-  if (first || !M.moved || !centre) fitDefault();
-  else {
-    M.s = clamp(M.s, M.minS, M.maxS);
-    M.tx = W / 2 - centre[0] * M.s;
-    M.ty = H / 2 - centre[1] * M.s;
-    clampView();
-  }
-  requestRedraw();
 }
 
 /* ---------- full screen ---------- */
@@ -287,7 +250,6 @@ function exitFullscreen() {
 }
 function toggleFullscreen() {
   interacted();
-  M.tip.hide();
   if (isFullscreen()) exitFullscreen(); else enterFullscreen();
 }
 function setPseudo(on) {
@@ -302,8 +264,9 @@ function syncFullscreen() {
   var button = byId('fs-btn');
   button.setAttribute('aria-label', on ? 'Exit full screen' : 'Show the map full screen');
   button.setAttribute('title', on ? 'Exit full screen (F or Esc)' : 'Full screen (F)');
-  if (on) { try { M.stage.focus({ preventScroll: true }); } catch (error) { M.stage.focus(); } }
-  mapResize();
+  var stage = byId('stage');
+  if (on) { try { stage.focus({ preventScroll: true }); } catch (error) { stage.focus(); } }
+  map.resize();
 }
 document.addEventListener('fullscreenchange', syncFullscreen);
 document.addEventListener('webkitfullscreenchange', syncFullscreen);
@@ -323,185 +286,6 @@ function renderFsKey(data) {
   }
 }
 
-function fitDefault() {
-  var pad = 18;
-  var sx = (M.W - 2 * pad) / (FOCUS.x1 - FOCUS.x0), sy = (M.H - 2 * pad) / (FOCUS.y1 - FOCUS.y0);
-  M.s = M.fitS = Math.max(M.minS, Math.min(sx, sy));
-  M.maxS = M.fitS * 10;
-  M.tx = M.W / 2 - (FOCUS.x0 + FOCUS.x1) / 2 * M.s;
-  M.ty = M.H / 2 - (FOCUS.y0 + FOCUS.y1) / 2 * M.s;
-  clampView();
-}
-
-function clampView() {
-  if (!M.geo) return;
-  var b = M.geo.box, x0 = b[0], y0 = b[1], w = b[2] * M.s, hgt = b[3] * M.s;
-  if (w <= M.W) M.tx = (M.W - w) / 2 - x0 * M.s;
-  else M.tx = clamp(M.tx, M.W - (x0 * M.s + w), -x0 * M.s);
-  if (hgt <= M.H) M.ty = (M.H - hgt) / 2 - y0 * M.s;
-  else M.ty = clamp(M.ty, M.H - (y0 * M.s + hgt), -y0 * M.s);
-}
-
-function zoomAt(p, target) {
-  var next = clamp(target, M.minS, M.maxS);
-  var mx = (p[0] - M.tx) / M.s, my = (p[1] - M.ty) / M.s;
-  M.s = next;
-  M.tx = p[0] - mx * next;
-  M.ty = p[1] - my * next;
-  M.moved = true;
-  clampView();
-  requestRedraw();
-}
-
-function pos(e) {
-  var rect = M.svg.getBoundingClientRect();
-  return [e.clientX - rect.left, e.clientY - rect.top];
-}
-
-var pointers = {}, drag = null, pinch = null;
-function interacted() {
-  var hint = byId('hint');
-  if (!hint.hidden) hint.hidden = true;
-}
-function onWheel(e) {
-  e.preventDefault();
-  interacted();
-  M.tip.hide();
-  var factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016));
-  zoomAt(pos(e), M.s * factor);
-}
-function onDown(e) {
-  if (e.button && e.button !== 0) return;
-  var p = pos(e);
-  pointers[e.pointerId] = p;
-  try { M.svg.setPointerCapture(e.pointerId); } catch (error) { /* ignore */ }
-  var ids = Object.keys(pointers);
-  if (ids.length === 1) {
-    drag = { start: p, last: p, moved: false, type: e.pointerType };
-  } else if (ids.length === 2) {
-    var a = pointers[ids[0]], b = pointers[ids[1]];
-    var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    pinch = { d: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), s: M.s, mx: (mid[0] - M.tx) / M.s, my: (mid[1] - M.ty) / M.s };
-    if (drag) drag.moved = true;
-  }
-}
-function onMove(e) {
-  var p = pos(e);
-  if (!pointers[e.pointerId]) {
-    if (e.pointerType === 'mouse') hoverAt(p);
-    return;
-  }
-  pointers[e.pointerId] = p;
-  var ids = Object.keys(pointers);
-  if (ids.length >= 2 && pinch) {
-    var a = pointers[ids[0]], b = pointers[ids[1]];
-    var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    M.s = clamp(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, M.minS, M.maxS);
-    M.tx = mid[0] - pinch.mx * M.s;
-    M.ty = mid[1] - pinch.my * M.s;
-    M.moved = true;
-    clampView();
-    requestRedraw();
-  } else if (drag) {
-    if (!drag.moved && Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) > 5) {
-      drag.moved = true;
-      M.stage.classList.add('dragging');
-      M.tip.hide();
-      interacted();
-    }
-    if (drag.moved) {
-      M.tx += p[0] - drag.last[0];
-      M.ty += p[1] - drag.last[1];
-      M.moved = true;
-      clampView();
-      requestRedraw();
-    }
-    drag.last = p;
-  }
-}
-function onUp(e) {
-  var p = pos(e);
-  var wasClick = drag && !drag.moved && e.type === 'pointerup';
-  delete pointers[e.pointerId];
-  if (Object.keys(pointers).length < 2) pinch = null;
-  if (!Object.keys(pointers).length) {
-    M.stage.classList.remove('dragging');
-    if (wasClick) clickAt(p);
-    drag = null;
-  }
-}
-function onKey(e) {
-  if (e.target !== M.stage) return;
-  var step = 70, handled = true;
-  if (e.key === 'ArrowLeft') M.tx += step;
-  else if (e.key === 'ArrowRight') M.tx -= step;
-  else if (e.key === 'ArrowUp') M.ty += step;
-  else if (e.key === 'ArrowDown') M.ty -= step;
-  else if (e.key === '+' || e.key === '=') { zoomAt([M.W / 2, M.H / 2], M.s * 1.5); return e.preventDefault(); }
-  else if (e.key === '-' || e.key === '_') { zoomAt([M.W / 2, M.H / 2], M.s / 1.5); return e.preventDefault(); }
-  else if (e.key === '0') { M.moved = false; fitDefault(); requestRedraw(); return e.preventDefault(); }
-  else if (e.key === 'Escape') { if (!FS.pseudo) select(null); return; }
-  else if (e.key === ' ') { togglePlay(); return e.preventDefault(); }
-  else if (e.key === ',' || e.key === '.') { stepFrame(e.key === ',' ? -1 : 1); return e.preventDefault(); }
-  else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleFullscreen(); return e.preventDefault(); }
-  else handled = false;
-  if (handled) { e.preventDefault(); interacted(); M.tip.hide(); M.moved = true; clampView(); requestRedraw(); }
-}
-
-function hitStation(p) {
-  var best = null;
-  M.screen.forEach(function (item) {
-    var d = Math.hypot(item.sx - p[0], item.sy - p[1]);
-    var reach = Math.max(item.r + 2, 8);
-    if (d <= reach && (!best || item.r < best.r || (item.r === best.r && d < best.d))) best = { id: item.id, r: item.r, d: d, item: item };
-  });
-  return best;
-}
-function hitLink(p) {
-  var best = null;
-  M.links.forEach(function (link) {
-    if (!link.pts) return;
-    for (var i = 1; i < link.pts.length; i++) {
-      var a = link.pts[i - 1], b = link.pts[i];
-      var dx = b[0] - a[0], dy = b[1] - a[1];
-      var t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
-      var d = Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
-      if (d < 7 && (!best || d < best.d)) best = { link: link, d: d };
-    }
-  });
-  return best && best.link;
-}
-function hoverAt(p) {
-  var hit = hitStation(p);
-  if (hit) { setHover(hit.id, null); showStationTip(hit.item.st, p); return; }
-  var link = hitLink(p);
-  if (link) { setHover(null, link.code); showLinkTip(link, p); return; }
-  setHover(null, null);
-}
-function clickAt(p) {
-  var hit = hitStation(p);
-  if (hit) {
-    select(hit.id);
-    showStationTip(hit.item.st, p);
-    return;
-  }
-  var link = hitLink(p);
-  if (link) { setHover(null, link.code); showLinkTip(link, p); return; }
-  M.tip.hide();
-  setHover(null, null);
-  select(null);
-}
-function setHover(id, code) {
-  if (M.hoverId === id && M.hoverLink === code) return;
-  if (M.hoverId && M.nodes[M.hoverId]) M.nodes[M.hoverId].node.classList.remove('hover');
-  M.hoverId = id;
-  M.hoverLink = code;
-  if (id && M.nodes[id]) M.nodes[id].node.classList.add('hover');
-  M.links.forEach(function (link) { link.g.classList.toggle('hover', link.code === code); });
-  M.stage.classList.toggle('pointing', Boolean(id || code));
-  if (!id && !code) M.tip.hide();
-}
-
 function stationRows(st) {
   var rows = [];
   if (st.mw <= -1) rows.push({ cls: 'b-' + st.c, value: mw(-st.mw) + ' MW', label: st.c === 'storage' ? 'storing (charging or pumping)' : 'using' });
@@ -516,11 +300,7 @@ function stationRows(st) {
 }
 function showStationTip(st, p) {
   var sideShown = byId('side').offsetParent !== null;
-  M.tip.show(st.n, stationRows(st), p[0], p[1], 'Modelled from Elexon data.' + (sideShown ? ' Select for the last 24 hours.' : ' Exit full screen for its last 24 hours.'));
-}
-function linkWords(link) {
-  if (!num(link.mw) || Math.abs(link.mw) < 10) return 'idle';
-  return gw(Math.abs(link.mw)) + ' GW ' + (link.mw > 0 ? 'in' : 'out');
+  tip.show(st.n, stationRows(st), p[0], p[1], 'Modelled from Elexon data.' + (sideShown ? ' Select for the last 24 hours.' : ' Exit full screen for its last 24 hours.'));
 }
 function showLinkTip(link, p) {
   var rows = [];
@@ -529,274 +309,7 @@ function showLinkTip(link, p) {
   if (link.cap && num(link.mw)) rows.push({ value: Math.round(100 * Math.abs(link.mw) / link.cap) + '%', label: 'of ' + gw(link.cap) + ' GW capacity' });
   rows.push({ sep: true });
   if (link.gb && link.far) rows.push({ value: link.gb[2], label: 'to ' + link.far[2] + ', ' + link.country });
-  M.tip.show(link.name + ' (' + link.country + ')', rows, p[0], p[1], 'Measured flow, Elexon.');
-}
-
-function radius(st) {
-  if (isIdle(st)) return 3;
-  return Math.max(2.5, Math.sqrt(Math.abs(st.mw)) * M.K);
-}
-
-function drawMapData() {
-  var data = state.data;
-  if (!M.ready || !data || state.view !== 'map') return;
-  if (!data.model) {
-    var feed = data.status && data.status.units;
-    showMapMessage(feed && feed.last_error ? 'Station data unavailable: ' + feed.last_error : 'Collecting the first power station data. This takes about a minute after the dashboard starts.');
-  } else {
-    showMapMessage(null);
-  }
-  refreshStations();
-  drawLinks(data.links || []);
-  requestRedraw();
-}
-
-function refreshStations() {
-  var data = state.data;
-  if (!M.ready || !data) return;
-  var list = stationsOf(data);
-  var seen = {};
-  list.forEach(function (st) {
-    seen[st.id] = true;
-    var entry = M.nodes[st.id];
-    if (!entry) {
-      entry = M.nodes[st.id] = { node: s('circle', { 'class': 'st' }) };
-    }
-    entry.st = st;
-    var cls = 'st ';
-    if (st.mw <= -1) cls += 'using k-' + st.c;
-    else if (isIdle(st)) cls += 'idle k-' + st.c;
-    else cls += 'f-' + st.c + (st.off ? ' sea-st' : '');
-    if (state.selected === st.id) cls += ' sel';
-    if (M.hoverId === st.id) cls += ' hover';
-    if (state.highlight && state.highlight !== st.c) cls += ' dim';
-    entry.node.setAttribute('class', cls);
-    var visible = !state.hidden[st.c] && (state.showIdle || !isIdle(st));
-    entry.node.style.display = visible ? '' : 'none';
-    entry.visible = visible;
-  });
-  Object.keys(M.nodes).forEach(function (id) {
-    if (!seen[id]) { M.nodes[id].node.remove(); delete M.nodes[id]; }
-  });
-  M.order = list.map(function (st) { return M.nodes[st.id]; }).sort(function (a, b) { return radius(b.st) - radius(a.st); });
-  M.order.forEach(function (entry) { M.gStations.appendChild(entry.node); });
-}
-
-function drawLinks(links) {
-  var seen = {};
-  M.links = links.filter(function (link) { return link.gb && link.far; }).map(function (data) {
-    seen[data.code] = true;
-    var link = M.linkNodes[data.code];
-    if (!link) {
-      link = M.linkNodes[data.code] = { code: data.code, g: s('g', { 'class': 'link' }) };
-      link.base = s('path');
-      link.flow = s('path', { 'class': 'link-flow' });
-      link.arrow = s('path', { 'class': 'link-arrow' });
-      link.g.appendChild(link.base);
-      link.g.appendChild(link.flow);
-      link.g.appendChild(link.arrow);
-      M.gLinks.appendChild(link.g);
-      link.end = s('circle', { 'class': 'link-end', r: 3.5 });
-      link.gbEnd = s('circle', { 'class': 'link-gb', r: 3 });
-      link.label = s('text', { 'class': 'link-label' }, [s('tspan'), s('tspan', { 'class': 'v' })]);
-      M.gEnds.appendChild(link.end);
-      M.gEnds.appendChild(link.gbEnd);
-      M.gEnds.appendChild(link.label);
-    }
-    ['name', 'country', 'mw', 'cap', 'gb', 'far'].forEach(function (key) { link[key] = data[key]; });
-    link.flowing = num(link.mw) && Math.abs(link.mw) >= 10;
-    link.width = link.flowing ? 1.5 + 5 * Math.min(1, Math.abs(link.mw) / 1400) : 1.5;
-    link.base.setAttribute('class', link.flowing ? 'link-base' : 'link-idle');
-    link.base.style.strokeWidth = link.width + 'px';
-    link.flow.style.display = link.flowing ? '' : 'none';
-    link.arrow.style.display = link.flowing ? '' : 'none';
-    if (link.flowing) {
-      link.flow.style.strokeWidth = (link.width + 1.5) + 'px';
-      var share = link.cap ? Math.min(1, Math.abs(link.mw) / link.cap) : 0.5;
-      var duration = (2.6 - 1.6 * share).toFixed(1) + 's';
-      if (link.flow.style.animationDuration !== duration) link.flow.style.animationDuration = duration;
-    }
-    link.label.childNodes[0].textContent = link.name;
-    link.label.childNodes[1].textContent = linkWords(link);
-    return link;
-  });
-  Object.keys(M.linkNodes).forEach(function (code) {
-    if (seen[code]) return;
-    var link = M.linkNodes[code];
-    [link.g, link.end, link.gbEnd, link.label].forEach(function (node) { node.remove(); });
-    delete M.linkNodes[code];
-  });
-}
-
-function requestRedraw() {
-  if (M.raf) return;
-  M.raf = requestAnimationFrame(function () { M.raf = 0; redraw(); });
-}
-
-function sx(x) { return M.tx + x * M.s; }
-function sy(y) { return M.ty + y * M.s; }
-
-function redraw() {
-  if (!M.ready || state.view !== 'map') return;
-  var W = M.W, H = M.H;
-  M.gLand.setAttribute('transform', 'translate(' + M.tx.toFixed(2) + ' ' + M.ty.toFixed(2) + ') scale(' + M.s.toFixed(5) + ')');
-  M.screen = [];
-  M.order.forEach(function (entry) {
-    var st = entry.st, r = radius(st);
-    var x = sx(st.x), y = sy(st.y);
-    entry.node.setAttribute('cx', x.toFixed(1));
-    entry.node.setAttribute('cy', y.toFixed(1));
-    entry.node.setAttribute('r', r.toFixed(2));
-    if (entry.visible && x > -40 && x < W + 40 && y > -40 && y < H + 40) M.screen.push({ id: st.id, sx: x, sy: y, r: r, st: st });
-  });
-  M.links.forEach(redrawLink);
-  var taken = [];
-  placeLinkLabels(taken);
-  drawStationLabels(taken);
-  placeGeoLabels(taken);
-  drawSizeKey();
-}
-
-function overlaps(box, boxes) {
-  return boxes.some(function (b) { return box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]; });
-}
-
-/* Interconnector labels first (largest flows win), then stations, then place names */
-function placeLinkLabels(taken) {
-  M.links.slice().sort(function (a, b) { return Math.abs(b.mw || 0) - Math.abs(a.mw || 0); }).forEach(function (link) {
-    var end = [sx(link.far[0]), sy(link.far[1])];
-    var place = LINK_LABEL[link.code] || [8, 4, 'start'];
-    var value = linkWords(link);
-    var width = Math.max(textWidth(link.name, 11.5, 400), textWidth(value, 11.5, 650));
-    var onScreen = end[0] > -30 && end[0] < M.W + 30 && end[1] > -30 && end[1] < M.H + 30;
-    var chosen = null;
-    if (onScreen) {
-      [place[1], place[1] - 24, place[1] + 24].some(function (dy) {
-        var x = end[0] + place[0], y = end[1] + dy;
-        var left = place[2] === 'start' ? x : place[2] === 'end' ? x - width : x - width / 2;
-        var shift = clamp(left, 6, M.W - width - 6) - left;
-        var box = [left + shift - 2, y - 19, left + shift + width + 2, y + 11];
-        if (box[1] < 2 || box[3] > M.H - 2 || overlaps(box, taken)) return false;
-        chosen = { x: x + shift, y: y, box: box };
-        return true;
-      });
-    }
-    link.label.style.display = chosen ? '' : 'none';
-    if (!chosen) return;
-    taken.push(chosen.box);
-    link.label.setAttribute('text-anchor', place[2]);
-    var spans = link.label.childNodes;
-    spans[0].setAttribute('x', chosen.x.toFixed(1));
-    spans[0].setAttribute('y', (chosen.y - 7).toFixed(1));
-    spans[1].setAttribute('x', chosen.x.toFixed(1));
-    spans[1].setAttribute('y', (chosen.y + 7).toFixed(1));
-    spans[1].textContent = value;
-  });
-}
-
-function placeGeoLabels(taken) {
-  M.geoLabels.forEach(function (label) {
-    var x = sx(label.x), y = sy(label.y);
-    var width = textWidth(label.node.textContent, 12.5, 400);
-    var box = [x - width / 2 - 2, y - 12, x + width / 2 + 2, y + 4];
-    var show = x > -width && x < M.W + width && y > 0 && y < M.H + 10 && !overlaps(box, taken);
-    label.node.style.display = show ? '' : 'none';
-    if (show) {
-      label.node.setAttribute('x', x.toFixed(1));
-      label.node.setAttribute('y', y.toFixed(1));
-    }
-  });
-}
-
-function redrawLink(link) {
-  var a = [sx(link.gb[0]), sy(link.gb[1])], b = [sx(link.far[0]), sy(link.far[1])];
-  var importing = num(link.mw) && link.mw > 0;
-  var p0 = importing ? b : a, p2 = importing ? a : b;
-  var dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
-  var bend = (LINK_BEND[link.code] || 0.05) * len;
-  var c = [(a[0] + b[0]) / 2 - dy / len * bend, (a[1] + b[1]) / 2 + dx / len * bend];
-  var d = 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + 'Q' + c[0].toFixed(1) + ' ' + c[1].toFixed(1) + ' ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
-  link.base.setAttribute('d', d);
-  if (link.flow) link.flow.setAttribute('d', d);
-  link.pts = [];
-  for (var i = 0; i <= 20; i++) {
-    var t = i / 20, u = 1 - t;
-    link.pts.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p2[1]]);
-  }
-  if (link.arrow) {
-    var m = link.pts[10], ang = Math.atan2(p2[1] - p0[1], p2[0] - p0[0]) * 180 / Math.PI;
-    var size = 4 + link.width;
-    link.arrow.setAttribute('d', 'M' + size + ' 0L' + (-size * 0.8) + ' ' + (size * 0.75) + 'L' + (-size * 0.4) + ' 0L' + (-size * 0.8) + ' ' + (-size * 0.75) + 'Z');
-    link.arrow.setAttribute('transform', 'translate(' + m[0].toFixed(1) + ' ' + m[1].toFixed(1) + ') rotate(' + ang.toFixed(1) + ')');
-  }
-  link.end.setAttribute('cx', b[0].toFixed(1));
-  link.end.setAttribute('cy', b[1].toFixed(1));
-  link.gbEnd.setAttribute('cx', a[0].toFixed(1));
-  link.gbEnd.setAttribute('cy', a[1].toFixed(1));
-}
-
-function shortName(name) {
-  var suffix = ' Wind Farm';
-  return name.slice(-suffix.length) === suffix ? name.slice(0, -suffix.length) : name;
-}
-
-function drawStationLabels(taken) {
-  clear(M.gLabels);
-  var zoom = M.s / M.fitS;
-  var minMw = 800 / Math.pow(Math.max(1, zoom), 1.6);
-  var circles = [];
-  M.screen.forEach(function (item) { if (item.r >= 6) circles.push([item.sx - item.r * 0.7, item.sy - item.r * 0.7, item.sx + item.r * 0.7, item.sy + item.r * 0.7]); });
-  var candidates = M.screen.filter(function (item) { return item.st.mw >= minMw || item.id === state.selected; })
-    .sort(function (a, b) { return (b.id === state.selected) - (a.id === state.selected) || b.st.mw - a.st.mw; });
-  var placed = 0;
-  candidates.forEach(function (item) {
-    if (placed >= 14 + zoom * 4) return;
-    var text = shortName(item.st.n);
-    var width = textWidth(text, 12, 600), tall = 15;
-    var options = [
-      [item.sx + item.r + 4, item.sy + 4, 'start'],
-      [item.sx - item.r - 4, item.sy + 4, 'end'],
-      [item.sx, item.sy - item.r - 5, 'middle'],
-      [item.sx, item.sy + item.r + 14, 'middle']
-    ];
-    for (var i = 0; i < options.length; i++) {
-      var o = options[i];
-      var left = o[2] === 'start' ? o[0] : o[2] === 'end' ? o[0] - width : o[0] - width / 2;
-      var box = [left - 2, o[1] - tall + 3, left + width + 2, o[1] + 4];
-      if (box[0] < 4 || box[2] > M.W - 4 || box[1] < 4 || box[3] > M.H - 4) continue;
-      if (overlaps(box, taken) || overlaps(box, circles)) continue;
-      taken.push(box);
-      M.gLabels.appendChild(s('text', { x: o[0].toFixed(1), y: o[1].toFixed(1), 'text-anchor': o[2], 'class': 'st-label' + (item.st.off ? ' on-sea' : ''), text: text }));
-      placed++;
-      break;
-    }
-  });
-}
-
-function drawSizeKey() {
-  var host = byId('size-key');
-  var signature = M.K.toFixed(3);
-  if (host.getAttribute('data-k') === signature) return;
-  host.setAttribute('data-k', signature);
-  clear(host);
-  var sizes = [100, 500, 2000];
-  var rMax = Math.sqrt(sizes[2]) * M.K;
-  var x = 0, items = [];
-  sizes.forEach(function (size) {
-    var r = Math.sqrt(size) * M.K;
-    var text = size >= 1000 ? (size / 1000) + ' GW' : size + ' MW';
-    var width = Math.max(2 * r, textWidth(text, 11.5, 400));
-    items.push({ r: r, cx: x + width / 2, text: text });
-    x += width + 12;
-  });
-  var svg = s('svg', { width: Math.ceil(x - 12), height: Math.ceil(2 * rMax + 34) });
-  svg.appendChild(s('text', { x: 0, y: 11, text: 'Output', 'font-weight': '600' }));
-  items.forEach(function (item) {
-    var base = 18 + 2 * rMax;
-    svg.appendChild(s('circle', { cx: item.cx.toFixed(1), cy: (base - item.r).toFixed(1), r: item.r.toFixed(1) }));
-    svg.appendChild(s('text', { x: item.cx.toFixed(1), y: base + 14, 'text-anchor': 'middle', text: item.text }));
-  });
-  host.appendChild(svg);
+  tip.show(link.name + ' (' + link.country + ')', rows, p[0], p[1], 'Measured flow, Elexon.');
 }
 
 function select(id) {
@@ -804,11 +317,11 @@ function select(id) {
     if (id !== null) renderDetail();
     return;
   }
-  if (state.selected && M.nodes[state.selected]) M.nodes[state.selected].node.classList.remove('sel');
+  if (state.selected && map.nodeFor(state.selected)) map.nodeFor(state.selected).classList.remove('sel');
   state.selected = id;
-  if (id && M.nodes[id]) M.nodes[id].node.classList.add('sel');
+  if (id && map.nodeFor(id)) map.nodeFor(id).classList.add('sel');
   renderDetail();
-  requestRedraw();
+  map.redraw();
   if (id && window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
     byId('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -881,11 +394,10 @@ function renderFuels(data) {
         savePrefs();
         signatures.fuels = null;
         renderFuels(state.data);
-        refreshStations();
-        requestRedraw();
+        map.restyle();
       },
-      onmouseenter: function () { state.highlight = key; refreshStations(); requestRedraw(); },
-      onmouseleave: function () { if (state.highlight) { state.highlight = null; refreshStations(); requestRedraw(); } }
+      onmouseenter: function () { state.highlight = key; map.restyle(); },
+      onmouseleave: function () { if (state.highlight) { state.highlight = null; map.restyle(); } }
     }, [
       h('span', { cls: 'sw b-' + key }),
       h('span', { cls: 'name', text: NAMES[key] }),
@@ -1305,7 +817,7 @@ function renderUnplaced(data) {
 byId('search').addEventListener('input', function (e) { state.query = e.target.value; state.showAll = false; renderStationsTable(state.data); });
 byId('idle-filter').addEventListener('change', function (e) { state.includeIdle = e.target.checked; renderStationsTable(state.data); });
 byId('more-btn').addEventListener('click', function () { state.showAll = !state.showAll; renderStationsTable(state.data); });
-byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); refreshStations(); requestRedraw(); });
+byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); map.restyle(); });
 byId('how-btn').addEventListener('click', function (e) {
   var open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
   e.currentTarget.setAttribute('aria-expanded', String(open));
