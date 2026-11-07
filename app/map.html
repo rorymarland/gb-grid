@@ -1,0 +1,1914 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>GB grid map</title>
+<link id="favicon" rel="icon" href="data:,">
+<style>
+:root {
+  --page: #edf1f5;
+  --surface: #fbfcfd;
+  --ink: #142230;
+  --ink-2: #4a5a6a;
+  --muted: #728191;
+  --hair: #d9e0e7;
+  --axis: #b6c1cc;
+  --chip: #e4eaf0;
+  --focus: #2b6cd4;
+  --wash: rgba(20, 34, 48, 0.06);
+  --sea: #dde5ec;
+  --land: #fbfcfd;
+  --land-near: #eef2f5;
+  --coast: #aebdca;
+  --coast-near: #c9d3dc;
+  --c-nuclear: #6d52bc;
+  --c-wind: #24a5da;
+  --c-solar: #e5a600;
+  --c-hydro: #305eb7;
+  --c-biomass: #43963c;
+  --c-imports: #b94082;
+  --c-storage: #26bdae;
+  --c-gas: #e36927;
+  --c-other: #9aa4ae;
+  --good: #0ca30c;
+  --warn: #e09a00;
+  --bad: #d03b3b;
+  --line: #3c4c5c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --page: #0b131c; --surface: #152130; --ink: #e8eef4; --ink-2: #a9b6c3; --muted: #7f8e9d;
+    --hair: #243447; --axis: #3a4e63; --chip: #1e2c3d; --focus: #79a8ff; --wash: rgba(232, 238, 244, 0.06);
+    --sea: #0c1621; --land: #1c2a3a; --land-near: #142130; --coast: #3a4f65; --coast-near: #26384b;
+    --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #3967c1; --c-biomass: #3d8f35;
+    --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-other: #6e7a87;
+    --good: #0ca30c; --warn: #fab219; --bad: #e05252; --line: #c3cfda;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0b131c; --surface: #152130; --ink: #e8eef4; --ink-2: #a9b6c3; --muted: #7f8e9d;
+  --hair: #243447; --axis: #3a4e63; --chip: #1e2c3d; --focus: #79a8ff; --wash: rgba(232, 238, 244, 0.06);
+  --sea: #0c1621; --land: #1c2a3a; --land-near: #142130; --coast: #3a4f65; --coast-near: #26384b;
+  --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #3967c1; --c-biomass: #3d8f35;
+  --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-other: #6e7a87;
+  --good: #0ca30c; --warn: #fab219; --bad: #e05252; --line: #c3cfda;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+a { color: inherit; text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Header (shared with the overview) */
+.top { border-bottom: 1px solid var(--hair); background: var(--page); }
+.top-inner { display: flex; align-items: center; gap: 12px 20px; min-height: 58px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+body.mode-map .top-inner { max-width: none; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -0.01em; margin: 0; }
+.brand svg { width: 26px; height: 26px; flex: none; }
+.nav { display: flex; gap: 2px; background: var(--chip); border-radius: 10px; padding: 3px; }
+.nav a { text-decoration: none; font-size: 13.5px; color: var(--ink-2); padding: 4px 12px; border-radius: 8px; }
+.nav a:hover { color: var(--ink); }
+.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--hair); }
+.live { margin: 0 0 0 auto; display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 13.5px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.good { background: var(--good); }
+.dot.warn { background: var(--warn); }
+.dot.bad { background: var(--bad); }
+.dot.pulse { animation: pulse 2.6s ease-out infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(12, 163, 12, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(12, 163, 12, 0); }
+}
+.theme-btn { border: 1px solid var(--hair); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.theme-btn:hover { background: var(--wash); }
+
+/* Map view layout: the map fills the window beside a scrolling side panel */
+@media (min-width: 901px) {
+  body.mode-map { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  body.mode-map #view-map { flex: 1; min-height: 0; }
+}
+.map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; height: 100%; }
+.stage { position: relative; background: var(--sea); overflow: hidden; touch-action: none; cursor: grab; outline-offset: -3px; user-select: none; -webkit-user-select: none; }
+.stage.dragging { cursor: grabbing; }
+.stage.pointing { cursor: pointer; }
+.stage > svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.side { background: var(--surface); border-left: 1px solid var(--hair); overflow-y: auto; padding: 22px 22px 36px; }
+
+/* Map drawing */
+.land { fill: var(--land); stroke: var(--coast); stroke-width: 0.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.land-near { fill: var(--land-near); stroke: var(--coast-near); stroke-width: 0.7; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.geo-label { fill: var(--muted); font-size: 12px; text-anchor: middle; paint-order: stroke; stroke: var(--land-near); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.geo-label.gb { fill: var(--ink-2); font-size: 13px; letter-spacing: 0.04em; stroke: var(--land); opacity: 0.8; }
+.geo-label.sea { font-style: italic; stroke: var(--sea); font-size: 11.5px; }
+.st { stroke: var(--land); stroke-width: 1.25px; fill-opacity: 0.9; }
+.st.sea-st { stroke: var(--sea); }
+.st.idle { fill: var(--land); fill-opacity: 1; stroke-width: 1.5px; opacity: 0.7; }
+.st.using { fill: none; stroke-width: 2px; stroke-dasharray: 3 2; }
+.st.dim { opacity: 0.14; }
+.st.hover, .st.sel { stroke: var(--ink); stroke-width: 2.5px; opacity: 1; }
+.st-label { font-size: 12px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--land); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
+.st-label.on-sea { stroke: var(--sea); }
+.st-label .mw { font-weight: 500; fill: var(--ink-2); }
+.link-base { fill: none; stroke: var(--c-imports); stroke-linecap: round; opacity: 0.3; }
+.link-flow { fill: none; stroke: var(--c-imports); stroke-linecap: round; stroke-dasharray: 0.1 9; animation: flow 1.6s linear infinite; }
+.link-idle { fill: none; stroke: var(--c-imports); stroke-width: 1.5px; stroke-dasharray: 4 4; opacity: 0.45; }
+.link-arrow { fill: var(--c-imports); }
+.link-end { fill: var(--c-imports); stroke: var(--land-near); stroke-width: 1.5px; }
+.link-gb { fill: var(--surface); stroke: var(--c-imports); stroke-width: 2px; }
+.link.hover .link-base { opacity: 0.55; }
+.link-label { font-size: 11.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--sea); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
+.link-label .v { font-weight: 650; fill: var(--ink); }
+@keyframes flow { to { stroke-dashoffset: -18.2; } }
+.f-nuclear { fill: var(--c-nuclear); } .f-wind { fill: var(--c-wind); } .f-solar { fill: var(--c-solar); }
+.f-hydro { fill: var(--c-hydro); } .f-biomass { fill: var(--c-biomass); } .f-imports { fill: var(--c-imports); }
+.f-storage { fill: var(--c-storage); } .f-gas { fill: var(--c-gas); } .f-other { fill: var(--c-other); }
+.k-nuclear { stroke: var(--c-nuclear); } .k-wind { stroke: var(--c-wind); } .k-solar { stroke: var(--c-solar); }
+.k-hydro { stroke: var(--c-hydro); } .k-biomass { stroke: var(--c-biomass); } .k-storage { stroke: var(--c-storage); }
+.k-gas { stroke: var(--c-gas); } .k-other { stroke: var(--c-other); }
+.b-nuclear { background: var(--c-nuclear); } .b-wind { background: var(--c-wind); } .b-solar { background: var(--c-solar); }
+.b-hydro { background: var(--c-hydro); } .b-biomass { background: var(--c-biomass); } .b-imports { background: var(--c-imports); }
+.b-storage { background: var(--c-storage); } .b-gas { background: var(--c-gas); } .b-other { background: var(--c-other); }
+.b-line { background: var(--line); }
+
+/* Map controls and keys */
+.zoom { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
+.zoom button { width: 34px; height: 34px; border: 0; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; color: var(--ink); display: grid; place-items: center; padding: 0; }
+.zoom button + button { border-top: 1px solid var(--hair); }
+.zoom button:hover { background: var(--wash); }
+.size-key { position: absolute; left: 12px; bottom: 12px; background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 8px 12px 8px 10px; font-size: 12px; color: var(--ink-2); pointer-events: none; }
+.size-key svg { display: block; overflow: visible; }
+.size-key text { fill: var(--ink-2); font-size: 11.5px; }
+.size-key circle { fill: none; stroke: var(--axis); stroke-width: 1.25px; }
+.size-key .line { stroke: var(--axis); stroke-width: 1px; stroke-dasharray: 2 2; }
+.fs-btn { position: absolute; right: 12px; top: 12px; width: 36px; height: 36px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.fs-btn:hover { background-image: linear-gradient(var(--wash), var(--wash)); }
+.fs-btn .fs-off { display: none; }
+#view-map.is-fs .fs-btn .fs-on { display: none; }
+#view-map.is-fs .fs-btn .fs-off { display: block; }
+#view-map.is-fs { background: var(--page); }
+#view-map.is-fs .map-layout { height: 100%; }
+#view-map.pseudo-fs { position: fixed; inset: 0; z-index: 50; }
+html.fs-lock, html.fs-lock body { overflow: hidden; }
+.fs-key { display: none; position: absolute; top: 12px; left: 58px; right: 58px; flex-wrap: wrap; gap: 4px 6px; pointer-events: none; }
+.fs-key span { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 2px 9px 2px 7px; font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fs-key span.when-chip { color: var(--ink-2); padding-left: 9px; }
+.fs-key .sw { width: 9px; height: 9px; border-radius: 2px; }
+.map-msg { position: absolute; right: 58px; top: 12px; max-width: min(360px, calc(100% - 80px)); background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; color: var(--ink-2); }
+.hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 3px 10px; pointer-events: none; }
+
+/* Tooltip (same as the overview) */
+.tip { position: absolute; z-index: 10; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--hair); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 8px 28px rgba(8, 18, 28, 0.16); min-width: 180px; max-width: 290px; }
+.tip .t { font-weight: 650; margin-bottom: 6px; font-size: 13px; }
+.tip .row { display: grid; grid-template-columns: 12px auto 1fr; gap: 9px; align-items: center; line-height: 1.65; }
+.tip .key { height: 10px; width: 10px; border-radius: 3px; }
+.tip .key.none { background: transparent; }
+.tip .v { font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.tip .l { color: var(--ink-2); }
+.tip .sep { border-top: 1px solid var(--hair); margin: 5px 0; }
+.tip .note { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
+
+/* Side panel */
+.side h1 { font-size: 23px; line-height: 1.2; font-weight: 650; letter-spacing: -0.018em; margin: 0 0 6px; }
+.when { color: var(--ink-2); font-size: 14px; margin: 0 0 16px; }
+.stats { display: flex; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin: 0 0 18px; }
+.stat { flex: 1; min-width: 0; padding: 10px 0 10px 12px; border-left: 1px solid var(--hair); }
+.stat:first-child { border-left: 0; padding-left: 0; }
+.stat b { display: block; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat b small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 3px; letter-spacing: 0; }
+.stat span { font-size: 12.5px; color: var(--ink-2); }
+.side h2 { font-size: 15.5px; font-weight: 650; margin: 20px 0 4px; display: flex; align-items: baseline; gap: 10px; }
+.side h2 .aside { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.side .sub { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+.fuels { list-style: none; margin: 4px -6px 0; padding: 0; }
+.fuel-btn { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; width: 100%; border: 0; background: transparent; padding: 6px 6px 7px; border-radius: 9px; text-align: left; cursor: pointer; }
+.fuel-btn:hover { background: var(--wash); }
+.fuel-btn[aria-pressed="false"] .name, .fuel-btn[aria-pressed="false"] .val { color: var(--muted); }
+.fuel-btn[aria-pressed="false"] .sw { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--axis); }
+.fuel-btn[aria-pressed="false"] .track i { opacity: 0.25; }
+.fuel-btn .sw { width: 12px; height: 12px; border-radius: 3px; }
+.fuel-btn .name { font-weight: 550; font-size: 14.5px; }
+.fuel-btn .val { font-variant-numeric: tabular-nums; font-weight: 650; font-size: 14.5px; white-space: nowrap; }
+.fuel-btn .val small { font-weight: 500; color: var(--ink-2); font-size: 12px; margin-left: 2px; }
+.track { grid-column: 2 / -1; height: 6px; background: var(--chip); border-radius: 3px; margin-top: 5px; display: flex; gap: 2px; overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 3px; min-width: 0; }
+.track i.rest { opacity: 0.4; }
+.fuel-btn .note { grid-column: 2 / -1; font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+.switch { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; cursor: pointer; }
+.switch input { width: 16px; height: 16px; margin: 0; accent-color: var(--focus); }
+.ic { list-style: none; padding: 0; margin: 4px 0 0; }
+.ic li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--hair); font-size: 14px; }
+.ic li:last-child { border-bottom: 0; }
+.ic .who { font-weight: 550; }
+.ic .fv { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.ic .cables { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.notes { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.notes p { margin: 0 0 8px; }
+.explain-btn { border: 0; background: none; padding: 0; color: var(--ink-2); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.detail { border: 1px solid var(--hair); border-radius: 14px; padding: 14px 14px 10px; margin: 0 0 18px; background: var(--page); }
+.detail-head { display: flex; gap: 10px; align-items: flex-start; }
+.detail-head h2 { margin: 0; font-size: 17px; line-height: 1.3; }
+.detail-head .close { margin-left: auto; border: 1px solid var(--hair); background: var(--surface); border-radius: 999px; width: 28px; height: 28px; cursor: pointer; flex: none; display: grid; place-items: center; padding: 0; font-size: 16px; line-height: 1; color: var(--ink-2); }
+.detail .meta { font-size: 13px; color: var(--ink-2); margin: 2px 0 10px; }
+.detail .big { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.detail .big small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 4px; letter-spacing: 0; }
+.detail .cap { font-size: 13px; color: var(--ink-2); margin: 0 0 8px; }
+.chart-box { position: relative; }
+.chart-box svg { display: block; width: 100%; overflow: visible; }
+.grid-line { stroke: var(--hair); stroke-width: 1; shape-rendering: crispEdges; }
+.axis-text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.area { opacity: 0.16; }
+.series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.xhair { stroke: var(--ink-2); stroke-width: 1; }
+.empty { color: var(--muted); font-size: 13.5px; margin: 6px 0; }
+
+/* Stations view */
+.page-head { padding: 34px 0 20px; }
+.page-head h1 { font-size: clamp(26px, 1rem + 1.8vw, 38px); line-height: 1.1; font-weight: 650; letter-spacing: -0.022em; margin: 0 0 10px; }
+.lede { font-size: 17px; line-height: 1.5; color: var(--ink-2); margin: 0; max-width: 70ch; }
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: 18px; padding: 22px 24px 24px; margin: 0 0 24px; min-width: 0; }
+.panel h2 { font-size: 19px; font-weight: 650; letter-spacing: -0.012em; margin: 0; }
+.panel .sub { color: var(--ink-2); font-size: 14.5px; margin: 6px 0 16px; max-width: 76ch; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.nations { display: grid; gap: 12px; margin-top: 6px; position: relative; }
+.nation { display: grid; grid-template-columns: 120px minmax(0, 1fr) 84px; gap: 14px; align-items: center; }
+.nation .label { font-weight: 550; }
+.nation .label small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.nation .bar { display: flex; gap: 2px; height: 24px; }
+.nation .bar i { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+.nation .total { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 16px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-2); }
+.legend li { display: flex; align-items: center; gap: 7px; }
+.sw { width: 11px; height: 11px; border-radius: 3px; flex: none; display: inline-block; }
+table { border-collapse: collapse; width: 100%; }
+.data th, .data td { padding: 9px 8px; text-align: left; font-weight: 400; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+.data thead th { font-size: 12.5px; color: var(--muted); font-weight: 500; padding-top: 0; white-space: nowrap; }
+.data .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data .name { font-weight: 550; }
+.data .muted { color: var(--muted); }
+.data .route { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.data tfoot td { border-bottom: 0; color: var(--ink-2); font-size: 13.5px; }
+.sort-btn { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.sort-btn:hover { color: var(--ink); }
+th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+.stations-table tbody tr.row { cursor: pointer; }
+.stations-table tbody tr.row:hover td, .stations-table tbody tr.row.open td { background: var(--wash); }
+.stations-table tr.detail-row td { padding: 4px 8px 16px; background: var(--wash); }
+.typ { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.tag { font-size: 11.5px; color: var(--ink-2); background: var(--chip); border-radius: 6px; padding: 1px 7px; margin-left: 8px; font-weight: 500; white-space: nowrap; }
+.load { display: inline-block; width: 64px; height: 6px; background: var(--chip); border-radius: 3px; position: relative; vertical-align: middle; margin-right: 9px; overflow: hidden; }
+.load i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 2px 0 14px; }
+.search { border: 1px solid var(--hair); background: var(--page); border-radius: 10px; padding: 7px 12px; min-width: 230px; flex: 0 1 280px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--hair); background: transparent; border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.chip:hover { background: var(--wash); }
+.chip[aria-pressed="true"] { background: var(--chip); color: var(--ink); border-color: transparent; font-weight: 600; }
+.toggle { display: inline-flex; background: var(--chip); border-radius: 10px; padding: 3px; }
+.toggle button { border: 0; background: transparent; color: var(--ink-2); font-size: 13.5px; padding: 4px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.toggle button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--hair); }
+.count { font-size: 13px; color: var(--muted); margin-left: auto; }
+.more-btn { margin-top: 14px; border: 1px solid var(--hair); background: transparent; border-radius: 10px; padding: 6px 12px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+.more-btn:hover { background: var(--wash); }
+.diverge { position: relative; height: 8px; background: var(--chip); border-radius: 4px; width: 120px; display: inline-block; vertical-align: middle; }
+.diverge::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--axis); }
+.diverge i { position: absolute; top: 0; bottom: 0; }
+.diverge i.in { left: 50%; border-radius: 0 4px 4px 0; }
+.diverge i.out { right: 50%; border-radius: 4px 0 0 4px; }
+.method { font-size: 14px; color: var(--ink-2); line-height: 1.6; max-width: 78ch; }
+.method p { margin: 0 0 10px; }
+.foot { padding: 4px 0 56px; color: var(--muted); font-size: 12.5px; }
+.foot p { margin: 0 0 6px; max-width: 110ch; }
+.credit { margin: 22px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .two { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .map-layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .stage { height: 64vh; min-height: 400px; }
+  .side { border-left: 0; border-top: 1px solid var(--hair); }
+  /* Full screen on a narrow screen: just the map, with a compact key */
+  #view-map.is-fs .map-layout { height: 100%; grid-template-rows: minmax(0, 1fr); }
+  #view-map.is-fs .stage { height: 100%; min-height: 0; }
+  #view-map.is-fs .side { display: none; }
+  #view-map.is-fs .fs-key { display: flex; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px; }
+  .live { margin-left: 0; order: 3; width: 100%; }
+  .theme-btn { margin-left: auto; }
+  .side { padding: 18px 16px 30px; }
+  .panel { padding: 18px 16px 20px; border-radius: 16px; }
+  .nation { grid-template-columns: 82px minmax(0, 1fr) 64px; gap: 10px; }
+  .hide-sm { display: none; }
+  .search { min-width: 0; flex: 1 1 100%; }
+  .hint { display: none; }
+}
+@media (max-width: 480px) {
+  .brand span { display: none; }
+  .top-inner { column-gap: 10px; }
+  .nav a { padding: 4px 10px; }
+  .theme-word { display: none; }
+  .theme-btn { padding: 4px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.pulse { animation: none; }
+  .link-flow { animation: none; }
+}
+@media (forced-colors: active) {
+  .sw, .track i, .load i, .nation .bar i, .diverge i { forced-color-adjust: none; }
+}
+</style>
+</head>
+<body class="mode-map">
+<header class="top">
+  <div class="wrap top-inner">
+    <p class="brand">
+      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="0.5" y="0.5" width="25" height="25" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.25"/><path d="M4 13c1.5-5 3-5 4.5 0s3 5 4.5 0 3-5 4.5 0 3 5 4.5 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>GB grid</span>
+    </p>
+    <nav class="nav" aria-label="Views">
+      <a href="/">Overview</a>
+      <a href="/map" data-view="map">Map</a>
+      <a href="/stations" data-view="stations">Stations</a>
+    </nav>
+    <p class="live" aria-live="polite"><span class="dot" id="live-dot"></span><span id="live-text">Connecting to the dashboard server…</span></p>
+    <button class="theme-btn" id="theme-btn" type="button">Theme: auto</button>
+  </div>
+</header>
+
+<main id="view-map">
+  <div class="map-layout">
+    <section class="stage" id="stage" tabindex="0" aria-label="Map of power stations and interconnectors. Drag or use the arrow keys to move, plus and minus to zoom, F for full screen.">
+      <svg id="map" role="img" aria-labelledby="map-summary"><title id="map-summary">Map of Great Britain’s power stations and interconnectors</title></svg>
+      <div class="zoom">
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-reset" aria-label="Show the whole country" title="Show the whole country"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7.5L8 3l5.5 4.5M4 6.5V13h3V9.5h2V13h3V6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <button type="button" class="fs-btn" id="fs-btn" aria-label="Show the map full screen" title="Full screen (F)">
+        <svg class="fs-on" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="fs-off" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="fs-key" id="fs-key" aria-hidden="true"></div>
+      <div class="size-key" id="size-key" aria-hidden="true"></div>
+      <p class="map-msg" id="map-msg" hidden></p>
+      <p class="hint" id="hint" aria-hidden="true">Scroll or pinch to zoom, drag to move</p>
+    </section>
+    <aside class="side" id="side" aria-label="Generation summary">
+      <div id="detail" hidden></div>
+      <h1>Where Great Britain’s power is coming from</h1>
+      <p class="when" id="when">Waiting for the first station data…</p>
+      <div class="stats" id="stats"></div>
+      <h2>By type <span class="aside">Select to show or hide</span></h2>
+      <ul class="fuels" id="fuels"></ul>
+      <label class="switch"><input type="checkbox" id="idle-toggle" checked> Show stations that are idle now</label>
+      <h2>Interconnectors <span class="aside" id="net"></span></h2>
+      <ul class="ic" id="ic"></ul>
+      <h2>Not shown on the map</h2>
+      <div class="notes" id="unmapped"></div>
+      <div class="notes">
+        <p><button class="explain-btn" type="button" id="how-btn" aria-expanded="false" aria-controls="how">How the station figures are worked out</button></p>
+        <div id="how" hidden>
+          <p>There’s no public live meter reading for each power station, so each one is modelled. Every unit tells the grid operator in advance what it plans to generate (its Physical Notification), and the operator’s instructions to turn up or down (Bid-Offer Acceptances) override that plan. Both come from Elexon.</p>
+          <p>Those estimates are then scaled, fuel by fuel, so they add up to Elexon’s measured total for the same five minutes. The totals here therefore match the overview, while each station’s figure is a close estimate rather than a meter reading.</p>
+          <p>Locations come from the open Power Station Dictionary plus hand-added recent stations. Interconnector flows are measured, not modelled.</p>
+        </div>
+      </div>
+      <p class="credit">Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> (<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" rel="noopener">licence</a>). Station locations: <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>
+    </aside>
+  </div>
+</main>
+
+<main id="view-stations" class="wrap" hidden>
+  <section class="page-head">
+    <h1>Power stations and interconnectors</h1>
+    <p class="lede" id="st-lede">Every grid-connected power station and link to another country, with what each is doing now.</p>
+  </section>
+  <section class="panel" aria-labelledby="nations-title">
+    <h2 id="nations-title">Generation by nation</h2>
+    <p class="sub">Stations on the map, grouped by where they are. Offshore wind farms count towards the nearest coast. Solar and small wind farms aren’t included because their output is only known nationally.</p>
+    <div class="nations" id="nations"></div>
+    <ul class="legend" id="nations-legend"></ul>
+  </section>
+  <div class="two">
+    <section class="panel" aria-labelledby="types-title">
+      <h2 id="types-title">By type</h2>
+      <p class="sub">Measured national totals, and how much of each is drawn on the map.</p>
+      <div class="table-scroll"><table class="data" id="types-table"></table></div>
+    </section>
+    <section class="panel" aria-labelledby="links-title">
+      <h2 id="links-title">Interconnectors</h2>
+      <p class="sub" id="links-sub">Cables to other countries. Flows are measured.</p>
+      <div class="table-scroll"><table class="data" id="links-table"></table></div>
+    </section>
+  </div>
+  <section class="panel" aria-labelledby="stations-title">
+    <h2 id="stations-title">Power stations</h2>
+    <p class="sub">Select a station to see its last 24 hours. Output is modelled from each unit’s plan and the grid operator’s instructions, matched to the measured total for its fuel.</p>
+    <div class="toolbar">
+      <input class="search" id="search" type="search" placeholder="Find a station" aria-label="Find a station by name">
+      <div class="toggle" id="nation-filter" role="group" aria-label="Where"></div>
+      <label class="switch" style="margin:0"><input type="checkbox" id="idle-filter"> Include idle</label>
+    </div>
+    <div class="chips" id="fuel-chips" role="group" aria-label="Types to show"></div>
+    <div class="toolbar"><span class="count" id="st-count"></span></div>
+    <div class="table-scroll"><table class="data stations-table" id="stations-table"></table></div>
+    <button class="more-btn" type="button" id="more-btn" hidden>Show all stations</button>
+  </section>
+  <section class="panel" aria-labelledby="unplaced-title">
+    <h2 id="unplaced-title">Units without a known location</h2>
+    <p class="sub" id="unplaced-sub">Units Elexon reports on that aren’t matched to a station location yet. Their output still counts in the totals.</p>
+    <div class="table-scroll"><table class="data" id="unplaced-table"></table></div>
+  </section>
+  <section class="panel method" aria-labelledby="method-title">
+    <h2 id="method-title">How these figures are made</h2>
+    <p class="sub"></p>
+    <p>Elexon publishes measured output for each fuel type nationally every five minutes, but not for individual power stations in real time. So each station is modelled from two Elexon datasets: the Physical Notification each unit submits an hour ahead saying what it plans to generate, and the Bid-Offer Acceptances where the grid operator (NESO) tells a unit to change that plan.</p>
+    <p>The modelled figures for each fuel are scaled to Elexon’s measured total for the same five minutes, so the map and this page agree with the overview. The scale factor for each fuel is shown in the type table; values near 1 mean the plans matched reality closely.</p>
+    <p id="method-model"></p>
+    <p>Station locations come from the Power Station Dictionary (Open Climate Fix and others, MIT licence) with recent stations added by hand. Map outlines are from Natural Earth. Northern Ireland is part of the all-island grid with Ireland, so it appears here only through the Moyle interconnector.</p>
+  </section>
+  <footer class="foot">
+    <p>Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> (<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" rel="noopener">licence</a>). Carbon intensity from the <a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a> and embedded generation from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar from <a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. Map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>
+    <p>A self-hosted dashboard, not an official Elexon or NESO service. All times are UK time.</p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var TZ = 'Europe/London';
+  var CATS = ['wind', 'solar', 'nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other'];
+  var NAMES = { wind: 'Wind', solar: 'Solar', nuclear: 'Nuclear', gas: 'Gas', biomass: 'Biomass', hydro: 'Hydro', storage: 'Storage', other: 'Other' };
+  var FAVICON = { wind: '#24a5da', solar: '#e5a600', nuclear: '#6d52bc', gas: '#e36927', biomass: '#43963c', hydro: '#305eb7', storage: '#26bdae', other: '#9aa4ae' };
+  /* Great Britain plus its offshore wind farms, in map km (y down) */
+  var FOCUS = { x0: -430, x1: 340, y0: -1330, y1: -5 };
+  /* Where each interconnector's far-end label sits: dx, dy (px), anchor */
+  var LINK_LABEL = {
+    INTFR: [9, 16, 'start'], INTELEC: [9, -10, 'start'], INTNEM: [8, 4, 'start'], INTNED: [8, 4, 'start'],
+    INTIFA2: [0, 20, 'middle'], INTNSL: [8, 4, 'start'], INTVKL: [8, 4, 'start'], INTIRL: [-8, 4, 'end'],
+    INTEW: [-8, 4, 'end'], INTGRNL: [-8, 4, 'end']
+  };
+  var LINK_BEND = { INTFR: -0.16, INTELEC: 0.16, INTNEM: 0.06, INTNED: -0.06 };
+
+  var state = {
+    data: null, text: '', failures: 0, lastOk: 0, timer: null, view: 'map',
+    hidden: {}, showIdle: true, selected: null, highlight: null, stationHistory: {},
+    sort: { key: 'mw', dir: -1 }, query: '', nation: 'all', cats: {}, includeIdle: false,
+    openRow: null, showAll: false, fuelOrder: null, fuelOrderTime: null
+  };
+  try {
+    var saved = JSON.parse(localStorage.getItem('gb-grid-map') || '{}');
+    if (saved && typeof saved === 'object') {
+      if (saved.hidden) state.hidden = saved.hidden;
+      if (saved.showIdle === false) state.showIdle = false;
+    }
+  } catch (error) { /* storage unavailable */ }
+  function savePrefs() {
+    try { localStorage.setItem('gb-grid-map', JSON.stringify({ hidden: state.hidden, showIdle: state.showIdle })); } catch (error) { /* ignore */ }
+  }
+
+  /* ---------- small helpers ---------- */
+
+  function byId(id) { return document.getElementById(id); }
+  function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); return node; }
+  function add(node, kids) {
+    if (kids === null || kids === undefined) return node;
+    if (!Array.isArray(kids)) kids = [kids];
+    kids.forEach(function (kid) {
+      if (kid === null || kid === undefined || kid === false) return;
+      node.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    });
+    return node;
+  }
+  function h(tag, props, kids) {
+    var node = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (key) {
+        var value = props[key];
+        if (value === null || value === undefined || value === false) return;
+        if (key === 'text') node.textContent = value;
+        else if (key === 'cls') node.className = value;
+        else if (key.indexOf('on') === 0) node.addEventListener(key.slice(2), value);
+        else node.setAttribute(key, value === true ? '' : value);
+      });
+    }
+    return add(node, kids);
+  }
+  function s(tag, attrs, kids) {
+    var node = document.createElementNS(NS, tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (key) {
+        var value = attrs[key];
+        if (value === null || value === undefined) return;
+        if (key === 'text') node.textContent = value;
+        else node.setAttribute(key, value);
+      });
+    }
+    return add(node, kids);
+  }
+  function num(v) { return v !== null && v !== undefined && !isNaN(v); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  var timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ });
+  var intFmt = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
+  function hm(t) { return timeFmt.format(new Date(t * 1000)); }
+  function mw(v) { return num(v) ? intFmt.format(Math.round(v)) : '–'; }
+  function gw(vMw) {
+    if (!num(vMw)) return '–';
+    var v = vMw / 1000;
+    return Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(2);
+  }
+  function ago(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    if (seconds < 60) return seconds + ' s ago';
+    if (seconds < 3600) return Math.round(seconds / 60) + ' min ago';
+    return Math.round(seconds / 3600) + ' h ago';
+  }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+  function niceStep(span, target) {
+    var raw = span / Math.max(1, target);
+    var magnitude = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var norm = raw / magnitude;
+    return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * magnitude;
+  }
+  var measureContext = null;
+  function textWidth(text, size, weight) {
+    if (!measureContext) measureContext = document.createElement('canvas').getContext('2d');
+    measureContext.font = (weight || 600) + ' ' + size + 'px ' + getComputedStyle(document.body).fontFamily;
+    return measureContext.measureText(text).width;
+  }
+  var signatures = {};
+  function changed(name, inputs) {
+    var signature = JSON.stringify(inputs);
+    if (signatures[name] === signature) return false;
+    signatures[name] = signature;
+    return true;
+  }
+
+  function makeTip(container) {
+    var tip = h('div', { cls: 'tip', 'aria-hidden': 'true' });
+    tip.hidden = true;
+    container.appendChild(tip);
+    return {
+      show: function (title, rows, x, y, note) {
+        clear(tip);
+        tip.appendChild(h('div', { cls: 't', text: title }));
+        rows.forEach(function (row) {
+          if (row.sep) { tip.appendChild(h('div', { cls: 'sep' })); return; }
+          tip.appendChild(h('div', { cls: 'row' }, [
+            h('span', { cls: 'key ' + (row.cls || 'none') }),
+            h('span', { cls: 'v', text: row.value }),
+            h('span', { cls: 'l', text: row.label })
+          ]));
+        });
+        if (note) tip.appendChild(h('div', { cls: 'note', text: note }));
+        tip.hidden = false;
+        var width = container.clientWidth, height = container.clientHeight;
+        var tipWidth = tip.offsetWidth, tipHeight = tip.offsetHeight;
+        var left = x + 18;
+        if (left + tipWidth > width - 6) left = x - tipWidth - 18;
+        if (left < 6) left = clamp(x - tipWidth / 2, 6, Math.max(6, width - tipWidth - 6));
+        var top = clamp(y - tipHeight / 2, 6, Math.max(6, height - tipHeight - 6));
+        if (left === clamp(x - tipWidth / 2, 6, Math.max(6, width - tipWidth - 6)) && Math.abs(top - y) < tipHeight) {
+          top = y + 22 + tipHeight < height ? y + 22 : Math.max(6, y - tipHeight - 22);
+        }
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+      },
+      hide: function () { tip.hidden = true; }
+    };
+  }
+
+  /* ---------- data ---------- */
+
+  function stationsOf(data) { return (data && data.stations) || []; }
+  function category(data, key) {
+    var found = null;
+    ((data && data.categories) || []).forEach(function (c) { if (c.key === key) found = c; });
+    return found;
+  }
+  function catTotal(c) {
+    if (!c) return 0;
+    return Math.max(0, c.measured || 0) + Math.max(0, c.embedded || 0);
+  }
+  function netImports(data) {
+    var total = 0;
+    ((data && data.links) || []).forEach(function (link) { if (num(link.mw)) total += link.mw; });
+    return total;
+  }
+  function generationTotal(data) {
+    var total = 0;
+    CATS.forEach(function (key) { total += catTotal(category(data, key)); });
+    return total;
+  }
+  function isIdle(st) { return Math.abs(st.mw) < 1; }
+  function loadOf(st) { return st.cap && st.mw > 0 ? Math.min(100, 100 * st.mw / st.cap) : null; }
+  function where(st) { return st.off ? 'Offshore, ' + (st.na || 'GB') : (st.na || ''); }
+
+  function fetchText(url) {
+    return fetch(url, { cache: 'no-cache', headers: { Accept: 'application/json' } }).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.text();
+    });
+  }
+
+  function tick() {
+    clearTimeout(state.timer);
+    fetchText('/api/map').then(function (text) {
+      state.failures = 0;
+      state.lastOk = Date.now();
+      if (text !== state.text) {
+        state.text = text;
+        state.data = JSON.parse(text);
+        render();
+      }
+    }).catch(function () {
+      state.failures += 1;
+    }).then(function () {
+      renderHeader();
+      schedule();
+    });
+  }
+  function schedule() {
+    clearTimeout(state.timer);
+    if (document.hidden) return;
+    var seconds = (state.data && state.data.refresh_seconds) || 10;
+    if (state.failures) seconds = Math.min(60, seconds * Math.pow(2, state.failures - 1));
+    state.timer = setTimeout(tick, seconds * 1000);
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
+
+  function renderHeader() {
+    var data = state.data, dot = byId('live-dot'), text = byId('live-text');
+    var cls = 'dot', message;
+    var offline = state.failures > 0 && (!state.lastOk || Date.now() - state.lastOk > 25000);
+    if (offline) {
+      cls += ' bad';
+      message = 'Can’t reach the dashboard server. Retrying.';
+    } else if (!data) {
+      message = 'Connecting to the dashboard server…';
+    } else if (!data.model) {
+      var feed = data.status && data.status.units;
+      if (feed && feed.failures) { cls += ' warn'; message = 'No station data yet: ' + (feed.last_error || 'Elexon isn’t responding') + '.'; }
+      else message = 'Collecting the first station data…';
+    } else {
+      var at = data.model.at, checked = ago((Date.now() - state.lastOk) / 1000);
+      if (Date.now() / 1000 - at > 20 * 60) {
+        cls += ' warn';
+        message = 'Delayed. Station data is for ' + hm(at) + '; checked ' + checked + '.';
+      } else {
+        cls += ' good pulse';
+        message = 'Live. Station data for ' + hm(data.model.time || at) + ', checked ' + checked + '.';
+      }
+    }
+    if (dot.className !== cls) dot.className = cls;
+    if (text.textContent !== message) text.textContent = message;
+  }
+
+  /* ---------- views ---------- */
+
+  function viewFromPath() { return /^\/stations/.test(location.pathname) ? 'stations' : 'map'; }
+  function setView(view, push) {
+    if (view !== 'map' && isFullscreen()) exitFullscreen();
+    state.view = view;
+    document.body.className = 'mode-' + view;
+    byId('view-map').hidden = view !== 'map';
+    byId('view-stations').hidden = view !== 'stations';
+    Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (link) {
+      if (link.getAttribute('data-view') === view) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    if (push) history.pushState({ view: view }, '', view === 'map' ? '/map' : '/stations');
+    signatures = {};
+    if (view === 'map') { mapResize(); }
+    render();
+    if (push) window.scrollTo(0, 0);
+  }
+  document.querySelector('.nav').addEventListener('click', function (event) {
+    var link = event.target.closest('a[data-view]');
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+    event.preventDefault();
+    if (link.getAttribute('data-view') !== state.view) setView(link.getAttribute('data-view'), true);
+  });
+  window.addEventListener('popstate', function () { setView(viewFromPath(), false); });
+
+  function render() {
+    var data = state.data;
+    if (!data) return;
+    updateTitle(data);
+    if (state.view === 'map') {
+      drawMapData();
+      renderSide();
+    } else {
+      renderStationsView();
+    }
+  }
+
+  function updateTitle(data) {
+    var total = generationTotal(data);
+    document.title = (state.view === 'map' ? 'GB grid map' : 'GB power stations') + (total ? ': ' + gw(total) + ' GW generating' : '');
+    var parts = CATS.map(function (key) { return { key: key, v: catTotal(category(data, key)) }; }).filter(function (p) { return p.v > 0; });
+    var sum = parts.reduce(function (a, p) { return a + p.v; }, 0);
+    if (!sum) return;
+    var angle = -Math.PI / 2, shapes = '';
+    parts.forEach(function (part) {
+      var sweep = 2 * Math.PI * part.v / sum, next = angle + sweep;
+      if (sweep >= 2 * Math.PI - 0.0001) { shapes += '<circle cx="16" cy="16" r="15" fill="' + FAVICON[part.key] + '"/>'; return; }
+      shapes += '<path d="M16 16L' + (16 + 15 * Math.cos(angle)).toFixed(2) + ' ' + (16 + 15 * Math.sin(angle)).toFixed(2) + 'A15 15 0 ' + (sweep > Math.PI ? 1 : 0) +
+        ' 1 ' + (16 + 15 * Math.cos(next)).toFixed(2) + ' ' + (16 + 15 * Math.sin(next)).toFixed(2) + 'Z" fill="' + FAVICON[part.key] + '"/>';
+      angle = next;
+    });
+    byId('favicon').setAttribute('href', 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' + shapes + '</svg>'));
+  }
+
+  /* ---------- the map ---------- */
+
+  var M = {
+    ready: false, s: 1, tx: 0, ty: 0, W: 0, H: 0, minS: 0.1, maxS: 10, fitS: 1, moved: false,
+    nodes: {}, order: [], screen: [], links: [], linkNodes: {}, hoverId: null, hoverLink: null, raf: 0, K: 0.42
+  };
+
+  function initMap() {
+    M.stage = byId('stage');
+    M.svg = byId('map');
+    M.gLand = s('g');
+    M.gGeoLabels = s('g');
+    M.gLinks = s('g');
+    M.gStations = s('g');
+    M.gLabels = s('g');
+    M.gEnds = s('g');
+    [M.gLand, M.gGeoLabels, M.gLinks, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
+    M.tip = makeTip(M.stage);
+    fetch('/geo.json').then(function (r) { return r.json(); }).then(function (geo) {
+      M.geo = geo;
+      var inner = s('g', { transform: 'scale(0.5)' });
+      geo.units.forEach(function (unit) {
+        inner.appendChild(s('path', { d: unit.d, 'class': unit.kind === 'gb' ? 'land' : 'land-near', 'fill-rule': 'evenodd' }));
+      });
+      M.gLand.appendChild(inner);
+      M.geoLabels = geo.labels.map(function (label) {
+        var node = s('text', { 'class': 'geo-label ' + (label.k === 'gb' ? 'gb' : label.k === 'sea' ? 'sea' : ''), text: label.t });
+        M.gGeoLabels.appendChild(node);
+        return { node: node, x: label.x, y: label.y };
+      });
+      M.ready = true;
+      mapResize();
+      drawMapData();
+    }).catch(function () {
+      showMapMessage('Couldn’t load the map outline. Reload the page to try again.');
+    });
+
+    M.svg.addEventListener('wheel', onWheel, { passive: false });
+    M.svg.addEventListener('pointerdown', onDown);
+    M.svg.addEventListener('pointermove', onMove);
+    M.svg.addEventListener('pointerup', onUp);
+    M.svg.addEventListener('pointercancel', onUp);
+    M.svg.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse' && !drag) setHover(null, null); });
+    M.svg.addEventListener('dblclick', function (e) { e.preventDefault(); zoomAt(pos(e), M.s * 2); });
+    M.stage.addEventListener('keydown', onKey);
+    byId('zoom-in').addEventListener('click', function () { interacted(); M.tip.hide(); zoomAt([M.W / 2, M.H / 2], M.s * 1.6); });
+    byId('zoom-out').addEventListener('click', function () { interacted(); M.tip.hide(); zoomAt([M.W / 2, M.H / 2], M.s / 1.6); });
+    byId('zoom-reset').addEventListener('click', function () { M.moved = false; fitDefault(); requestRedraw(); });
+    byId('fs-btn').addEventListener('click', toggleFullscreen);
+    if (window.ResizeObserver) new ResizeObserver(function () { mapResize(); }).observe(M.stage);
+    else window.addEventListener('resize', mapResize);
+  }
+
+  function showMapMessage(text) {
+    var node = byId('map-msg');
+    node.hidden = !text;
+    if (text) node.textContent = text;
+  }
+
+  function mapResize() {
+    if (!M.stage || state.view !== 'map') return;
+    var W = M.stage.clientWidth, H = M.stage.clientHeight;
+    if (!W || !H) return;
+    var first = !M.W;
+    var centre = !first && M.moved ? [(M.W / 2 - M.tx) / M.s, (M.H / 2 - M.ty) / M.s] : null;
+    M.W = W; M.H = H;
+    M.K = 0.42 * clamp(Math.min(W, H * 0.8) / 760, 0.72, 1.12);
+    if (!M.geo) return;
+    var box = M.geo.box;
+    M.minS = Math.max(W / box[2], H / box[3]);
+    if (first || !M.moved || !centre) fitDefault();
+    else {
+      M.s = clamp(M.s, M.minS, M.maxS);
+      M.tx = W / 2 - centre[0] * M.s;
+      M.ty = H / 2 - centre[1] * M.s;
+      clampView();
+    }
+    requestRedraw();
+  }
+
+  /* ---------- full screen ---------- */
+
+  var FS = { pseudo: false };
+  function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function isFullscreen() { return Boolean(fsElement()) || FS.pseudo; }
+  function enterFullscreen() {
+    var view = byId('view-map');
+    var request = view.requestFullscreen || view.webkitRequestFullscreen;
+    var allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    if (request && allowed) {
+      try {
+        var result = request.call(view, { navigationUI: 'hide' });
+        if (result && result.catch) result.catch(function () { setPseudo(true); });
+        return;
+      } catch (error) { /* fall back below */ }
+    }
+    /* iPhone Safari can't make a page full screen, so fill the window instead */
+    setPseudo(true);
+  }
+  function exitFullscreen() {
+    if (FS.pseudo) { setPseudo(false); return; }
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fsElement() && exit) exit.call(document);
+  }
+  function toggleFullscreen() {
+    interacted();
+    M.tip.hide();
+    if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+  }
+  function setPseudo(on) {
+    FS.pseudo = on;
+    byId('view-map').classList.toggle('pseudo-fs', on);
+    document.documentElement.classList.toggle('fs-lock', on);
+    syncFullscreen();
+  }
+  function syncFullscreen() {
+    var on = isFullscreen();
+    byId('view-map').classList.toggle('is-fs', on);
+    var button = byId('fs-btn');
+    button.setAttribute('aria-label', on ? 'Exit full screen' : 'Show the map full screen');
+    button.setAttribute('title', on ? 'Exit full screen (F or Esc)' : 'Full screen (F)');
+    if (on) { try { M.stage.focus({ preventScroll: true }); } catch (error) { M.stage.focus(); } }
+    mapResize();
+  }
+  document.addEventListener('fullscreenchange', syncFullscreen);
+  document.addEventListener('webkitfullscreenchange', syncFullscreen);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && FS.pseudo) setPseudo(false); });
+
+  function renderFsKey(data) {
+    var host = clear(byId('fs-key'));
+    if (data.model) host.appendChild(h('span', { cls: 'when-chip', text: 'GW at ' + hm(data.model.time || data.model.at) }));
+    (state.fuelOrder || CATS).forEach(function (key) {
+      var total = catTotal(category(data, key));
+      if (total < 50) return;
+      host.appendChild(h('span', null, [h('i', { cls: 'sw b-' + key }), NAMES[key] + ' ' + gw(total)]));
+    });
+    var net = netImports(data);
+    if ((data.links || []).length && Math.abs(net) >= 50) {
+      host.appendChild(h('span', null, [h('i', { cls: 'sw b-imports' }), (net > 0 ? 'Imports ' : 'Exports ') + gw(Math.abs(net))]));
+    }
+  }
+
+  function fitDefault() {
+    var pad = 18;
+    var sx = (M.W - 2 * pad) / (FOCUS.x1 - FOCUS.x0), sy = (M.H - 2 * pad) / (FOCUS.y1 - FOCUS.y0);
+    M.s = M.fitS = Math.max(M.minS, Math.min(sx, sy));
+    M.maxS = M.fitS * 10;
+    M.tx = M.W / 2 - (FOCUS.x0 + FOCUS.x1) / 2 * M.s;
+    M.ty = M.H / 2 - (FOCUS.y0 + FOCUS.y1) / 2 * M.s;
+    clampView();
+  }
+
+  function clampView() {
+    if (!M.geo) return;
+    var b = M.geo.box, x0 = b[0], y0 = b[1], w = b[2] * M.s, hgt = b[3] * M.s;
+    if (w <= M.W) M.tx = (M.W - w) / 2 - x0 * M.s;
+    else M.tx = clamp(M.tx, M.W - (x0 * M.s + w), -x0 * M.s);
+    if (hgt <= M.H) M.ty = (M.H - hgt) / 2 - y0 * M.s;
+    else M.ty = clamp(M.ty, M.H - (y0 * M.s + hgt), -y0 * M.s);
+  }
+
+  function zoomAt(p, target) {
+    var next = clamp(target, M.minS, M.maxS);
+    var mx = (p[0] - M.tx) / M.s, my = (p[1] - M.ty) / M.s;
+    M.s = next;
+    M.tx = p[0] - mx * next;
+    M.ty = p[1] - my * next;
+    M.moved = true;
+    clampView();
+    requestRedraw();
+  }
+
+  function pos(e) {
+    var rect = M.svg.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  }
+
+  var pointers = {}, drag = null, pinch = null;
+  function interacted() {
+    var hint = byId('hint');
+    if (!hint.hidden) hint.hidden = true;
+  }
+  function onWheel(e) {
+    e.preventDefault();
+    interacted();
+    M.tip.hide();
+    var factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016));
+    zoomAt(pos(e), M.s * factor);
+  }
+  function onDown(e) {
+    if (e.button && e.button !== 0) return;
+    var p = pos(e);
+    pointers[e.pointerId] = p;
+    try { M.svg.setPointerCapture(e.pointerId); } catch (error) { /* ignore */ }
+    var ids = Object.keys(pointers);
+    if (ids.length === 1) {
+      drag = { start: p, last: p, moved: false, type: e.pointerType };
+    } else if (ids.length === 2) {
+      var a = pointers[ids[0]], b = pointers[ids[1]];
+      var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      pinch = { d: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), s: M.s, mx: (mid[0] - M.tx) / M.s, my: (mid[1] - M.ty) / M.s };
+      if (drag) drag.moved = true;
+    }
+  }
+  function onMove(e) {
+    var p = pos(e);
+    if (!pointers[e.pointerId]) {
+      if (e.pointerType === 'mouse') hoverAt(p);
+      return;
+    }
+    pointers[e.pointerId] = p;
+    var ids = Object.keys(pointers);
+    if (ids.length >= 2 && pinch) {
+      var a = pointers[ids[0]], b = pointers[ids[1]];
+      var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      M.s = clamp(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, M.minS, M.maxS);
+      M.tx = mid[0] - pinch.mx * M.s;
+      M.ty = mid[1] - pinch.my * M.s;
+      M.moved = true;
+      clampView();
+      requestRedraw();
+    } else if (drag) {
+      if (!drag.moved && Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) > 5) {
+        drag.moved = true;
+        M.stage.classList.add('dragging');
+        M.tip.hide();
+        interacted();
+      }
+      if (drag.moved) {
+        M.tx += p[0] - drag.last[0];
+        M.ty += p[1] - drag.last[1];
+        M.moved = true;
+        clampView();
+        requestRedraw();
+      }
+      drag.last = p;
+    }
+  }
+  function onUp(e) {
+    var p = pos(e);
+    var wasClick = drag && !drag.moved && e.type === 'pointerup';
+    delete pointers[e.pointerId];
+    if (Object.keys(pointers).length < 2) pinch = null;
+    if (!Object.keys(pointers).length) {
+      M.stage.classList.remove('dragging');
+      if (wasClick) clickAt(p);
+      drag = null;
+    }
+  }
+  function onKey(e) {
+    var step = 70, handled = true;
+    if (e.key === 'ArrowLeft') M.tx += step;
+    else if (e.key === 'ArrowRight') M.tx -= step;
+    else if (e.key === 'ArrowUp') M.ty += step;
+    else if (e.key === 'ArrowDown') M.ty -= step;
+    else if (e.key === '+' || e.key === '=') { zoomAt([M.W / 2, M.H / 2], M.s * 1.5); return e.preventDefault(); }
+    else if (e.key === '-' || e.key === '_') { zoomAt([M.W / 2, M.H / 2], M.s / 1.5); return e.preventDefault(); }
+    else if (e.key === '0') { M.moved = false; fitDefault(); requestRedraw(); return e.preventDefault(); }
+    else if (e.key === 'Escape') { if (!FS.pseudo) select(null); return; }
+    else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleFullscreen(); return e.preventDefault(); }
+    else handled = false;
+    if (handled) { e.preventDefault(); interacted(); M.tip.hide(); M.moved = true; clampView(); requestRedraw(); }
+  }
+
+  function hitStation(p) {
+    var best = null;
+    M.screen.forEach(function (item) {
+      var d = Math.hypot(item.sx - p[0], item.sy - p[1]);
+      var reach = Math.max(item.r + 2, 8);
+      if (d <= reach && (!best || item.r < best.r || (item.r === best.r && d < best.d))) best = { id: item.id, r: item.r, d: d, item: item };
+    });
+    return best;
+  }
+  function hitLink(p) {
+    var best = null;
+    M.links.forEach(function (link) {
+      if (!link.pts) return;
+      for (var i = 1; i < link.pts.length; i++) {
+        var a = link.pts[i - 1], b = link.pts[i];
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        var t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+        var d = Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+        if (d < 7 && (!best || d < best.d)) best = { link: link, d: d };
+      }
+    });
+    return best && best.link;
+  }
+  function hoverAt(p) {
+    var hit = hitStation(p);
+    if (hit) { setHover(hit.id, null); showStationTip(hit.item.st, p); return; }
+    var link = hitLink(p);
+    if (link) { setHover(null, link.code); showLinkTip(link, p); return; }
+    setHover(null, null);
+  }
+  function clickAt(p) {
+    var hit = hitStation(p);
+    if (hit) {
+      select(hit.id);
+      showStationTip(hit.item.st, p);
+      return;
+    }
+    var link = hitLink(p);
+    if (link) { setHover(null, link.code); showLinkTip(link, p); return; }
+    M.tip.hide();
+    setHover(null, null);
+    select(null);
+  }
+  function setHover(id, code) {
+    if (M.hoverId === id && M.hoverLink === code) return;
+    if (M.hoverId && M.nodes[M.hoverId]) M.nodes[M.hoverId].node.classList.remove('hover');
+    M.hoverId = id;
+    M.hoverLink = code;
+    if (id && M.nodes[id]) M.nodes[id].node.classList.add('hover');
+    M.links.forEach(function (link) { link.g.classList.toggle('hover', link.code === code); });
+    M.stage.classList.toggle('pointing', Boolean(id || code));
+    if (!id && !code) M.tip.hide();
+  }
+
+  function stationRows(st) {
+    var rows = [];
+    if (st.mw <= -1) rows.push({ cls: 'b-' + st.c, value: mw(-st.mw) + ' MW', label: st.c === 'storage' ? 'storing (charging or pumping)' : 'using' });
+    else rows.push({ cls: 'b-' + st.c, value: mw(Math.max(0, st.mw)) + ' MW', label: 'output now' });
+    var load = loadOf(st);
+    if (st.cap) rows.push({ value: load === null ? '–' : Math.round(load) + '%', label: 'of ' + mw(st.cap) + ' MW capacity' });
+    rows.push({ sep: true });
+    rows.push({ value: NAMES[st.c] || st.c, label: where(st) });
+    rows.push({ value: st.on + ' of ' + st.u, label: st.u === 1 ? 'unit running' : 'units running' });
+    if (st.i) rows.push({ value: String(st.i), label: st.i === 1 ? 'unit following a grid instruction' : 'units following grid instructions' });
+    return rows;
+  }
+  function showStationTip(st, p) {
+    var sideShown = byId('side').offsetParent !== null;
+    M.tip.show(st.n, stationRows(st), p[0], p[1], 'Modelled from Elexon data.' + (sideShown ? ' Select for the last 24 hours.' : ' Exit full screen for its last 24 hours.'));
+  }
+  function linkWords(link) {
+    if (!num(link.mw) || Math.abs(link.mw) < 10) return 'idle';
+    return gw(Math.abs(link.mw)) + ' GW ' + (link.mw > 0 ? 'in' : 'out');
+  }
+  function showLinkTip(link, p) {
+    var rows = [];
+    if (!num(link.mw) || Math.abs(link.mw) < 10) rows.push({ cls: 'b-imports', value: '0 GW', label: 'idle now' });
+    else rows.push({ cls: 'b-imports', value: gw(Math.abs(link.mw)) + ' GW', label: link.mw > 0 ? 'importing to GB' : 'exporting from GB' });
+    if (link.cap && num(link.mw)) rows.push({ value: Math.round(100 * Math.abs(link.mw) / link.cap) + '%', label: 'of ' + gw(link.cap) + ' GW capacity' });
+    rows.push({ sep: true });
+    if (link.gb && link.far) rows.push({ value: link.gb[2], label: 'to ' + link.far[2] + ', ' + link.country });
+    M.tip.show(link.name + ' (' + link.country + ')', rows, p[0], p[1], 'Measured flow, Elexon.');
+  }
+
+  function radius(st) {
+    if (isIdle(st)) return 3;
+    return Math.max(2.5, Math.sqrt(Math.abs(st.mw)) * M.K);
+  }
+
+  function drawMapData() {
+    var data = state.data;
+    if (!M.ready || !data || state.view !== 'map') return;
+    if (!data.model) {
+      var feed = data.status && data.status.units;
+      showMapMessage(feed && feed.last_error ? 'Station data unavailable: ' + feed.last_error : 'Collecting the first power station data. This takes about a minute after the dashboard starts.');
+    } else {
+      showMapMessage(null);
+    }
+    refreshStations();
+    drawLinks(data.links || []);
+    requestRedraw();
+  }
+
+  function refreshStations() {
+    var data = state.data;
+    if (!M.ready || !data) return;
+    var list = stationsOf(data);
+    var seen = {};
+    list.forEach(function (st) {
+      seen[st.id] = true;
+      var entry = M.nodes[st.id];
+      if (!entry) {
+        entry = M.nodes[st.id] = { node: s('circle', { 'class': 'st' }) };
+      }
+      entry.st = st;
+      var cls = 'st ';
+      if (st.mw <= -1) cls += 'using k-' + st.c;
+      else if (isIdle(st)) cls += 'idle k-' + st.c;
+      else cls += 'f-' + st.c + (st.off ? ' sea-st' : '');
+      if (state.selected === st.id) cls += ' sel';
+      if (M.hoverId === st.id) cls += ' hover';
+      if (state.highlight && state.highlight !== st.c) cls += ' dim';
+      entry.node.setAttribute('class', cls);
+      var visible = !state.hidden[st.c] && (state.showIdle || !isIdle(st));
+      entry.node.style.display = visible ? '' : 'none';
+      entry.visible = visible;
+    });
+    Object.keys(M.nodes).forEach(function (id) {
+      if (!seen[id]) { M.nodes[id].node.remove(); delete M.nodes[id]; }
+    });
+    M.order = list.map(function (st) { return M.nodes[st.id]; }).sort(function (a, b) { return radius(b.st) - radius(a.st); });
+    M.order.forEach(function (entry) { M.gStations.appendChild(entry.node); });
+  }
+
+  function drawLinks(links) {
+    var seen = {};
+    M.links = links.filter(function (link) { return link.gb && link.far; }).map(function (data) {
+      seen[data.code] = true;
+      var link = M.linkNodes[data.code];
+      if (!link) {
+        link = M.linkNodes[data.code] = { code: data.code, g: s('g', { 'class': 'link' }) };
+        link.base = s('path');
+        link.flow = s('path', { 'class': 'link-flow' });
+        link.arrow = s('path', { 'class': 'link-arrow' });
+        link.g.appendChild(link.base);
+        link.g.appendChild(link.flow);
+        link.g.appendChild(link.arrow);
+        M.gLinks.appendChild(link.g);
+        link.end = s('circle', { 'class': 'link-end', r: 3.5 });
+        link.gbEnd = s('circle', { 'class': 'link-gb', r: 3 });
+        link.label = s('text', { 'class': 'link-label' }, [s('tspan'), s('tspan', { 'class': 'v' })]);
+        M.gEnds.appendChild(link.end);
+        M.gEnds.appendChild(link.gbEnd);
+        M.gEnds.appendChild(link.label);
+      }
+      ['name', 'country', 'mw', 'cap', 'gb', 'far'].forEach(function (key) { link[key] = data[key]; });
+      link.flowing = num(link.mw) && Math.abs(link.mw) >= 10;
+      link.width = link.flowing ? 1.5 + 5 * Math.min(1, Math.abs(link.mw) / 1400) : 1.5;
+      link.base.setAttribute('class', link.flowing ? 'link-base' : 'link-idle');
+      link.base.style.strokeWidth = link.width + 'px';
+      link.flow.style.display = link.flowing ? '' : 'none';
+      link.arrow.style.display = link.flowing ? '' : 'none';
+      if (link.flowing) {
+        link.flow.style.strokeWidth = (link.width + 1.5) + 'px';
+        var share = link.cap ? Math.min(1, Math.abs(link.mw) / link.cap) : 0.5;
+        var duration = (2.6 - 1.6 * share).toFixed(1) + 's';
+        if (link.flow.style.animationDuration !== duration) link.flow.style.animationDuration = duration;
+      }
+      link.label.childNodes[0].textContent = link.name;
+      link.label.childNodes[1].textContent = linkWords(link);
+      return link;
+    });
+    Object.keys(M.linkNodes).forEach(function (code) {
+      if (seen[code]) return;
+      var link = M.linkNodes[code];
+      [link.g, link.end, link.gbEnd, link.label].forEach(function (node) { node.remove(); });
+      delete M.linkNodes[code];
+    });
+  }
+
+  function requestRedraw() {
+    if (M.raf) return;
+    M.raf = requestAnimationFrame(function () { M.raf = 0; redraw(); });
+  }
+
+  function sx(x) { return M.tx + x * M.s; }
+  function sy(y) { return M.ty + y * M.s; }
+
+  function redraw() {
+    if (!M.ready || state.view !== 'map') return;
+    var W = M.W, H = M.H;
+    M.gLand.setAttribute('transform', 'translate(' + M.tx.toFixed(2) + ' ' + M.ty.toFixed(2) + ') scale(' + M.s.toFixed(5) + ')');
+    M.screen = [];
+    M.order.forEach(function (entry) {
+      var st = entry.st, r = radius(st);
+      var x = sx(st.x), y = sy(st.y);
+      entry.node.setAttribute('cx', x.toFixed(1));
+      entry.node.setAttribute('cy', y.toFixed(1));
+      entry.node.setAttribute('r', r.toFixed(2));
+      if (entry.visible && x > -40 && x < W + 40 && y > -40 && y < H + 40) M.screen.push({ id: st.id, sx: x, sy: y, r: r, st: st });
+    });
+    M.links.forEach(redrawLink);
+    var taken = [];
+    placeLinkLabels(taken);
+    drawStationLabels(taken);
+    placeGeoLabels(taken);
+    drawSizeKey();
+  }
+
+  function overlaps(box, boxes) {
+    return boxes.some(function (b) { return box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]; });
+  }
+
+  /* Interconnector labels first (largest flows win), then stations, then place names */
+  function placeLinkLabels(taken) {
+    M.links.slice().sort(function (a, b) { return Math.abs(b.mw || 0) - Math.abs(a.mw || 0); }).forEach(function (link) {
+      var end = [sx(link.far[0]), sy(link.far[1])];
+      var place = LINK_LABEL[link.code] || [8, 4, 'start'];
+      var value = linkWords(link);
+      var width = Math.max(textWidth(link.name, 11.5, 400), textWidth(value, 11.5, 650));
+      var onScreen = end[0] > -30 && end[0] < M.W + 30 && end[1] > -30 && end[1] < M.H + 30;
+      var chosen = null;
+      if (onScreen) {
+        [place[1], place[1] - 24, place[1] + 24].some(function (dy) {
+          var x = end[0] + place[0], y = end[1] + dy;
+          var left = place[2] === 'start' ? x : place[2] === 'end' ? x - width : x - width / 2;
+          var shift = clamp(left, 6, M.W - width - 6) - left;
+          var box = [left + shift - 2, y - 19, left + shift + width + 2, y + 11];
+          if (box[1] < 2 || box[3] > M.H - 2 || overlaps(box, taken)) return false;
+          chosen = { x: x + shift, y: y, box: box };
+          return true;
+        });
+      }
+      link.label.style.display = chosen ? '' : 'none';
+      if (!chosen) return;
+      taken.push(chosen.box);
+      link.label.setAttribute('text-anchor', place[2]);
+      var spans = link.label.childNodes;
+      spans[0].setAttribute('x', chosen.x.toFixed(1));
+      spans[0].setAttribute('y', (chosen.y - 7).toFixed(1));
+      spans[1].setAttribute('x', chosen.x.toFixed(1));
+      spans[1].setAttribute('y', (chosen.y + 7).toFixed(1));
+      spans[1].textContent = value;
+    });
+  }
+
+  function placeGeoLabels(taken) {
+    M.geoLabels.forEach(function (label) {
+      var x = sx(label.x), y = sy(label.y);
+      var width = textWidth(label.node.textContent, 12.5, 400);
+      var box = [x - width / 2 - 2, y - 12, x + width / 2 + 2, y + 4];
+      var show = x > -width && x < M.W + width && y > 0 && y < M.H + 10 && !overlaps(box, taken);
+      label.node.style.display = show ? '' : 'none';
+      if (show) {
+        label.node.setAttribute('x', x.toFixed(1));
+        label.node.setAttribute('y', y.toFixed(1));
+      }
+    });
+  }
+
+  function redrawLink(link) {
+    var a = [sx(link.gb[0]), sy(link.gb[1])], b = [sx(link.far[0]), sy(link.far[1])];
+    var importing = num(link.mw) && link.mw > 0;
+    var p0 = importing ? b : a, p2 = importing ? a : b;
+    var dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+    var bend = (LINK_BEND[link.code] || 0.05) * len;
+    var c = [(a[0] + b[0]) / 2 - dy / len * bend, (a[1] + b[1]) / 2 + dx / len * bend];
+    var d = 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + 'Q' + c[0].toFixed(1) + ' ' + c[1].toFixed(1) + ' ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
+    link.base.setAttribute('d', d);
+    if (link.flow) link.flow.setAttribute('d', d);
+    link.pts = [];
+    for (var i = 0; i <= 20; i++) {
+      var t = i / 20, u = 1 - t;
+      link.pts.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p2[1]]);
+    }
+    if (link.arrow) {
+      var m = link.pts[10], ang = Math.atan2(p2[1] - p0[1], p2[0] - p0[0]) * 180 / Math.PI;
+      var size = 4 + link.width;
+      link.arrow.setAttribute('d', 'M' + size + ' 0L' + (-size * 0.8) + ' ' + (size * 0.75) + 'L' + (-size * 0.4) + ' 0L' + (-size * 0.8) + ' ' + (-size * 0.75) + 'Z');
+      link.arrow.setAttribute('transform', 'translate(' + m[0].toFixed(1) + ' ' + m[1].toFixed(1) + ') rotate(' + ang.toFixed(1) + ')');
+    }
+    link.end.setAttribute('cx', b[0].toFixed(1));
+    link.end.setAttribute('cy', b[1].toFixed(1));
+    link.gbEnd.setAttribute('cx', a[0].toFixed(1));
+    link.gbEnd.setAttribute('cy', a[1].toFixed(1));
+  }
+
+  function shortName(name) {
+    var suffix = ' Wind Farm';
+    return name.slice(-suffix.length) === suffix ? name.slice(0, -suffix.length) : name;
+  }
+
+  function drawStationLabels(taken) {
+    clear(M.gLabels);
+    var zoom = M.s / M.fitS;
+    var minMw = 800 / Math.pow(Math.max(1, zoom), 1.6);
+    var circles = [];
+    M.screen.forEach(function (item) { if (item.r >= 6) circles.push([item.sx - item.r * 0.7, item.sy - item.r * 0.7, item.sx + item.r * 0.7, item.sy + item.r * 0.7]); });
+    var candidates = M.screen.filter(function (item) { return item.st.mw >= minMw || item.id === state.selected; })
+      .sort(function (a, b) { return (b.id === state.selected) - (a.id === state.selected) || b.st.mw - a.st.mw; });
+    var placed = 0;
+    candidates.forEach(function (item) {
+      if (placed >= 14 + zoom * 4) return;
+      var text = shortName(item.st.n);
+      var width = textWidth(text, 12, 600), tall = 15;
+      var options = [
+        [item.sx + item.r + 4, item.sy + 4, 'start'],
+        [item.sx - item.r - 4, item.sy + 4, 'end'],
+        [item.sx, item.sy - item.r - 5, 'middle'],
+        [item.sx, item.sy + item.r + 14, 'middle']
+      ];
+      for (var i = 0; i < options.length; i++) {
+        var o = options[i];
+        var left = o[2] === 'start' ? o[0] : o[2] === 'end' ? o[0] - width : o[0] - width / 2;
+        var box = [left - 2, o[1] - tall + 3, left + width + 2, o[1] + 4];
+        if (box[0] < 4 || box[2] > M.W - 4 || box[1] < 4 || box[3] > M.H - 4) continue;
+        if (overlaps(box, taken) || overlaps(box, circles)) continue;
+        taken.push(box);
+        M.gLabels.appendChild(s('text', { x: o[0].toFixed(1), y: o[1].toFixed(1), 'text-anchor': o[2], 'class': 'st-label' + (item.st.off ? ' on-sea' : ''), text: text }));
+        placed++;
+        break;
+      }
+    });
+  }
+
+  function drawSizeKey() {
+    var host = byId('size-key');
+    var signature = M.K.toFixed(3);
+    if (host.getAttribute('data-k') === signature) return;
+    host.setAttribute('data-k', signature);
+    clear(host);
+    var sizes = [100, 500, 2000];
+    var rMax = Math.sqrt(sizes[2]) * M.K;
+    var x = 0, items = [];
+    sizes.forEach(function (size) {
+      var r = Math.sqrt(size) * M.K;
+      var text = size >= 1000 ? (size / 1000) + ' GW' : size + ' MW';
+      var width = Math.max(2 * r, textWidth(text, 11.5, 400));
+      items.push({ r: r, cx: x + width / 2, text: text });
+      x += width + 12;
+    });
+    var svg = s('svg', { width: Math.ceil(x - 12), height: Math.ceil(2 * rMax + 34) });
+    svg.appendChild(s('text', { x: 0, y: 11, text: 'Output now', 'font-weight': '600' }));
+    items.forEach(function (item) {
+      var base = 18 + 2 * rMax;
+      svg.appendChild(s('circle', { cx: item.cx.toFixed(1), cy: (base - item.r).toFixed(1), r: item.r.toFixed(1) }));
+      svg.appendChild(s('text', { x: item.cx.toFixed(1), y: base + 14, 'text-anchor': 'middle', text: item.text }));
+    });
+    host.appendChild(svg);
+  }
+
+  function select(id) {
+    if (state.selected === id) {
+      if (id !== null) renderDetail();
+      return;
+    }
+    if (state.selected && M.nodes[state.selected]) M.nodes[state.selected].node.classList.remove('sel');
+    state.selected = id;
+    if (id && M.nodes[id]) M.nodes[id].node.classList.add('sel');
+    renderDetail();
+    requestRedraw();
+    if (id && window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+      byId('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  /* ---------- side panel ---------- */
+
+  function renderSide() {
+    var data = state.data;
+    if (!data) return;
+    var model = data.model;
+    var when = byId('when');
+    if (model) {
+      when.textContent = 'At ' + hm(model.time || model.at) + '. Each circle is a power station, sized by what it’s generating.' +
+        (model.basis === 'measured' ? '' : ' Measured totals are delayed, so these are the stations’ own plans.');
+    } else {
+      when.textContent = 'Waiting for the first station data…';
+    }
+    if (changed('stats', [data.time, data.links, data.categories, data.demand_gw])) renderStats(data);
+    if (changed('fuels', [data.time, data.categories, state.hidden, state.highlight])) renderFuels(data);
+    if (changed('ic', [data.time, data.links])) renderInterconnectors(data);
+    if (changed('unmapped', [data.time, data.categories, data.model && data.model.unplaced_count])) renderUnmapped(data);
+    if (changed('fskey', [data.time, data.categories, data.links, state.fuelOrder])) renderFsKey(data);
+    byId('idle-toggle').checked = state.showIdle;
+    if (state.selected) renderDetail();
+  }
+
+  function renderStats(data) {
+    var host = clear(byId('stats'));
+    var net = netImports(data);
+    var stat = function (value, unit, label) {
+      return h('div', { cls: 'stat' }, [h('b', null, [value, h('small', { text: unit })]), h('span', { text: label })]);
+    };
+    host.appendChild(stat(gw(generationTotal(data)), 'GW', 'generated in GB'));
+    host.appendChild(stat(gw(Math.abs(net)), 'GW', net >= 0 ? 'net imports' : 'net exports'));
+    host.appendChild(stat(num(data.demand_gw) ? data.demand_gw.toFixed(1) : '–', 'GW', 'being used'));
+  }
+
+  function renderFuels(data) {
+    var host = clear(byId('fuels'));
+    var rows = CATS.map(function (key) { return category(data, key) || { key: key, label: NAMES[key] }; });
+    if (!state.fuelOrder || state.fuelOrderTime !== data.time) {
+      state.fuelOrder = rows.slice().sort(function (a, b) { return catTotal(b) - catTotal(a); }).map(function (c) { return c.key; });
+      state.fuelOrderTime = data.time;
+    }
+    var biggest = Math.max.apply(null, rows.map(catTotal).concat([1]));
+    state.fuelOrder.forEach(function (key) {
+      var c = category(data, key) || { key: key };
+      var total = catTotal(c);
+      if (total < 0.5 && key !== 'solar' && key !== 'wind' && !c.stations) return;
+      var mapped = Math.min(total, Math.max(0, c.mapped || 0));
+      var rest = Math.max(0, total - mapped);
+      var note;
+      if (key === 'solar') note = 'Rooftops and solar farms everywhere, so not drawn as stations.';
+      else {
+        var parts = [];
+        parts.push(c.stations ? 'From ' + plural(c.stations, 'station', 'stations') + ' on the map' : 'No stations generating');
+        if (key === 'wind' && c.embedded >= 50) parts.push(gw(c.embedded) + ' GW from small wind farms not drawn');
+        if (c.unplaced >= 50) parts.push(gw(c.unplaced) + ' GW from units without a location');
+        note = parts.join('; ') + '.';
+      }
+      var shown = !state.hidden[key];
+      var button = h('button', {
+        type: 'button', cls: 'fuel-btn', 'aria-pressed': String(shown),
+        'aria-label': NAMES[key] + ', ' + gw(total) + ' gigawatts. ' + (shown ? 'Shown on the map; select to hide.' : 'Hidden; select to show.'),
+        onclick: function () {
+          if (key === 'solar') return;
+          if (state.hidden[key]) delete state.hidden[key]; else state.hidden[key] = true;
+          savePrefs();
+          signatures.fuels = null;
+          renderFuels(state.data);
+          refreshStations();
+          requestRedraw();
+        },
+        onmouseenter: function () { if (key !== 'solar') { state.highlight = key; refreshStations(); requestRedraw(); } },
+        onmouseleave: function () { if (state.highlight) { state.highlight = null; refreshStations(); requestRedraw(); } }
+      }, [
+        h('span', { cls: 'sw b-' + key }),
+        h('span', { cls: 'name', text: NAMES[key] }),
+        h('span', { cls: 'val' }, [gw(total), h('small', { text: 'GW' })]),
+        h('span', { cls: 'track', 'aria-hidden': 'true' }, [
+          mapped > 0 ? h('i', { cls: 'b-' + key, style: 'width:' + (100 * mapped / biggest).toFixed(2) + '%' }) : null,
+          rest > 0 ? h('i', { cls: 'rest b-' + key, style: 'width:' + (100 * rest / biggest).toFixed(2) + '%' }) : null
+        ]),
+        h('span', { cls: 'note', text: note })
+      ]);
+      if (key === 'solar') { button.setAttribute('aria-disabled', 'true'); button.removeAttribute('aria-pressed'); button.style.cursor = 'default'; }
+      host.appendChild(h('li', null, button));
+    });
+  }
+
+  function countryGroups(links) {
+    var groups = {}, order = [];
+    links.forEach(function (link) {
+      if (!groups[link.country]) { groups[link.country] = { country: link.country, mw: 0, links: [] }; order.push(link.country); }
+      groups[link.country].mw += num(link.mw) ? link.mw : 0;
+      groups[link.country].links.push(link);
+    });
+    return order.map(function (key) { return groups[key]; }).sort(function (a, b) { return b.mw - a.mw; });
+  }
+
+  function renderInterconnectors(data) {
+    var host = clear(byId('ic'));
+    var links = data.links || [];
+    var net = netImports(data);
+    byId('net').textContent = links.length ? (Math.abs(net) < 50 ? 'Balanced' : 'Net ' + gw(Math.abs(net)) + ' GW ' + (net > 0 ? 'in' : 'out')) : '';
+    if (!links.length) { host.appendChild(h('li', { cls: 'empty', text: 'Waiting for interconnector data…' })); return; }
+    countryGroups(links).forEach(function (group) {
+      var v = Math.abs(group.mw) < 10 ? 'Idle' : gw(Math.abs(group.mw)) + ' GW ' + (group.mw > 0 ? 'in' : 'out');
+      host.appendChild(h('li', null, [
+        h('span', { cls: 'who', text: group.country }),
+        h('span', { cls: 'fv', text: v }),
+        h('span', { cls: 'cables', text: group.links.map(function (link) { return link.name + ' ' + linkWords(link); }).join(', ') })
+      ]));
+    });
+  }
+
+  function renderUnmapped(data) {
+    var host = clear(byId('unmapped'));
+    var wind = category(data, 'wind'), solar = category(data, 'solar');
+    var model = data.model;
+    var parts = [];
+    if (solar && num(solar.embedded)) parts.push('solar (' + gw(solar.embedded) + ' GW)');
+    if (wind && num(wind.embedded)) parts.push('small wind farms (' + gw(wind.embedded) + ' GW)');
+    host.appendChild(h('p', { text: parts.length ? 'Power from thousands of small sites, such as ' + parts.join(' and ') + ', is only known as a national total, so it isn’t drawn.' : 'Waiting for data…' }));
+    if (model && model.unplaced_count) {
+      var unplaced = 0;
+      (data.categories || []).forEach(function (c) { unplaced += c.unplaced || 0; });
+      var p = h('p', null, [plural(model.unplaced_count, 'unit', 'units') + ' (' + gw(unplaced) + ' GW) aren’t matched to a location yet. ']);
+      p.appendChild(h('a', { href: '/stations#unplaced-title', text: 'See the list', onclick: function (e) { e.preventDefault(); setView('stations', true); setTimeout(function () { byId('unplaced-title').scrollIntoView(); }, 50); } }));
+      host.appendChild(p);
+    }
+  }
+
+  function stationById(id) {
+    var found = null;
+    stationsOf(state.data).forEach(function (st) { if (st.id === id) found = st; });
+    return found;
+  }
+
+  function renderDetail() {
+    var host = byId('detail');
+    var st = state.selected ? stationById(state.selected) : null;
+    if (!st) { host.hidden = true; clear(host); return; }
+    host.hidden = false;
+    clear(host);
+    host.className = 'detail';
+    var load = loadOf(st);
+    host.appendChild(h('div', { cls: 'detail-head' }, [
+      h('div', null, [
+        h('h2', { text: st.n }),
+        h('p', { cls: 'meta' }, [h('span', { cls: 'sw b-' + st.c, style: 'margin-right:6px;vertical-align:-1px' }), NAMES[st.c] + ', ' + where(st)])
+      ]),
+      h('button', { type: 'button', cls: 'close', 'aria-label': 'Close station details', text: '×', onclick: function () { select(null); } })
+    ]));
+    var big = st.mw <= -1 ? [mw(-st.mw), h('small', { text: 'MW being stored' })] : [mw(Math.max(0, st.mw)), h('small', { text: 'MW now' })];
+    host.appendChild(h('div', { cls: 'big' }, big));
+    host.appendChild(h('p', { cls: 'cap', text: (st.cap ? (load === null ? '' : Math.round(load) + '% of its ' + mw(st.cap) + ' MW capacity. ') : '') +
+      st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '.' }));
+    var box = h('div', { cls: 'chart-box' });
+    host.appendChild(box);
+    loadStationChart(st, box);
+  }
+
+  function loadStationChart(st, box) {
+    var cached = state.stationHistory[st.id];
+    var fresh = cached && Date.now() - cached.fetched < 60000;
+    if (cached) drawStationChart(st, cached.data, box);
+    else box.appendChild(h('p', { cls: 'empty', text: 'Loading the last 24 hours…' }));
+    if (fresh) return;
+    fetchText('/api/station?id=' + st.id).then(function (text) {
+      var data = JSON.parse(text);
+      state.stationHistory[st.id] = { fetched: Date.now(), data: data };
+      if (box.isConnected) drawStationChart(st, data, box);
+    }).catch(function () {
+      if (box.isConnected && !cached) { clear(box); box.appendChild(h('p', { cls: 'empty', text: 'Couldn’t load this station’s history.' })); }
+    });
+  }
+
+  function drawStationChart(st, history, box) {
+    clear(box);
+    var points = history.points || [];
+    if (points.length < 2) {
+      box.appendChild(h('p', { cls: 'empty', text: 'History builds up from when the dashboard started' + (history.since ? ' (' + hm(history.since) + ')' : '') + '. Check back in a few minutes.' }));
+      return;
+    }
+    var width = Math.max(240, box.clientWidth || 300), height = 132;
+    var padL = 34, padR = 8, padT = 10, padB = 20;
+    var end = Math.floor(Date.now() / 1000), start = end - 86400;
+    var values = points.map(function (p) { return p[1]; });
+    var hi = Math.max(st.cap || 0, Math.max.apply(null, values), 10);
+    var lo = Math.min(0, Math.min.apply(null, values));
+    var step = niceStep(hi - lo, 3);
+    hi = Math.ceil(hi / step) * step;
+    lo = Math.floor(lo / step) * step;
+    var x = function (t) { return padL + (t - start) / 86400 * (width - padL - padR); };
+    var y = function (v) { return padT + (hi - v) / (hi - lo || 1) * (height - padT - padB); };
+    var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': st.n + ' output over the last 24 hours' });
+    for (var v = lo; v <= hi + 0.001; v += step) {
+      svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
+      svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (y(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: v >= 1000 ? (v / 1000) + 'k' : String(v) }));
+    }
+    for (var hour = Math.ceil(start / 21600) * 21600; hour <= end; hour += 21600) {
+      svg.appendChild(s('text', { 'class': 'axis-text', x: x(hour).toFixed(1), y: height - 4, 'text-anchor': 'middle', text: hm(hour) }));
+    }
+    var line = '', area = '', prev = null, segments = [];
+    points.forEach(function (p) {
+      if (p[0] < start) return;
+      var gap = prev && p[0] - prev[0] > 900;
+      if (!prev || gap) { if (line) segments.push(line); line = 'M'; } else line += 'L';
+      line += x(p[0]).toFixed(1) + ' ' + y(p[1]).toFixed(1);
+      prev = p;
+    });
+    if (line) segments.push(line);
+    segments.forEach(function (d) {
+      var first = d.slice(1).split('L')[0], last = d.split('L').pop().replace('M', '');
+      area = d + 'L' + last.split(' ')[0] + ' ' + y(0).toFixed(1) + 'L' + first.split(' ')[0] + ' ' + y(0).toFixed(1) + 'Z';
+      svg.appendChild(s('path', { d: area, 'class': 'area f-' + st.c }));
+      svg.appendChild(s('path', { d: d, 'class': 'series k-' + st.c }));
+    });
+    if (st.cap) svg.appendChild(s('line', { x1: padL, x2: width - padR, y1: y(st.cap).toFixed(1), y2: y(st.cap).toFixed(1), stroke: 'var(--axis)', 'stroke-dasharray': '3 3' }));
+    var cross = s('line', { 'class': 'xhair', y1: padT, y2: height - padB, visibility: 'hidden' });
+    svg.appendChild(cross);
+    box.appendChild(svg);
+    var tip = makeTip(box);
+    svg.addEventListener('pointermove', function (e) {
+      var rect = svg.getBoundingClientRect();
+      var px = (e.clientX - rect.left) * width / rect.width;
+      var t = start + (px - padL) / (width - padL - padR) * 86400;
+      var best = null;
+      points.forEach(function (p) { if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p; });
+      if (!best || Math.abs(best[0] - t) > 1200) { tip.hide(); cross.setAttribute('visibility', 'hidden'); return; }
+      cross.setAttribute('x1', x(best[0]).toFixed(1));
+      cross.setAttribute('x2', x(best[0]).toFixed(1));
+      cross.setAttribute('visibility', 'visible');
+      tip.show(hm(best[0]), [{ cls: 'b-' + st.c, value: mw(best[1]) + ' MW', label: 'output' }], x(best[0]) * rect.width / width, 40);
+    });
+    svg.addEventListener('pointerleave', function () { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
+    if (history.since && history.since > start + 1800) {
+      box.appendChild(h('p', { cls: 'empty', text: 'History starts at ' + hm(history.since) + ', when the dashboard began recording stations.' }));
+    }
+  }
+
+  /* ---------- stations view ---------- */
+
+  function renderStationsView() {
+    var data = state.data;
+    if (!data) return;
+    var model = data.model;
+    byId('st-lede').textContent = model
+      ? 'Every grid-connected power station and link to another country, with what each was doing at ' + hm(model.time || model.at) + '.'
+      : 'Waiting for the first station data. This takes about a minute after the dashboard starts.';
+    if (changed('nations', [data.time, data.stations && data.stations.length, model && model.at])) renderNations(data);
+    if (changed('types', [data.time, data.categories, model && model.scale])) renderTypes(data);
+    if (changed('links', [data.time, data.links])) renderLinksTable(data);
+    renderStationFilters();
+    renderStationsTable(data);
+    if (changed('unplaced', [data.unplaced])) renderUnplaced(data);
+    byId('method-model').textContent = model ? (plural(model.counts.units, 'unit', 'units') + ' are reporting; ' + model.counts.placed + ' of them are placed at ' +
+      plural(stationsOf(data).length, 'station', 'stations') + ' on the map. ' + (model.reference_error ? 'The BM unit register couldn’t be loaded (' + model.reference_error + '), so units are matched by ID only.' : 'Unit names and types come from Elexon’s BM unit register (' + model.reference_units + ' units).')) : '';
+  }
+
+  function renderNations(data) {
+    var host = clear(byId('nations'));
+    var nations = ['Scotland', 'England', 'Wales'];
+    var totals = {};
+    nations.forEach(function (n) { totals[n] = { all: 0, offshore: 0, cats: {} }; });
+    stationsOf(data).forEach(function (st) {
+      var t = totals[st.na];
+      if (!t || st.mw <= 0) return;
+      t.all += st.mw;
+      if (st.off) t.offshore += st.mw;
+      t.cats[st.c] = (t.cats[st.c] || 0) + st.mw;
+    });
+    var biggest = Math.max.apply(null, nations.map(function (n) { return totals[n].all; }).concat([1]));
+    var used = {};
+    var tip = makeTip(byId('nations'));
+    nations.forEach(function (n) {
+      var t = totals[n];
+      var bar = h('div', { cls: 'bar', role: 'img', 'aria-label': n + ': ' + CATS.filter(function (c) { return t.cats[c]; }).map(function (c) { return NAMES[c] + ' ' + gw(t.cats[c]) + ' GW'; }).join(', ') });
+      CATS.forEach(function (c) {
+        if (!t.cats[c]) return;
+        used[c] = true;
+        var seg = h('i', { cls: 'b-' + c, style: 'width:' + (100 * t.cats[c] / biggest).toFixed(2) + '%' });
+        seg.addEventListener('pointermove', function (e) {
+          var rect = byId('nations').getBoundingClientRect();
+          tip.show(n + ': ' + NAMES[c], [{ cls: 'b-' + c, value: gw(t.cats[c]) + ' GW', label: Math.round(100 * t.cats[c] / t.all) + '% of ' + n + '’s mapped output' }], e.clientX - rect.left, e.clientY - rect.top);
+        });
+        seg.addEventListener('pointerleave', function () { tip.hide(); });
+        bar.appendChild(seg);
+      });
+      host.appendChild(h('div', { cls: 'nation' }, [
+        h('div', { cls: 'label' }, [n, h('small', { text: t.offshore >= 1 ? gw(t.offshore) + ' GW offshore' : '' })]),
+        bar,
+        h('div', { cls: 'total', text: gw(t.all) + ' GW' })
+      ]));
+    });
+    var legend = clear(byId('nations-legend'));
+    CATS.forEach(function (c) { if (used[c]) legend.appendChild(h('li', null, [h('span', { cls: 'sw b-' + c }), NAMES[c]])); });
+  }
+
+  function renderTypes(data) {
+    var table = clear(byId('types-table'));
+    var scale = (data.model && data.model.scale) || {};
+    var scaleFor = { wind: ['WIND'], nuclear: ['NUCLEAR'], gas: ['CCGT', 'OCGT'], biomass: ['BIOMASS'], hydro: ['NPSHYD'], storage: ['PS', 'BATTERY', 'BESS'], other: ['OTHER', 'COAL', 'OIL'] };
+    table.appendChild(h('thead', null, h('tr', null, [
+      h('th', { text: 'Type' }), h('th', { cls: 'num', text: 'Now (GW)' }), h('th', { cls: 'num', text: 'On the map' }),
+      h('th', { cls: 'num hide-sm', text: 'Stations' }), h('th', { cls: 'num hide-sm', text: 'Model scale' })
+    ])));
+    var body = h('tbody');
+    var sum = 0, mapped = 0;
+    CATS.forEach(function (key) {
+      var c = category(data, key);
+      if (!c) return;
+      var total = catTotal(c);
+      sum += total;
+      mapped += Math.max(0, c.mapped || 0);
+      var factors = (scaleFor[key] || []).map(function (code) { return scale[code]; }).filter(num);
+      var factorText = factors.length ? '×' + factors.map(function (f) { return f.toFixed(2); }).join(', ×') : '–';
+      body.appendChild(h('tr', null, [
+        h('td', null, h('span', { cls: 'typ' }, [h('span', { cls: 'sw b-' + key }), NAMES[key]])),
+        h('td', { cls: 'num', text: gw(total) }),
+        h('td', { cls: 'num', text: key === 'solar' ? 'not drawn' : (total > 0 ? Math.round(100 * Math.min(total, c.mapped || 0) / total) + '%' : '–') }),
+        h('td', { cls: 'num hide-sm', text: c.stations ? String(c.stations) : '–' }),
+        h('td', { cls: 'num hide-sm muted', text: factorText })
+      ]));
+    });
+    table.appendChild(body);
+    table.appendChild(h('tfoot', null, h('tr', null, [
+      h('td', { text: 'Total generated in GB' }), h('td', { cls: 'num', text: gw(sum) }),
+      h('td', { cls: 'num', text: sum ? Math.round(100 * mapped / sum) + '%' : '–' }), h('td', { cls: 'hide-sm' }), h('td', { cls: 'hide-sm' })
+    ])));
+  }
+
+  function renderLinksTable(data) {
+    var table = clear(byId('links-table'));
+    var links = (data.links || []).slice().sort(function (a, b) { return (b.mw || 0) - (a.mw || 0); });
+    var net = netImports(data);
+    byId('links-sub').textContent = 'Cables to other countries, measured. ' + (links.length ? (Math.abs(net) < 50 ? 'Imports and exports roughly balance.' : 'Net ' + gw(Math.abs(net)) + ' GW ' + (net > 0 ? 'into' : 'out of') + ' Great Britain.') : '') +
+      ' Bars run right for imports and left for exports, against each cable’s capacity.';
+    table.appendChild(h('thead', null, h('tr', null, [
+      h('th', { text: 'Link' }), h('th', { cls: 'num', text: 'Flow' }), h('th', { cls: 'num hide-sm', text: 'Out and in' })
+    ])));
+    var body = h('tbody');
+    links.forEach(function (link) {
+      var share = link.cap && num(link.mw) ? Math.min(1, Math.abs(link.mw) / link.cap) : 0;
+      var bar = h('span', { cls: 'diverge', 'aria-hidden': 'true' }, [h('i', { cls: (link.mw > 0 ? 'in' : 'out') + ' b-imports', style: 'width:' + (50 * share).toFixed(1) + '%' })]);
+      body.appendChild(h('tr', null, [
+        h('td', null, [
+          h('span', { cls: 'name', text: link.name }), h('span', { cls: 'tag', text: link.country }),
+          h('span', { cls: 'route', text: link.gb && link.far ? link.gb[2] + ' to ' + link.far[2] + (link.cap ? ', ' + gw(link.cap) + ' GW' : '') : (link.note || '') })
+        ]),
+        h('td', { cls: 'num', text: linkWords(link) }),
+        h('td', { cls: 'num hide-sm' }, bar)
+      ]));
+    });
+    table.appendChild(body);
+  }
+
+  function renderStationFilters() {
+    var nationHost = byId('nation-filter');
+    var options = [['all', 'All'], ['Scotland', 'Scotland'], ['England', 'England'], ['Wales', 'Wales'], ['offshore', 'Offshore']];
+    if (!nationHost.childNodes.length) {
+      options.forEach(function (o) {
+        nationHost.appendChild(h('button', { type: 'button', text: o[1], 'data-v': o[0], onclick: function () { state.nation = o[0]; state.showAll = false; renderStationsTable(state.data); renderStationFilters(); } }));
+      });
+    }
+    Array.prototype.forEach.call(nationHost.childNodes, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === state.nation)); });
+    var chips = byId('fuel-chips');
+    if (!chips.childNodes.length) {
+      CATS.forEach(function (c) {
+        if (c === 'solar') return;
+        chips.appendChild(h('button', { type: 'button', cls: 'chip', 'data-c': c, onclick: function () {
+          if (state.cats[c]) delete state.cats[c]; else state.cats[c] = true;
+          state.showAll = false;
+          renderStationFilters();
+          renderStationsTable(state.data);
+        } }, [h('span', { cls: 'sw b-' + c }), NAMES[c]]));
+      });
+    }
+    var any = Object.keys(state.cats).length > 0;
+    Array.prototype.forEach.call(chips.childNodes, function (b) { b.setAttribute('aria-pressed', String(any ? Boolean(state.cats[b.getAttribute('data-c')]) : false)); });
+  }
+
+  var COLUMNS = [
+    { key: 'n', label: 'Station', cls: '' },
+    { key: 'c', label: 'Type', cls: 'hide-sm' },
+    { key: 'na', label: 'Where', cls: 'hide-sm' },
+    { key: 'mw', label: 'Output (MW)', cls: 'num' },
+    { key: 'cap', label: 'Capacity (MW)', cls: 'num hide-sm' },
+    { key: 'load', label: 'Running at', cls: 'num' }
+  ];
+
+  function filteredStations(data) {
+    var q = state.query.trim().toLowerCase();
+    var anyCat = Object.keys(state.cats).length > 0;
+    return stationsOf(data).filter(function (st) {
+      if (!state.includeIdle && isIdle(st)) return false;
+      if (anyCat && !state.cats[st.c]) return false;
+      if (state.nation === 'offshore' && !st.off) return false;
+      if (state.nation !== 'all' && state.nation !== 'offshore' && st.na !== state.nation) return false;
+      if (q && st.n.toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+
+  function sortValue(st, key) {
+    if (key === 'load') return loadOf(st) === null ? -1 : loadOf(st);
+    if (key === 'c') return NAMES[st.c] || st.c;
+    if (key === 'na') return where(st);
+    if (key === 'cap') return st.cap || 0;
+    return st[key];
+  }
+
+  function renderStationsTable(data) {
+    if (!data) return;
+    var table = clear(byId('stations-table'));
+    var rows = filteredStations(data);
+    var key = state.sort.key, dir = state.sort.dir;
+    rows.sort(function (a, b) {
+      var va = sortValue(a, key), vb = sortValue(b, key);
+      if (typeof va === 'string') return dir * va.localeCompare(vb);
+      return dir * (va - vb) || a.n.localeCompare(b.n);
+    });
+    var total = rows.length, limit = state.showAll ? rows.length : 60;
+    byId('st-count').textContent = plural(total, 'station', 'stations') + (state.includeIdle ? '' : ' generating') + (total > limit ? ', showing the top ' + limit : '');
+    var more = byId('more-btn');
+    more.hidden = total <= limit && !state.showAll;
+    more.textContent = state.showAll ? 'Show fewer' : 'Show all ' + total;
+    var head = h('tr');
+    COLUMNS.forEach(function (col) {
+      var active = col.key === key;
+      var th = h('th', { cls: col.cls, 'aria-sort': active ? (dir > 0 ? 'ascending' : 'descending') : null }, h('button', {
+        type: 'button', cls: 'sort-btn', onclick: function () {
+          if (state.sort.key === col.key) state.sort.dir = -state.sort.dir;
+          else state.sort = { key: col.key, dir: (col.key === 'n' || col.key === 'c' || col.key === 'na') ? 1 : -1 };
+          renderStationsTable(state.data);
+        }
+      }, [col.label, active ? (dir > 0 ? ' ↑' : ' ↓') : '']));
+      head.appendChild(th);
+    });
+    table.appendChild(h('thead', null, head));
+    var body = h('tbody');
+    if (!rows.length) body.appendChild(h('tr', null, h('td', { colspan: COLUMNS.length, cls: 'muted', text: stationsOf(data).length ? 'No stations match.' : 'Waiting for station data…' })));
+    rows.slice(0, limit).forEach(function (st) {
+      var load = loadOf(st);
+      var open = state.openRow === st.id;
+      var tr = h('tr', { cls: 'row' + (open ? ' open' : ''), tabindex: '0', 'aria-expanded': String(open), onclick: function () { toggleRow(st.id); },
+        onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(st.id); } } }, [
+        h('td', null, [h('span', { cls: 'name', text: st.n }), st.off ? h('span', { cls: 'tag', text: 'Offshore' }) : null, st.i ? h('span', { cls: 'tag', text: 'Instructed' }) : null]),
+        h('td', { cls: 'hide-sm' }, h('span', { cls: 'typ' }, [h('span', { cls: 'sw b-' + st.c }), NAMES[st.c]])),
+        h('td', { cls: 'hide-sm muted', text: st.na }),
+        h('td', { cls: 'num', text: st.mw <= -1 ? '−' + mw(-st.mw) : mw(Math.max(0, st.mw)) }),
+        h('td', { cls: 'num hide-sm muted', text: st.cap ? mw(st.cap) : '–' }),
+        h('td', { cls: 'num' }, load === null ? (st.mw <= -1 ? 'Storing' : '–') : [h('span', { cls: 'load', 'aria-hidden': 'true' }, h('i', { cls: 'b-' + st.c, style: 'width:' + load.toFixed(1) + '%' })), Math.round(load) + '%'])
+      ]);
+      body.appendChild(tr);
+      if (open) {
+        var cell = h('td', { colspan: COLUMNS.length });
+        var box = h('div', { cls: 'chart-box' });
+        cell.appendChild(h('p', { cls: 'cap', style: 'margin:8px 0 4px;font-size:13px;color:var(--ink-2)', text: NAMES[st.c] + ', ' + where(st) + '. ' + st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '. Last 24 hours:' }));
+        cell.appendChild(box);
+        body.appendChild(h('tr', { cls: 'detail-row' }, cell));
+        loadStationChart(st, box);
+      }
+    });
+    table.appendChild(body);
+  }
+
+  function toggleRow(id) {
+    state.openRow = state.openRow === id ? null : id;
+    renderStationsTable(state.data);
+  }
+
+  function renderUnplaced(data) {
+    var table = clear(byId('unplaced-table'));
+    var list = data.unplaced || [];
+    var count = (data.model && data.model.unplaced_count) || 0;
+    byId('unplaced-sub').textContent = count
+      ? plural(count, 'unit is', 'units are') + ' generating or storing without a known location. Their output still counts in the totals. The dashboard log lists the largest once a day.'
+      : 'Every unit that’s running is matched to a station on the map.';
+    if (!list.length) return;
+    table.appendChild(h('thead', null, h('tr', null, [h('th', { text: 'Unit' }), h('th', { text: 'Registered to' }), h('th', { cls: 'hide-sm', text: 'Type' }), h('th', { cls: 'num', text: 'MW' })])));
+    var body = h('tbody');
+    list.forEach(function (u) {
+      body.appendChild(h('tr', null, [
+        h('td', { cls: 'name', text: u.unit }), h('td', { cls: 'muted', text: u.name || '–' }),
+        h('td', { cls: 'hide-sm' }, h('span', { cls: 'typ' }, [h('span', { cls: 'sw b-' + u.cat }), NAMES[u.cat] || u.cat])),
+        h('td', { cls: 'num', text: u.mw < 0 ? '−' + mw(-u.mw) : mw(u.mw) })
+      ]));
+    });
+    table.appendChild(body);
+  }
+
+  byId('search').addEventListener('input', function (e) { state.query = e.target.value; state.showAll = false; renderStationsTable(state.data); });
+  byId('idle-filter').addEventListener('change', function (e) { state.includeIdle = e.target.checked; renderStationsTable(state.data); });
+  byId('more-btn').addEventListener('click', function () { state.showAll = !state.showAll; renderStationsTable(state.data); });
+  byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); refreshStations(); requestRedraw(); });
+  byId('how-btn').addEventListener('click', function (e) {
+    var open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    byId('how').hidden = !open;
+  });
+
+  /* ---------- theme ---------- */
+
+  var themes = ['auto', 'light', 'dark'];
+  var theme = 'auto';
+  try { theme = localStorage.getItem('gb-grid-theme') || 'auto'; } catch (error) { theme = 'auto'; }
+  function applyTheme(name) {
+    theme = themes.indexOf(name) >= 0 ? name : 'auto';
+    if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', theme);
+    var button = byId('theme-btn');
+    clear(button);
+    button.appendChild(h('span', { cls: 'theme-word', text: 'Theme: ' }));
+    button.appendChild(document.createTextNode(theme));
+    button.setAttribute('aria-label', 'Colour theme is ' + theme + '. Select to change.');
+  }
+  applyTheme(theme);
+  byId('theme-btn').addEventListener('click', function () {
+    applyTheme(themes[(themes.indexOf(theme) + 1) % themes.length]);
+    try { localStorage.setItem('gb-grid-theme', theme); } catch (error) { /* storage unavailable */ }
+    signatures = {};
+    render();
+  });
+
+  var lastWidth = 0, resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      var width = document.documentElement.clientWidth;
+      if (Math.abs(width - lastWidth) < 8) return;
+      lastWidth = width;
+      signatures = {};
+      render();
+    }, 160);
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.year'), function (node) { node.textContent = String(new Date().getFullYear()); });
+  initMap();
+  setView(viewFromPath(), false);
+  tick();
+})();
+</script>
+</body>
+</html>

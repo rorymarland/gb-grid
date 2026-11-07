@@ -1,0 +1,51 @@
+# GB Grid: a live dashboard and power station map for the Great Britain
+# electricity grid. https://github.com/rorymarland/gb-grid
+#
+# Put this file in a folder, optionally with .env.example copied to .env,
+# then run: docker compose up -d
+# The dashboard is then at http://<host>:8080 (or the GRID_PORT you set).
+# Every setting has a default, so the .env file is optional.
+
+services:
+  gb-grid:
+    # 1 follows 1.x releases. Pin an exact version (for example 1.0.0) if you
+    # prefer to upgrade by hand.
+    image: ghcr.io/rorymarland/gb-grid:1
+    container_name: gb-grid
+    restart: unless-stopped
+    ports:
+      - "${GRID_PORT:-8080}:8080"
+    volumes:
+      - gb-grid-data:/data
+    environment:
+      TZ: ${TZ:-Europe/London}
+      CARBON_REGION_ID: ${CARBON_REGION_ID:-0}
+      HISTORY_DAYS: ${HISTORY_DAYS:-7}
+      BROWSER_REFRESH_SECONDS: ${BROWSER_REFRESH_SECONDS:-10}
+      POLL_GENERATION_SECONDS: ${POLL_GENERATION_SECONDS:-60}
+      POLL_FREQUENCY_SECONDS: ${POLL_FREQUENCY_SECONDS:-20}
+      POLL_CARBON_SECONDS: ${POLL_CARBON_SECONDS:-300}
+      POLL_PRICE_SECONDS: ${POLL_PRICE_SECONDS:-300}
+      POLL_SOLAR_SECONDS: ${POLL_SOLAR_SECONDS:-300}
+      POLL_EMBEDDED_SECONDS: ${POLL_EMBEDDED_SECONDS:-1800}
+      POLL_DEMAND_UPDATE_SECONDS: ${POLL_DEMAND_UPDATE_SECONDS:-3600}
+      POLL_UNITS_SECONDS: ${POLL_UNITS_SECONDS:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ACCESS_LOG: ${ACCESS_LOG:-false}
+    # Hardening: nothing in the container needs to write outside /data and
+    # /tmp, or needs any Linux capabilities.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  gb-grid-data:
