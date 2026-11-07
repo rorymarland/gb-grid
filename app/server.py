@@ -1882,6 +1882,7 @@ class Outlook:
                     if v is not None and item.get('boundary', 'N') == 'N' and (t not in best or published > best[t][0]):
                         best[t] = (published, v)
             self.raw['demand'] = raw
+            self.raw['demand_sample'] = [items[:2] if items else [], [sorted(best)[:3], len(best)]]
             self.demand = [(t, best[t][1]) for t in sorted(best)]
         except (FetchError, KeyError, ValueError) as error:
             errors.append('demand: %s' % error)
