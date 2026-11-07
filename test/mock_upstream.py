@@ -62,6 +62,36 @@ def demand_mw(t):
     return base + 2500 * math.exp(-((h - 17.5) ** 2) / 2.0)
 
 
+
+HISTORY_START = int(datetime(2009, 1, 1, tzinfo=timezone.utc).timestamp())
+COAL_END = int(datetime(2024, 9, 30, tzinfo=timezone.utc).timestamp())
+
+
+def history_row(t):
+    """A synthetic half hour of NESO's historic generation mix since 2009."""
+    year = 2009 + (t - HISTORY_START) / (365.25 * 86400)
+    season = math.cos(2 * math.pi * (t % 31557600) / 31557600)  # +1 in January
+    demand = (demand_mw(t) * 1.25) * (1 - 0.012 * (year - 2009)) * (1 + 0.12 * season)
+    gust = 0.55 + 0.45 * math.sin(t / 41000.0) + 0.25 * math.sin(t / 9000.0 + 1.3) + 0.2 * season
+    wind = max(80.0, (250 + 52 * (year - 2009) ** 2.0) * max(0.05, gust))
+    wind_emb = wind * 0.16
+    solar = solar_mw(t) * min(1.4, max(0.0, (year - 2011) / 9.0)) * (1.1 - 0.5 * season)
+    nuclear = 7600 - 170 * (year - 2009) + 400 * math.sin(t / 900000.0)
+    coal = 0.0 if t >= COAL_END else max(0.0, 15500 * min(1.0, (2017.0 - year) / 5.0) * (1 + 0.15 * season)) if year < 2017 else 400.0 * (1 + season)
+    biomass = min(3300.0, max(0.0, 400 * (year - 2012)))
+    hydro = 330 + 120 * math.sin(t / 15000.0)
+    imports = 1500 + 300 * (year - 2009) * (0.6 + 0.4 * math.sin(t / 20000.0))
+    other = 350.0
+    storage = max(0.0, 600 * math.sin(math.pi * (hour_of_day(t) - 16) / 6)) if 16 <= hour_of_day(t) <= 22 else 0.0
+    gas = max(1200.0, demand - wind - wind_emb - solar - nuclear - coal - biomass - hydro - imports - other - storage)
+    generation = gas + coal + nuclear + wind + wind_emb + hydro + imports + biomass + other + solar + storage
+    ci = (gas * 394 + coal * 937 + other * 300 + imports * 180 + biomass * 120) / generation
+    return {'DATETIME': datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+            'GAS': round(gas), 'COAL': round(coal), 'NUCLEAR': round(nuclear), 'WIND': round(wind), 'WIND_EMB': round(wind_emb),
+            'HYDRO': round(hydro), 'IMPORTS': round(imports), 'BIOMASS': round(biomass), 'OTHER': round(other),
+            'SOLAR': round(solar), 'STORAGE': round(storage), 'GENERATION': round(generation), 'CARBON_INTENSITY': round(ci)}
+
+
 def fuels(t):
     wind_tx = wind_total(t) * 0.82
     emb_wind = wind_total(t) * 0.18
@@ -597,6 +627,32 @@ class Handler(BaseHTTPRequestHandler):
                     lines.append('%s,%d,25000,%s,26000,23000,%d,6600,%d,17000,0,0,0,0,0,0,0,0,0,0,0,0,0' % (
                         date_text, period, flag, emb_wind, sol))
             return self.send(200, '\n'.join(lines) + '\n', 'text/csv')
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'historic-generation-mix':
+            return self.send(200, {'success': True, 'result': {'resources': [
+                {'id': 'hgm-csv', 'datastore_active': False}, {'id': 'hgm', 'datastore_active': True}]}})
+        if path == '/neso/api/3/action/datastore_search_sql':
+            sql = q.get('sql', '')
+            since = re.search(r'"DATETIME" > \'([^\']+)\'', sql)
+            limit = re.search(r'LIMIT (\d+)', sql)
+            if not since or not limit or '"hgm"' not in sql:
+                return self.send(400, {'success': False, 'error': {'message': 'bad sql'}})
+            start = max(parse(since.group(1)) + 1800, HISTORY_START)
+            start -= start % 1800
+            end = min(start + int(limit.group(1)) * 1800, int(_clock.time()) - 2 * 86400)
+            end -= end % 1800
+            return self.send(200, {'success': True, 'result': {'records': [history_row(t) for t in range(start, end, 1800)]}})
+        if path == '/bmrs/api/v1/forecast/demand/day-ahead/latest':
+            start, end = parse(q['from']), parse(q['to'])
+            rows = []
+            for t in range(start - start % 1800, end, 1800):
+                for boundary in ('N', 'Z1'):
+                    rows.append({'publishTime': iso(start - 3600), 'startTime': iso(t), 'boundary': boundary,
+                                 'nationalDemand': round(demand_mw(t) - solar_mw(t) * 0.8), 'transmissionSystemDemand': round(demand_mw(t) + 600)})
+            return self.send(200, {'data': rows})
+        if path == '/bmrs/api/v1/forecast/generation/wind/latest':
+            start, end = parse(q['from']), parse(q['to'])
+            return self.send(200, {'data': [{'publishTime': iso(start - 3600), 'startTime': iso(t), 'generation': round(wind_total(t) * 0.82)}
+                                            for t in range(start - start % 3600, end, 3600)]})
         return self.send(404, {'error': 'not mocked: ' + path})
 
 

@@ -73,7 +73,7 @@ jobs:
           docker run -d --name smoke -p 8080:8080 --read-only --tmpfs /tmp \
             --cap-drop ALL --security-opt no-new-privileges:true gb-grid:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
-          for page in / /map /stations /static/base.css /static/base.js /geo.json /api/live /api/map /api/alerts /api/replay /regions /regions.json /api/regions /balancing /api/balancing /outages /api/outages /api/status; do
+          for page in / /map /stations /static/base.css /static/base.js /geo.json /api/live /api/map /api/alerts /api/replay /regions /regions.json /api/regions /balancing /api/balancing /outages /api/outages /history /api/longterm /api/longterm/summary /api/outlook /static/uplot.min.js /api/status; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$page")
             echo "$page $code"
             case "$page:$code" in /api/status:503|*:200) ;; *) exit 1 ;; esac

@@ -12,16 +12,29 @@ standard library inside.
 
 - **Overview:** what Britain is using right now and where it comes from.
   Generation mix, demand, carbon intensity, wholesale price, grid frequency and
-  interconnector flows, with history charts (24 hours, 7 days, 30 days) and the
+  interconnector flows, with history charts (24 hours, 7 days, 30 days), the
   cleanest times to use electricity over the next day, for Great Britain or one
-  of NESO's regions.
+  of NESO's regions, and forecasts of demand, wind, solar and carbon intensity
+  for the next 48 hours.
 - **Map:** every grid-connected power station as a circle sized by what it's
   generating and coloured by fuel, plus the interconnectors to Europe and
   Ireland with their live flows. Zoom, pan, full screen, and a 24-hour history
-  for any station.
+  for any station. A time machine replays the last seven days in 10-minute steps.
 - **Stations:** the same data as tables. Output by nation and by fuel, every
   station with its capacity and how hard it's running, the interconnectors, and
   any units that couldn't be placed on the map.
+- **Regions:** NESO's 14 regions coloured by carbon intensity, from 24 hours
+  ago to 48 hours ahead, with each region's generation mix and solar output.
+- **Balancing:** who the grid operator is paying to switch off or turn up right
+  now, what each half hour of balancing cost today and yesterday, the units paid
+  the most, and daily constraint costs.
+- **Outages:** spare capacity over the next 12 hours, the big units that are
+  offline and when they're due back, the nuclear fleet, and NESO's grid notices.
+  A banner appears on every page while a margin notice or similar warning is in
+  force.
+- **History:** the generation mix, carbon intensity and wholesale price since
+  2009 (prices since 2018), zoomable down to the half hour, plus records, the
+  latest day against a year earlier, and each year's mix.
 
 ![The map page](docs/map.png)
 
@@ -66,6 +79,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `CARBON_REGION_ID` | `0` | NESO region for the regional carbon view (1 to 17), or 0 for none |
 | `HISTORY_DAYS` | `7` | Days of history to download and keep (2 to 60) |
 | `BROWSER_REFRESH_SECONDS` | `10` | How often open pages check for new data |
+| `LONG_HISTORY` | `true` | Download NESO's record since 2009 for the History page (about 20 MB) |
 | `POLL_*_SECONDS` | varies | How often each upstream source is polled |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
@@ -120,6 +134,14 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/history?range=24h` | History series (`24h`, `7d` or `30d`) |
 | `/api/map` | Stations, interconnectors and totals for the map |
 | `/api/station?id=N` | One station's last 24 hours |
+| `/api/replay` | The last seven days of the map in 10-minute frames |
+| `/api/regions` | Every region's carbon intensity, mix and solar, 24 hours back to 48 ahead |
+| `/api/balancing` | Live instructions, half-hourly costs, top payments and constraint costs |
+| `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |
+| `/api/alerts` | Grid notices in force and the margin summary (drives the banner) |
+| `/api/longterm?from=&to=` | Mix, carbon and price between two Unix times, averaged to suit the span |
+| `/api/longterm/summary` | Records, the year-apart comparison and yearly mix |
+| `/api/outlook` | Demand, wind, solar and carbon forecasts for the next 48 hours |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
 
@@ -167,12 +189,17 @@ rebuild.
 
 - Contains BMRS data © Elexon Limited copyright and database right 2026
   ([licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/)).
-- Carbon intensity from the [NESO Carbon Intensity API](https://carbonintensity.org.uk/),
-  and embedded generation from the [NESO Data Portal](https://www.neso.energy/data-portal).
+- Supported by National Energy SO Open Data
+  ([licence](https://www.neso.energy/data-portal/neso-open-licence)): carbon
+  intensity from the [NESO Carbon Intensity API](https://carbonintensity.org.uk/),
+  and embedded generation, region boundaries, constraint costs and the historic
+  generation mix from the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).
 - Station locations derived from the
   [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT).
 - Map outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
+- Charts on the History page use [uPlot](https://github.com/leeoniya/uPlot) (MIT),
+  served from the image rather than a CDN.
 - Inspired by Kate Morley's [National Grid: Live](https://grid.iamkate.com/).
 
 Live data is fetched from each source's public API and is subject to its terms.

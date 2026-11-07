@@ -93,7 +93,10 @@ POLL = {
     'regions': env_int('POLL_REGIONS_SECONDS', 1800, 300, 7200),
     'balancing': env_int('POLL_BALANCING_SECONDS', 300, 120, 3600),
     'outages': env_int('POLL_OUTAGES_SECONDS', 900, 300, 7200),
+    'longhistory': env_int('POLL_LONG_HISTORY_SECONDS', 600, 300, 86400),
+    'outlook': env_int('POLL_OUTLOOK_SECONDS', 1800, 300, 7200),
 }
+LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
 ACCESS_LOG = env_str('ACCESS_LOG', 'false').lower() in ('1', 'true', 'yes', 'on')
@@ -398,6 +401,10 @@ class Store:
                 idx TEXT, mix TEXT, PRIMARY KEY (region, t)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS bal (d TEXT NOT NULL, sp INTEGER NOT NULL, unit TEXT NOT NULL, elexon TEXT,
                 vol_bid REAL, vol_offer REAL, cash_bid REAL, cash_offer REAL, PRIMARY KEY (d, sp, unit)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS lh (t INTEGER PRIMARY KEY, gas INTEGER, coal INTEGER, nuclear INTEGER,
+                wind INTEGER, wind_emb INTEGER, hydro INTEGER, imports INTEGER, biomass INTEGER, other INTEGER,
+                solar INTEGER, storage INTEGER, generation INTEGER, ci INTEGER);
+            CREATE TABLE IF NOT EXISTS lp (t INTEGER PRIMARY KEY, price REAL);
             CREATE TABLE IF NOT EXISTS balp (d TEXT NOT NULL, sp INTEGER NOT NULL, t INTEGER NOT NULL,
                 fetched INTEGER NOT NULL, PRIMARY KEY (d, sp)) WITHOUT ROWID;
         ''')
@@ -476,6 +483,8 @@ SOURCE_LABELS = {
     'regions': 'Regions (NESO carbon intensity, Sheffield Solar)',
     'balancing': 'Balancing (Elexon cashflows and volumes, NESO constraint costs)',
     'outages': 'Outages and margin (Elexon REMIT and loss of load forecasts)',
+    'longhistory': 'Long-term history (NESO generation mix since 2009, Elexon prices since 2018)',
+    'outlook': 'Outlook (Elexon demand and wind forecasts)',
 }
 
 
@@ -1728,6 +1737,138 @@ class Outages:
 
 
 # --------------------------------------------------------------------------
+# Long-term history and the 48-hour outlook
+# --------------------------------------------------------------------------
+
+LH_COLUMNS = ['gas', 'coal', 'nuclear', 'wind', 'wind_emb', 'hydro', 'imports', 'biomass', 'other', 'solar', 'storage', 'generation', 'ci']
+LH_SOURCE = ['GAS', 'COAL', 'NUCLEAR', 'WIND', 'WIND_EMB', 'HYDRO', 'IMPORTS', 'BIOMASS', 'OTHER', 'SOLAR', 'STORAGE', 'GENERATION', 'CARBON_INTENSITY']
+LH_RESOURCE = 'f93d1835-75bc-43e5-84ad-12472b180a98'  # NESO "Historic generation mix", looked up by name first
+PRICE_HISTORY_START = int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp())
+
+
+class LongHistory:
+    """NESO's half-hourly generation mix and carbon intensity since 2009, and
+    Elexon's market index price since 2018, downloaded once then kept current."""
+
+    def __init__(self, store):
+        self.store = store
+        self.resource = None
+        self.mix_checked = 0
+        self.version = 0
+
+    def find_resource(self):
+        try:
+            result = get_json(NESO + '/api/3/action/package_show?id=historic-generation-mix', timeout=60).get('result') or {}
+            for resource in result.get('resources', []):
+                if resource.get('datastore_active'):
+                    return resource['id']
+        except FetchError as error:
+            log.debug('[longhistory] dataset lookup failed: %s', error)
+        return LH_RESOURCE
+
+    def fetch_mix(self, limit=20000):
+        if not self.resource:
+            self.resource = self.find_resource()
+        last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
+        since = datetime.fromtimestamp(last, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') if last else '2000-01-01T00:00:00'
+        columns = ', '.join('"%s"' % c for c in ['DATETIME'] + LH_SOURCE)
+        sql = 'SELECT %s FROM "%s" WHERE "DATETIME" > \'%s\' ORDER BY "DATETIME" LIMIT %d' % (columns, self.resource, since, limit)
+        payload = get_json(NESO + '/api/3/action/datastore_search_sql?sql=' + urllib.parse.quote(sql), timeout=180)
+        records = (payload.get('result') or {}).get('records') or []
+        rows = []
+        for record in records:
+            try:
+                t = int(datetime.fromisoformat(str(record['DATETIME'])[:19]).replace(tzinfo=timezone.utc).timestamp())
+            except (KeyError, ValueError):
+                continue
+            values = [as_float(record.get(c)) for c in LH_SOURCE]
+            rows.append((t,) + tuple(None if v is None else int(round(v)) for v in values))
+        self.store.write('INSERT OR REPLACE INTO lh (t, %s) VALUES (%s)' % (', '.join(LH_COLUMNS), ', '.join('?' * 14)), rows, history=False)
+        return len(rows)
+
+    def fetch_prices(self):
+        last = self.store.scalar('SELECT MAX(t) FROM lp') or (PRICE_HISTORY_START - 1800)
+        start = last + 1800
+        end = min(start + 7 * 86400, time.time())
+        if end - start < 3600:
+            return 0
+        payload = get_json(ELEXON + '/balancing/pricing/market-index?from=%s&to=%s&dataProviders=APXMIDP' % (iso_minute(start), iso_minute(end)), timeout=90)
+        items = payload.get('data') if isinstance(payload, dict) else payload
+        rows = []
+        for item in items if isinstance(items, list) else []:
+            if item.get('dataProvider') not in (None, 'APXMIDP'):
+                continue
+            try:
+                t, price, volume = parse_time(item['startTime']), as_float(item.get('price')), as_float(item.get('volume'))
+            except (KeyError, ValueError):
+                continue
+            if price is not None and (volume or 0) > 0:
+                rows.append((t, price))
+        if not rows:
+            rows = [(floor_to(end, 1800) - 1800, None)]  # a gap in the data: step past it
+        self.store.write('INSERT OR REPLACE INTO lp (t, price) VALUES (?, ?)', rows, history=False)
+        return len(rows)
+
+    def poll(self):
+        now = time.time()
+        if not LONG_HISTORY:
+            return
+        errors = []
+        last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
+        behind = now - last > 3 * 86400
+        if behind or now - self.mix_checked > 6 * 3600:
+            try:
+                for _ in range(20 if behind else 1):
+                    if self.fetch_mix() < 20000:
+                        break
+                    time.sleep(1)
+                self.mix_checked = now
+            except FetchError as error:
+                errors.append('generation mix: ' + str(error))
+        try:
+            for _ in range(60):
+                if not self.fetch_prices():
+                    break
+                time.sleep(0.3)
+        except FetchError as error:
+            errors.append('prices: ' + str(error))
+        self.version += 1
+        if errors:
+            raise FetchError('; '.join(errors))
+
+
+class Outlook:
+    """Elexon's national demand and transmission wind forecasts."""
+
+    def __init__(self):
+        self.demand, self.wind, self.version = [], [], 0
+
+    def poll(self):
+        now = time.time()
+        window = 'from=%s&to=%s' % (iso_minute(floor_to(now, 1800)), iso_minute(now + 49 * 3600))
+        errors = []
+        try:
+            payload = get_json(ELEXON + '/forecast/demand/day-ahead/latest?' + window)
+            best = {}
+            for item in payload.get('data') or []:
+                t, v = parse_time(item['startTime']), as_float(item.get('nationalDemand'))
+                if v is not None and item.get('boundary', 'N') == 'N' and (t not in best or item['publishTime'] > best[t][0]):
+                    best[t] = (item['publishTime'], v)
+            self.demand = [(t, best[t][1]) for t in sorted(best)]
+        except (FetchError, KeyError, ValueError) as error:
+            errors.append('demand: %s' % error)
+        try:
+            payload = get_json(ELEXON + '/forecast/generation/wind/latest?' + window)
+            self.wind = sorted((parse_time(i['startTime']), as_float(i.get('generation'))) for i in payload.get('data') or []
+                               if as_float(i.get('generation')) is not None)
+        except (FetchError, KeyError, ValueError) as error:
+            errors.append('wind: %s' % error)
+        self.version += 1
+        if errors:
+            raise FetchError('; '.join(errors))
+
+
+# --------------------------------------------------------------------------
 # Grid notices: NESO's system warnings in plain English
 # --------------------------------------------------------------------------
 
@@ -1851,6 +1992,7 @@ class Grid:
     def __init__(self, store, status, fleet=None, units=None, balancing=None, outages=None):
         self.store = store
         self.outages = outages
+        self.outlook = None
         self.status = status
         self.fleet = fleet
         self.units = units
@@ -2546,6 +2688,155 @@ class Grid:
                 'lolp_max': max(row[2] for row in series), 'level': key, 'label': label,
                 'series': [[t, m, round(p, 4)] for t, m, p in series]}
 
+    # ---- /api/longterm and /api/outlook -------------------------------------
+
+    LT_FUELS = ['gas', 'coal', 'nuclear', 'wind', 'solar', 'biomass', 'hydro', 'imports', 'storage', 'other']
+    LT_SQL = ('AVG(gas), AVG(coal), AVG(nuclear), AVG(COALESCE(wind, 0) + COALESCE(wind_emb, 0)), AVG(solar), '
+              'AVG(biomass), AVG(hydro), AVG(imports), AVG(storage), AVG(other), AVG(generation), AVG(ci)')
+
+    @staticmethod
+    def longterm_bucket(span):
+        if span <= 14 * 86400:
+            return 1800
+        if span <= 92 * 86400:
+            return 6 * 3600
+        if span <= 2 * 366 * 86400:
+            return 86400
+        return 7 * 86400
+
+    def longterm_extent(self):
+        first, last, count = self.store.query('SELECT MIN(t), MAX(t), COUNT(*) FROM lh')[0]
+        price_first, price_last = self.store.query('SELECT MIN(t), MAX(t) FROM lp WHERE price IS NOT NULL')[0]
+        return {'first': first, 'last': last, 'rows': count, 'price_first': price_first, 'price_last': price_last}
+
+    def longterm(self, start=None, end=None):
+        extent = self.longterm_extent()
+        if not extent['rows']:
+            return {'ready': False, 'enabled': LONG_HISTORY, 'extent': extent}
+        end = min(int(end or extent['last'] + 1800), extent['last'] + 1800)
+        start = max(int(start or end - 365 * 86400), extent['first'])
+        if end - start < 86400:
+            start = end - 86400
+        bucket = self.longterm_bucket(end - start)
+        key = ('longterm', floor_to(start, bucket), floor_to(end, bucket))
+        version = (extent['last'], extent['price_last'])
+        with self.cache_lock:  # zooming makes many one-off ranges: keep only the recent ones
+            ranges = [k for k in self.cache if k[0] == 'longterm']
+            for stale in ranges[:-40]:
+                del self.cache[stale]
+        return self.cached(key, version, lambda: self._build_longterm(floor_to(start, bucket), end, bucket, extent))
+
+    def _build_longterm(self, start, end, bucket, extent):
+        # Weekly buckets start on Monday 00:00 UTC (the epoch was a Thursday)
+        offset = 4 * 86400 if bucket == 7 * 86400 else 0
+        if offset:
+            start = floor_to(start - offset, bucket) + offset
+        rows = self.store.query('SELECT ((t - ?) / ?) * ? + ? AS b, %s, COUNT(*) FROM lh WHERE t >= ? AND t < ? '
+                                'GROUP BY b ORDER BY b' % self.LT_SQL, (offset, bucket, bucket, offset, start, end))
+        prices = dict(self.store.query('SELECT ((t - ?) / ?) * ? + ? AS b, AVG(price) FROM lp WHERE t >= ? AND t < ? '
+                                       'AND price IS NOT NULL GROUP BY b', (offset, bucket, bucket, offset, start, end)))
+        times = [row[0] for row in rows]
+        series = {fuel: [None if row[1 + i] is None else round(row[1 + i]) for row in rows] for i, fuel in enumerate(self.LT_FUELS)}
+        def r(v, n=0):
+            return None if v is None else round(v, n) if n else round(v)
+        return {
+            'ready': True, 'enabled': LONG_HISTORY, 'extent': extent, 'from': start, 'to': end, 'bucket': bucket,
+            't': times, 'mix': series,
+            'generation': [r(row[11]) for row in rows],
+            'ci': [r(row[12]) for row in rows],
+            'price': [r(prices.get(t), 2) for t in times],
+        }
+
+    def longterm_summary(self):
+        extent = self.longterm_extent()
+        if not extent['rows']:
+            return {'ready': False, 'enabled': LONG_HISTORY, 'extent': extent}
+        return self.cached(('longterm-summary',), (extent['last'], extent['price_last'], int(time.time() // 3600)),
+                           lambda: self._build_summary(extent))
+
+    def _build_summary(self, extent):
+        q, now = self.store.query, time.time()
+        records = []
+
+        def add(key, title, unit, row, span, better):
+            if row and row[0] is not None and row[1] is not None:
+                records.append({'key': key, 'title': title, 'unit': unit, 't': row[0], 'value': round(row[1], 1),
+                                'span': span, 'recent': now - row[0] < 31 * 86400, 'better': better})
+
+        full_day = 'GROUP BY d HAVING COUNT(*) >= 46'
+        add('cleanest-hh', 'Cleanest half hour', 'g/kWh',
+            (q('SELECT t, ci FROM lh WHERE ci > 0 ORDER BY ci, t DESC LIMIT 1') or [None])[0], 'hh', 'low')
+        add('cleanest-day', 'Cleanest day', 'g/kWh',
+            (q('SELECT (t / 86400) * 86400 AS d, AVG(ci) a FROM lh WHERE ci > 0 %s ORDER BY a LIMIT 1' % full_day) or [None])[0], 'day', 'low')
+        add('wind-peak', 'Most wind power', 'MW',
+            (q('SELECT t, COALESCE(wind, 0) + COALESCE(wind_emb, 0) w FROM lh ORDER BY w DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('windiest-day', 'Windiest day', 'MW',
+            (q('SELECT (t / 86400) * 86400 AS d, AVG(COALESCE(wind, 0) + COALESCE(wind_emb, 0)) a FROM lh %s ORDER BY a DESC LIMIT 1' % full_day) or [None])[0], 'day', 'high')
+        add('wind-share', 'Highest wind share', '%',
+            (q('SELECT t, 100.0 * (COALESCE(wind, 0) + COALESCE(wind_emb, 0)) / generation s FROM lh '
+               'WHERE generation > 10000 ORDER BY s DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('solar-peak', 'Most solar power', 'MW',
+            (q('SELECT t, solar FROM lh ORDER BY solar DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('zero-carbon', 'Highest zero-carbon share', '%',
+            (q('SELECT t, 100.0 * (COALESCE(nuclear, 0) + COALESCE(wind, 0) + COALESCE(wind_emb, 0) + COALESCE(solar, 0) + COALESCE(hydro, 0)) / generation s '
+               'FROM lh WHERE generation > 10000 ORDER BY s DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('demand-low', 'Least generation needed', 'MW',
+            (q('SELECT t, generation FROM lh WHERE generation > 5000 ORDER BY generation LIMIT 1') or [None])[0], 'hh', 'low')
+        add('demand-high', 'Most generation needed', 'MW',
+            (q('SELECT t, generation FROM lh ORDER BY generation DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('price-high', 'Highest wholesale price', '£/MWh',
+            (q('SELECT t, price FROM lp WHERE price IS NOT NULL ORDER BY price DESC LIMIT 1') or [None])[0], 'hh', 'high')
+        add('price-low', 'Lowest wholesale price', '£/MWh',
+            (q('SELECT t, price FROM lp WHERE price IS NOT NULL ORDER BY price LIMIT 1') or [None])[0], 'hh', 'low')
+        last_coal = q('SELECT MAX(t) FROM lh WHERE coal > 20')[0][0]
+
+        # The latest complete day against the same weekday a year earlier
+        compare = None
+        latest = q('SELECT (t / 86400) * 86400 AS d FROM lh %s ORDER BY d DESC LIMIT 1' % full_day)
+        if latest:
+            def day(d):
+                row = q('SELECT %s, COUNT(*) FROM lh WHERE t >= ? AND t < ?' % self.LT_SQL, (d, d + 86400))[0]
+                if not row[-1]:
+                    return None
+                price = q('SELECT AVG(price) FROM lp WHERE t >= ? AND t < ? AND price IS NOT NULL', (d, d + 86400))[0][0]
+                total = sum(v or 0 for v in row[:10]) or 1
+                return {'t': d, 'mix': {f: round((row[i] or 0) / total, 4) for i, f in enumerate(self.LT_FUELS)},
+                        'generation': round(row[10] or 0), 'ci': None if row[11] is None else round(row[11]),
+                        'price': None if price is None else round(price, 2)}
+            d = latest[0][0]
+            compare = {'now': day(d), 'then': day(d - 364 * 86400)}
+
+        years = []
+        prices = dict(q("SELECT CAST(strftime('%Y', t, 'unixepoch') AS INTEGER) y, AVG(price) FROM lp WHERE price IS NOT NULL GROUP BY y"))
+        for row in q("SELECT CAST(strftime('%%Y', t, 'unixepoch') AS INTEGER) y, %s, COUNT(*) FROM lh GROUP BY y ORDER BY y" % self.LT_SQL):
+            total = sum(v or 0 for v in row[1:11]) or 1
+            years.append({'year': row[0], 'mix': {f: round((row[1 + i] or 0) / total, 4) for i, f in enumerate(self.LT_FUELS)},
+                          'ci': None if row[12] is None else round(row[12]), 'generation': round(row[11] or 0),
+                          'price': None if prices.get(row[0]) is None else round(prices[row[0]], 2),
+                          'complete': row[13] >= 17000})
+        return {'ready': True, 'extent': extent, 'records': records, 'last_coal': last_coal,
+                'compare': compare, 'years': years}
+
+    def outlook_payload(self):
+        version = (self.outlook.version if self.outlook else 0, self.store.version, int(time.time() // 300))
+        return self.cached(('outlook',), version, self._build_outlook)
+
+    def _build_outlook(self):
+        now = time.time()
+        start, end = floor_to(now, 1800), floor_to(now, 1800) + 48 * 3600
+        def clip(pairs):
+            return [[int(t), round(v)] for t, v in pairs if start <= t <= end and v is not None]
+        solar = self.store.query("SELECT t, v FROM hh WHERE k = 'fc_solar' AND t >= ? AND t <= ? ORDER BY t", (start, end))
+        carbon = [(t, v[0]) for t, v in sorted(self.carbon_table(0, start, end).items())]
+        outlook = self.outlook
+        return {
+            'from': start, 'to': end,
+            'demand': clip(outlook.demand if outlook else []),
+            'wind': clip(outlook.wind if outlook else []),
+            'solar': clip(solar),
+            'carbon': clip(carbon),
+        }
+
     # ---- /api/outages -------------------------------------------------------
 
     def outages_payload(self):
@@ -2647,6 +2938,7 @@ PAGES = [
     ('regions', '/regions', 'Regions', 'regions.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
+    ('history', '/history', 'History', 'history.html'),
 ]
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
@@ -2672,7 +2964,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'region boundaries and constraint costs from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'region boundaries, constraint costs and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
@@ -2789,6 +3081,15 @@ class Handler(BaseHTTPRequestHandler):
             elif parts.path == '/regions.json':
                 body, etag = App.regions
                 self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
+            elif parts.path == '/api/longterm':
+                def number(name):
+                    raw = query.get(name, [''])[0]
+                    return int(raw) if raw.isdigit() else None
+                self.respond_json(App.grid.longterm(number('from'), number('to')), send_body)
+            elif parts.path == '/api/longterm/summary':
+                self.respond_json(App.grid.longterm_summary(), send_body)
+            elif parts.path == '/api/outlook':
+                self.respond_json(App.grid.outlook_payload(), send_body)
             elif parts.path == '/api/outages':
                 self.respond_json(App.grid.outages_payload(), send_body)
             elif parts.path == '/api/balancing':
@@ -2894,7 +3195,9 @@ def main():
     units = Units(store, fleet)
     balancing = Balancing(store)
     outages = Outages()
+    longhistory, outlook = LongHistory(store), Outlook()
     App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing, outages), UI()
+    App.grid.outlook = outlook
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
@@ -2912,7 +3215,10 @@ def main():
         ('regions', ingest.poll_regions),
         ('balancing', balancing.poll),
         ('outages', outages.poll),
+        ('outlook', outlook.poll),
     ]
+    if LONG_HISTORY:
+        jobs.append(('longhistory', longhistory.poll))
     if REGION_ID:
         jobs.append(('region', ingest.poll_region))
     for index, (name, function) in enumerate(jobs):

@@ -48,7 +48,8 @@ def main():
         try:
             ready = (any(get(base, '/api/regions').get('ci', {}).values())
                      and get(base, '/api/balancing')['today']['periods'] > 0
-                     and get(base, '/api/outages').get('checked'))
+                     and get(base, '/api/outages').get('checked')
+                     and get(base, '/api/longterm/summary').get('ready'))
             if ready:
                 break
         except Exception as error:
@@ -130,6 +131,30 @@ def main():
         print('  upcoming:', len(o['upcoming']), '| notices:', len(o['notices']))
     except Exception as error:
         print('== Outages unavailable:', error)
+
+    try:
+        lt = get(base, '/api/longterm/summary')
+        e = lt.get('extent') or {}
+        fmt = lambda t: time.strftime('%Y-%m-%d %H:%M', time.gmtime(t)) if t else None
+        print('== Long-term history: %s rows, %s to %s; prices %s to %s' % (e.get('rows'), fmt(e.get('first')), fmt(e.get('last')), fmt(e.get('price_first')), fmt(e.get('price_last'))))
+        for r in lt.get('records', []):
+            print('    %-28s %10s %-6s %s%s' % (r['title'], r['value'], r['unit'], fmt(r['t']), ' (recent)' if r['recent'] else ''))
+        print('  last coal:', fmt(lt.get('last_coal')))
+        c = lt.get('compare') or {}
+        for k in ('now', 'then'):
+            if c.get(k):
+                print('  %s: %s ci %s price %s wind %.2f gas %.2f' % (k, fmt(c[k]['t']), c[k]['ci'], c[k]['price'], c[k]['mix']['wind'], c[k]['mix']['gas']))
+        print('  years:', ', '.join('%s %s' % (y['year'], y['ci']) for y in lt.get('years', [])))
+        recent = get(base, '/api/longterm?from=%d' % (e['last'] - 7 * 86400)) if e.get('last') else {}
+        print('  last week: bucket %s, %s points, price points %s' % (recent.get('bucket'), len(recent.get('t', [])), sum(1 for p in recent.get('price', []) if p is not None)))
+    except Exception as error:
+        print('== Long-term history unavailable:', error)
+
+    try:
+        ol = get(base, '/api/outlook')
+        print('== Outlook: ' + ', '.join('%s %d points (%s..%s)' % (k, len(ol[k]), ol[k][0][1] if ol[k] else '-', max(p[1] for p in ol[k]) if ol[k] else '-') for k in ('demand', 'wind', 'solar', 'carbon')))
+    except Exception as error:
+        print('== Outlook unavailable:', error)
 
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))

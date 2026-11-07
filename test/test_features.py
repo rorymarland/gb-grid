@@ -170,5 +170,72 @@ data = grid.outages_payload()
 check('interconnector twins counted once', data['offline'][0]['name'] == 'IFA (France)' and data['offline'][0]['lost'] == 1500 and data['lost_total'] == 1500, data['offline'])
 check('future outages listed separately', len(data['upcoming']) == 1 and data['upcoming'][0]['lost'] == 400, data['upcoming'])
 
+# ---- long-term history and outlook ----------------------------------------
+
+store = server.Store(tempfile.mkdtemp())
+lh = server.LongHistory(store)
+lh.resource = 'hgm'
+start = utc(2024, 9, 25)
+def mix_record(t, ci, coal=0.0, wind=5000.0):
+    return {'DATETIME': datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'), 'GAS': 10000.0, 'COAL': coal,
+            'NUCLEAR': 5000.0, 'WIND': wind, 'WIND_EMB': 1000.0, 'HYDRO': 300, 'IMPORTS': 2000.0, 'BIOMASS': 2000.0,
+            'OTHER': 300.0, 'SOLAR': 0.0, 'STORAGE': 0, 'GENERATION': 25600.0 + coal + wind - 5000, 'CARBON_INTENSITY': ci}
+records = [mix_record(start + i * 1800, 150 + (i % 48), coal=500.0 if i < 100 else 0.0, wind=20000.0 if i == 300 else 5000.0) for i in range(48 * 400)]
+calls = []
+def fake(url, timeout=30):
+    calls.append(url)
+    if 'datastore_search_sql' in url:
+        return {'result': {'records': records if len(calls) == 1 else []}}
+    return {'data': [{'startTime': server.iso(t), 'dataProvider': 'APXMIDP', 'price': 50.0 + (t // 1800) % 7, 'volume': 10.0}
+                     for t in range(server.PRICE_HISTORY_START + 1800 * 0, server.PRICE_HISTORY_START + 7 * 86400, 1800)]}
+original = server.get_json
+server.get_json = fake
+try:
+    n = lh.fetch_mix()
+    since = calls[0]
+    lh.fetch_mix()
+    first_prices = lh.fetch_prices()
+finally:
+    server.get_json = original
+check('mix rows stored', n == len(records) and store.scalar('SELECT COUNT(*) FROM lh') == len(records))
+check('first query starts at the beginning', '2000-01-01' in server.urllib.parse.unquote(since), since)
+check('next query starts after the last row', datetime.fromtimestamp(start + (len(records) - 1) * 1800, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') in server.urllib.parse.unquote(calls[1]), calls[1])
+check('prices stored', first_prices > 300 and store.scalar('SELECT MIN(t) FROM lp') == server.PRICE_HISTORY_START)
+grid = server.Grid(store, server.Status())
+check('buckets', [grid.longterm_bucket(x * 86400) for x in (7, 60, 365, 3000)] == [1800, 21600, 86400, 604800])
+data = grid.longterm(start, start + 7 * 86400)
+check('half-hourly over a week', data['bucket'] == 1800 and len(data['t']) == 336 and data['mix']['wind'][0] == 6000, (data['bucket'], len(data['t'])))
+data = grid.longterm(start, start + 300 * 86400)
+check('daily averages', data['bucket'] == 86400 and data['ci'][0] == round(150 + 23.5), data['ci'][:2])
+data = grid.longterm()
+check('weekly buckets start on Monday', data['bucket'] in (86400, 604800))
+summary = grid.longterm_summary()
+rec = {r['key']: r for r in summary['records']}
+check('cleanest half hour', rec['cleanest-hh']['value'] == 150, rec.get('cleanest-hh'))
+check('wind peak', rec['wind-peak']['value'] == 21000 and rec['wind-peak']['t'] == start + 300 * 1800, rec.get('wind-peak'))
+check('last coal', summary['last_coal'] == start + 99 * 1800, summary['last_coal'])
+check('year apart', summary['compare']['now'] and summary['compare']['then'] and summary['compare']['now']['t'] - summary['compare']['then']['t'] == 364 * 86400, summary['compare'])
+check('years', [y['year'] for y in summary['years']] == [2024, 2025] and abs(sum(summary['years'][0]['mix'].values()) - 1) < 0.01, summary['years'])
+
+ol = server.Outlook()
+now = server.time.time()
+base = server.floor_to(now, 1800) + 1800
+def fake_outlook(url, timeout=30):
+    if 'demand' in url:
+        return {'data': [{'startTime': server.iso(base), 'publishTime': '2026-11-07T10:00:00Z', 'boundary': 'N', 'nationalDemand': 30000},
+                         {'startTime': server.iso(base), 'publishTime': '2026-11-07T11:00:00Z', 'boundary': 'N', 'nationalDemand': 31000},
+                         {'startTime': server.iso(base), 'publishTime': '2026-11-07T12:00:00Z', 'boundary': 'B1', 'nationalDemand': 1}]}
+    return {'data': [{'startTime': server.iso(base), 'generation': 8000}]}
+server.get_json = fake_outlook
+try:
+    ol.poll()
+finally:
+    server.get_json = original
+check('latest national demand forecast', ol.demand == [(base, 31000.0)], ol.demand)
+check('wind forecast', ol.wind == [(base, 8000.0)], ol.wind)
+grid.outlook = ol
+payload = grid.outlook_payload()
+check('outlook payload', payload['demand'] == [[base, 31000]] and payload['wind'] == [[base, 8000]], payload)
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)
