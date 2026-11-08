@@ -13,6 +13,9 @@ releases that keep working with your existing settings and data.
   notice, the cleanest day of the week, heavy curtailment). The Display view
   has it as a slide too, so the default slide list is now
   `now,story,day,map,regions,balancing,outlook,outages,records`.
+- **Fixed:** the Display's 24-hour chart cut off its time labels when the
+  slide settled after the first draw; it now redraws when its box changes size.
+- README screenshots and feature notes brought up to date.
 
 ## 1.2.0 (2026-11-07)
 

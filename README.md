@@ -10,50 +10,93 @@ standard library inside.
 
 ## What it shows
 
-- **Overview:** what Britain is using right now and where it comes from.
-  Generation mix, demand, carbon intensity, wholesale price, grid frequency and
-  interconnector flows, with history charts (24 hours, 7 days, 30 days), the
-  cleanest times to use electricity over the next day, for Great Britain or one
-  of NESO's regions, and forecasts of demand, wind, solar and carbon intensity
-  for the next 48 hours.
-- **Map:** every grid-connected power station as a circle sized by what it's
-  generating and coloured by fuel, plus the interconnectors to Europe and
-  Ireland with their live flows. Zoom, pan, full screen, and a 24-hour history
-  for any station. A time machine replays the last seven days in 10-minute steps.
-- **Stations:** the same data as tables. Output by nation and by fuel, every
-  station with its capacity and how hard it's running, the interconnectors, and
-  any units that couldn't be placed on the map.
-- **Regions:** NESO's 14 regions coloured by carbon intensity, from 24 hours
-  ago to 48 hours ahead, with each region's generation mix and solar output.
-- **Balancing:** who the grid operator is paying to switch off or turn up right
-  now, what each half hour of balancing cost today and yesterday, the units paid
-  the most, and daily constraint costs.
-- **Outages:** spare capacity over the next 12 hours, the big units that are
-  offline and when they're due back, the nuclear fleet, and NESO's grid notices.
-  A banner appears on every page while a margin notice or similar warning is in
-  force.
-- **History:** the generation mix, carbon intensity and wholesale price since
-  2009 (prices since 2018), zoomable down to the half hour, plus records, the
-  latest day against a year earlier, and each year's mix.
-- **Plain English throughout:** grid jargon in the explanations is underlined;
-  hover, tap or tab to it for a short definition, or read them all on the
-  Glossary page (`/glossary`). The Overview opens with **Today on the grid**, a
-  summary of the day so far (or yesterday) written from the data: the mix,
-  carbon, demand, prices, peaks, imports, balancing costs and any notices,
-  led by whatever was most notable.
-- **Display:** a kiosk view for a tablet or spare screen, opened from the
-  Display button in the header. Each slide is designed to fit one screen:
-  right now, the last 24 hours, the station map, regions, balancing, the next
-  48 hours, spare capacity and outages, and then and now (once the history has
-  downloaded). Tap to pause, swipe or use the arrow keys to move on, and it
-  dims to a clock overnight. On an iPad, add it to the home screen for a
-  full-screen app; it keeps the screen awake where the browser allows.
+### Overview
 
-  Options go in the address: `/display?views=now,day,map,regions,balancing,outlook,outages,records`
-  (which slides, in order), `every=20` (seconds per slide), `night=23-7` (dim
-  hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
+What Britain is using right now and where it comes from: generation mix,
+demand, carbon intensity, wholesale price, grid frequency, spare capacity and
+interconnector and storage flows. Below that are history charts (24 hours and
+7 days, plus 30 days if `HISTORY_DAYS` is 30 or more), the cleanest times to
+use electricity over the next day for Great Britain or one of NESO's regions,
+and forecasts of demand, wind, solar and carbon intensity for the next 48
+hours.
+
+Under the headline figures, **Today on the grid** summarises the day so far (or
+yesterday) in a few sentences written from the data: the mix, carbon, demand, prices, peaks,
+imports, balancing costs and any notices, led by whatever was most notable.
+
+### Map and Stations
+
+Every grid-connected power station as a circle sized by what it's generating
+and coloured by fuel, plus the interconnectors to Europe and Ireland with their
+live flows. Zoom, pan, full screen, and a 24-hour history for any station. The
+time machine along the bottom replays the last seven days in 10-minute steps.
 
 ![The map page](docs/map.png)
+
+Stations shows the same data as tables: output by nation and by fuel, every
+station with its capacity and how hard it's running, the interconnectors, and
+any units that couldn't be placed on the map.
+
+### Regions
+
+NESO's 14 regions coloured by carbon intensity, from 24 hours ago to 48 hours
+ahead, with each region's generation mix and solar output.
+
+![The regions page](docs/regions.png)
+
+### Balancing
+
+Who the grid operator is paying to switch off or turn up right now, what each
+half hour of balancing cost today and yesterday, the units paid the most, and
+daily constraint costs.
+
+![The balancing page](docs/balancing.png)
+
+### Outages
+
+Spare capacity over the next 12 hours, the big units that are offline and when
+they're due back, the nuclear fleet, and NESO's grid notices. A banner appears
+on every page while a margin notice or similar warning is in force.
+
+![The outages page](docs/outages.png)
+
+### History
+
+The generation mix, carbon intensity and wholesale price since 2009 (prices
+since 2018), zoomable down to the half hour, plus records, the latest day
+against a year earlier, and each year's mix. The full record downloads in the
+background on first start; see `LONG_HISTORY` below.
+
+![The history page](docs/history.png)
+
+### Plain English throughout
+
+Grid jargon in the explanations is underlined: hover, tap or tab to it for a
+short definition. The Glossary page (`/glossary`, linked from the foot of every
+page) lists all of them, grouped and searchable, with links to where each one
+shows up in the dashboard.
+
+![The glossary page](docs/glossary.png)
+
+### Display
+
+A kiosk view for a tablet or spare screen, opened from the Display button in
+the header. Each slide is designed to fit one screen with nothing cut off:
+right now, Today on the grid, the last 24 hours, the station map, regions,
+balancing, the next 48 hours, spare capacity and outages, and then and now
+(once the history has downloaded). Tap to pause, swipe or use the arrow keys to
+move on, and it dims to a clock overnight. On an iPad, add it to the home
+screen for a full-screen app; it keeps the screen awake where the browser
+allows.
+
+| | |
+|---|---|
+| ![Display: Today on the grid](docs/display-story.png) | ![Display: the last 24 hours](docs/display-day.png) |
+
+Options go in the address:
+`/display?views=now,story,day,map,regions,balancing,outlook,outages,records`
+(which slides, in order), `every=20` (seconds per slide), `night=23-7` (dim
+hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
 
 ## Quick start
 

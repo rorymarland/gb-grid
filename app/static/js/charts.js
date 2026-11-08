@@ -61,7 +61,7 @@ export function axes(yValues, opts) {
   opts = opts || {};
   var ink = css('--muted'), grid = css('--hair'), size = opts.font || 11.5;
   return [
-    { stroke: ink, font: bodyFont(size), grid: { show: false }, ticks: { stroke: grid, size: 4 }, values: timeValues, space: opts.space || 70, gap: 4 },
+    { stroke: ink, font: bodyFont(size), grid: { show: false }, ticks: { stroke: grid, size: 4 }, values: timeValues, space: opts.space || 70, gap: 4, size: opts.xSize || 50 },
     { stroke: ink, font: bodyFont(size), grid: { stroke: grid, width: 1 }, ticks: { show: false }, values: yValues, size: opts.ySize || 44, gap: 6 }
   ];
 }

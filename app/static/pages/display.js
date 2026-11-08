@@ -181,7 +181,7 @@ function buildDay(body, take) {
         plot = new uPlot({
           width: W, height: H, legend: { show: false }, cursor: { show: false }, padding: [10, 14, 0, 0], tzDate: tzDate,
           scales: { x: { time: true }, y: { range: function (u, lo, hi) { return [0, Math.ceil((hi || 10) / 5) * 5]; } } },
-          axes: axes(function (u, splits) { return splits.map(function (v) { return v + ' GW'; }); }, { font: font, ySize: font * 4.6, space: font * 7 }),
+          axes: axes(function (u, splits) { return splits.map(function (v) { return v + ' GW'; }); }, { font: font, ySize: font * 4.6, xSize: font * 2.4, space: font * 7 }),
           series: st.series, bands: st.bands
         }, rows, chart);
         built = sig;
@@ -575,6 +575,16 @@ keepAwake();
 function rerender() { slides.forEach(function (sl) { if (sl.shown) sl.render(); }); }
 window.addEventListener('gb:theme', rerender);
 window.addEventListener('gb:width', rerender);
+/* Charts are sized when drawn; redraw when a box settles to a new size (say once the subtitle arrives) */
+if (window.ResizeObserver) {
+  var resizeQueued = false;
+  var boxes = new ResizeObserver(function () {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(function () { resizeQueued = false; rerender(); });
+  });
+  document.querySelectorAll('.chart-box').forEach(function (el) { boxes.observe(el); });
+}
 /* Reload once a day so a long-running screen picks up new versions */
 setTimeout(function () { location.reload(); }, (20 + Math.random() * 8) * 3600 * 1000);
 
