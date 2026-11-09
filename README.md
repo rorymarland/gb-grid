@@ -10,6 +10,20 @@ standard library inside.
 
 ## What it shows
 
+| Page | Path | In short |
+|---|---|---|
+| Overview | `/` | What Britain is using now, where it comes from, today in plain English and the next 48 hours |
+| Map and Stations | `/map`, `/stations` | Every power station and interconnector, live, with a seven-day time machine |
+| Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead |
+| Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
+| Balancing | `/balancing` | Who NESO is paying to turn up or down, and what it costs |
+| Outages | `/outages` | Spare capacity, offline units and grid notices |
+| Timeline | `/timeline` | Notable moments, kept for a year, linked to the map and History |
+| History | `/history` | The mix, carbon and price since 2009, with records |
+| What if? | `/sandbox` | Trip a power station and watch the first minute and the next hour |
+| Glossary | `/glossary` | Every term the dashboard uses, in plain English |
+| Display | `/display` | A full-screen slideshow for a spare screen |
+
 ### Overview
 
 What Britain is using right now and where it comes from: generation mix,
@@ -20,9 +34,11 @@ use electricity over the next day for Great Britain or one of NESO's regions,
 and forecasts of demand, wind, solar and carbon intensity for the next 48
 hours.
 
-Under the headline figures, **Today on the grid** summarises the day so far (or
-yesterday) in a few sentences written from the data: the mix, carbon, demand, prices, peaks,
-imports, balancing costs and any notices, led by whatever was most notable.
+Under the headline figures, **Today on the grid** summarises the day so far
+(or yesterday) in a few sentences written from the data: the mix, carbon,
+demand, prices, peaks, imports, balancing costs and any notices, led by
+whatever was most notable. Beside it, the latest few events from the
+Timeline.
 
 ### Map and Stations
 
@@ -62,6 +78,22 @@ moment) and the response NESO held at the time.
 
 ![The frequency page](docs/frequency.png)
 
+### Balancing
+
+Who the grid operator is paying to switch off or turn up right now, what each
+half hour of balancing cost today and yesterday, the units paid the most, and
+daily constraint costs.
+
+![The balancing page](docs/balancing.png)
+
+### Outages
+
+Spare capacity over the next 12 hours, the big units that are offline and when
+they're due back, the nuclear fleet, and NESO's grid notices. A banner appears
+on every page while a margin notice or similar warning is in force.
+
+![The outages page](docs/outages.png)
+
 ### Timeline
 
 Notable moments, spotted in the data as they happen and kept for a year:
@@ -74,6 +106,15 @@ any Unix time), and older moments open History zoomed to that week
 (`/history?at=`). The Overview lists the latest few next to Today on the grid.
 
 ![The timeline page](docs/timeline.png)
+
+### History
+
+The generation mix, carbon intensity and wholesale price since 2009 (prices
+since 2018), zoomable down to the half hour, plus records, the latest day
+against a year earlier, and each year's mix. The full record downloads in the
+background on first start; see `LONG_HISTORY` below.
+
+![The history page](docs/history.png)
 
 ### What if?
 
@@ -93,31 +134,6 @@ price, who sets it, carbon intensity and the mix move. Both are one-node
 teaching models, not studies of the real system.
 
 ![The what if page](docs/sandbox.png)
-
-### Balancing
-
-Who the grid operator is paying to switch off or turn up right now, what each
-half hour of balancing cost today and yesterday, the units paid the most, and
-daily constraint costs.
-
-![The balancing page](docs/balancing.png)
-
-### Outages
-
-Spare capacity over the next 12 hours, the big units that are offline and when
-they're due back, the nuclear fleet, and NESO's grid notices. A banner appears
-on every page while a margin notice or similar warning is in force.
-
-![The outages page](docs/outages.png)
-
-### History
-
-The generation mix, carbon intensity and wholesale price since 2009 (prices
-since 2018), zoomable down to the half hour, plus records, the latest day
-against a year earlier, and each year's mix. The full record downloads in the
-background on first start; see `LONG_HISTORY` below.
-
-![The history page](docs/history.png)
 
 ### Plain English throughout
 
@@ -172,7 +188,7 @@ Images are published for `linux/amd64` and `linux/arm64` to
 | Tag | What it follows |
 |---|---|
 | `1` | The latest 1.x release (recommended) |
-| `1.0.0` | That exact release |
+| `1.2.0` | That exact release |
 | `latest` | The main branch |
 
 To update: `docker compose pull && docker compose up -d`.
@@ -241,6 +257,14 @@ Allowlist `api.neso.energy` to fix it.
   side, or an interconnector's flow falling by 300 MW or more. Nobody
   publishes which units delivered response during an event, so the page shows
   what was held instead, from NESO's daily auction results.
+- **The sandbox's inertia** is estimated from the synchronous generation
+  running (nuclear, gas, biomass, hydro and pumped storage): a straight line
+  fitted to NESO's published inertia against the historic mix once enough of
+  both overlap, and about 6.5 GVA·s per GW plus 30 GVA·s until then. Its
+  running costs are typical values, not bids: gas plants get an efficiency
+  between 47% and 58% (33% to 38% for small open-cycle plant) and burn gas at
+  the price you set, plus 0.184 tonnes of CO2 per MWh of gas at your carbon
+  price.
 - **Northern Ireland** is part of the all-island grid with Ireland rather than
   the GB grid, so it only appears through the Moyle interconnector.
 
