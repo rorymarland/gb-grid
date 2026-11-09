@@ -1,7 +1,7 @@
 # GB Grid: a live dashboard and power station map for the Great Britain
 # electricity grid. The app is Python standard library only, so the image is
 # the official Python base image plus the app's files.
-FROM python:3.13-alpine
+FROM python:3.15-alpine
 
 ARG VERSION=dev
 
