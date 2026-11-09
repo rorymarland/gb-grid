@@ -199,3 +199,9 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 @media (forced-colors: active) {
   .sw, .track i, .load i, .nation .bar i, .diverge i { forced-color-adjust: none; }
 }
+/* The hint matches the input: touch screens get the touch gestures */
+.hint .hint-touch { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .hint .hint-mouse { display: none; }
+  .hint .hint-touch { display: inline; }
+}

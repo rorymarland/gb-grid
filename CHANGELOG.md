@@ -42,6 +42,13 @@ releases that keep working with your existing settings and data.
   device (it used to follow the device unless changed). Choices made before
   this version aren't carried over.
 - **Fixed:** at some desktop widths the page tabs overlapped the live status.
+- **Fixed:** on phones, dragging the map with one finger could zoom and jump
+  instead of moving it. If a finger's lift went unreported (as Safari can when
+  the map redraws under it), the next single touch was treated as a pinch
+  against the missing finger; and lifting one finger out of a pinch made the
+  map leap. One finger now always pans; pinch, double-tap, or double-tap and
+  slide down or up zoom, as in Google and Apple Maps. The map's hint shows the
+  touch gestures on touch screens.
 - The image now runs Python 3.14 (was 3.13, which only gets security fixes
   now).
 - **Security:** images are rebuilt weekly on a fresh base image (for `latest`

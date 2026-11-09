@@ -87,8 +87,18 @@ export function createStationMap(opts) {
     M.svg.addEventListener('pointermove', onMove);
     M.svg.addEventListener('pointerup', onUp);
     M.svg.addEventListener('pointercancel', onUp);
+    /* If a lift is never reported (Safari, when the element under the finger is redrawn), forget the finger */
+    M.svg.addEventListener('lostpointercapture', function (e) { if (pointers[e.pointerId]) onUp(e); });
     M.svg.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse' && !drag) setHover(null, null); });
-    M.svg.addEventListener('dblclick', function (e) { e.preventDefault(); zoomAt(pos(e), M.s * 2); });
+    /* Mouse double-click zooms in; touch double-taps are handled in onDown and onUp */
+    M.svg.addEventListener('dblclick', function (e) {
+      e.preventDefault();
+      if (Date.now() - lastTouch > 1000) zoomAt(pos(e), M.s * 2);
+    });
+    /* Safari's own pinch gestures would zoom the whole page instead of the map */
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (type) {
+      M.stage.addEventListener(type, function (e) { e.preventDefault(); });
+    });
     M.stage.addEventListener('keydown', onKey);
     observe();
   }
@@ -158,25 +168,43 @@ export function createStationMap(opts) {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  var pointers = {}, drag = null, pinch = null;
+  /* Touch: one finger pans; two fingers pinch to zoom; a double tap zooms in,
+     and a double tap held and slid down or up zooms in or out around that
+     point, as in Google and Apple Maps. Mouse: drag, wheel and double-click. */
+  var pointers = {}, drag = null, pinch = null, tapZoom = null, lastTap = null, lastTouch = 0;
+  var DOUBLE_TAP_MS = 320, DOUBLE_TAP_PX = 40;
   function onWheel(e) {
     e.preventDefault();
     interacted();
     var factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016));
     zoomAt(pos(e), M.s * factor);
   }
+  function startPinch() {
+    var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+    var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    pinch = { d: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), s: M.s, mx: (mid[0] - M.tx) / M.s, my: (mid[1] - M.ty) / M.s };
+  }
   function onDown(e) {
     if (e.button && e.button !== 0) return;
-    var p = pos(e);
+    var p = pos(e), touch = e.pointerType !== 'mouse';
+    if (touch) lastTouch = Date.now();
+    // A first finger means nothing else is down: drop any finger whose lift went unreported
+    if (e.isPrimary) { pointers = {}; pinch = null; tapZoom = null; drag = null; }
     pointers[e.pointerId] = p;
     try { M.svg.setPointerCapture(e.pointerId); } catch (error) { /* ignore */ }
     var ids = Object.keys(pointers);
     if (ids.length === 1) {
-      drag = { start: p, last: p, moved: false, type: e.pointerType };
+      if (touch && lastTap && Date.now() - lastTap.t < DOUBLE_TAP_MS && Math.hypot(p[0] - lastTap.p[0], p[1] - lastTap.p[1]) < DOUBLE_TAP_PX) {
+        var at = lastTap.p;
+        tapZoom = { y: p[1], s: M.s, at: at, mx: (at[0] - M.tx) / M.s, my: (at[1] - M.ty) / M.s, moved: false };
+        lastTap = null;
+        interacted();
+      } else {
+        drag = { start: p, last: p, moved: false, type: e.pointerType };
+      }
     } else if (ids.length === 2) {
-      var a = pointers[ids[0]], b = pointers[ids[1]];
-      var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      pinch = { d: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), s: M.s, mx: (mid[0] - M.tx) / M.s, my: (mid[1] - M.ty) / M.s };
+      tapZoom = null;
+      startPinch();
       if (drag) drag.moved = true;
     }
   }
@@ -188,7 +216,19 @@ export function createStationMap(opts) {
     }
     pointers[e.pointerId] = p;
     var ids = Object.keys(pointers);
-    if (ids.length >= 2 && pinch) {
+    if (tapZoom) {
+      var dy = p[1] - tapZoom.y;
+      if (!tapZoom.moved && Math.abs(dy) > 6) tapZoom.moved = true;
+      if (tapZoom.moved) {
+        // Slide down to zoom in, up to zoom out: doubling for every 150 px or so
+        M.s = clamp(tapZoom.s * Math.exp(dy / 216), M.minS, M.maxS);
+        M.tx = tapZoom.at[0] - tapZoom.mx * M.s;
+        M.ty = tapZoom.at[1] - tapZoom.my * M.s;
+        M.moved = true;
+        clampView();
+        requestRedraw();
+      }
+    } else if (ids.length >= 2 && pinch) {
       var a = pointers[ids[0]], b = pointers[ids[1]];
       var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       M.s = clamp(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, M.minS, M.maxS);
@@ -197,7 +237,7 @@ export function createStationMap(opts) {
       M.moved = true;
       clampView();
       requestRedraw();
-    } else if (drag) {
+    } else if (drag && ids.length === 1) {
       if (!drag.moved && Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) > 5) {
         drag.moved = true;
         M.stage.classList.add('dragging');
@@ -214,14 +254,26 @@ export function createStationMap(opts) {
     }
   }
   function onUp(e) {
-    var p = pos(e);
-    var wasClick = drag && !drag.moved && e.type === 'pointerup';
+    var p = pos(e), touch = e.pointerType !== 'mouse', up = e.type === 'pointerup';
+    var wasClick = drag && !drag.moved && up;
+    if (tapZoom && up && !tapZoom.moved) zoomAt(tapZoom.at, M.s * 2);   // a plain double tap
     delete pointers[e.pointerId];
-    if (Object.keys(pointers).length < 2) pinch = null;
-    if (!Object.keys(pointers).length) {
+    var ids = Object.keys(pointers);
+    if (ids.length < 2) pinch = null;
+    if (ids.length === 2) startPinch();
+    if (ids.length === 1) {
+      // Back to one finger after a pinch: carry on panning from where that finger is now
+      var rest = pointers[ids[0]];
+      drag = { start: rest, last: rest, moved: true, type: e.pointerType };
+    }
+    if (!ids.length) {
       M.stage.classList.remove('dragging');
-      if (wasClick) clickAt(p);
+      if (wasClick) {
+        clickAt(p);
+        if (touch) lastTap = { t: Date.now(), p: p };
+      } else if (touch) lastTap = null;
       drag = null;
+      tapZoom = null;
     }
   }
   function onKey(e) {
