@@ -51,7 +51,8 @@ a week of Elexon's 15-second readings. Below that: how steady it's been today
 and how the readings spread around 50 Hz, NESO's estimate of the grid's
 inertia, and how much fast frequency response (Dynamic Containment,
 Moderation and Regulation) and quick reserve NESO is holding for the current
-four-hour block.
+four-hour block. NESO publishes its inertia estimates in batches, often
+months after the fact, so that panel shows the latest week available.
 
 Sudden falls and rises are picked out as **frequency events**, usually a power
 station or interconnector tripping. Each one shows the minutes around it, how
