@@ -39,7 +39,7 @@
 .scale li { display: flex; align-items: center; gap: 7px; }
 .scale .note { color: var(--muted); }
 
-.rg-detail { border: 1px solid var(--hair); background: var(--page); border-radius: 16px; padding: 16px 18px 14px; margin: 0 0 22px; }
+.rg-detail { border: 0; background: var(--wash); border-radius: 12px; padding: 16px 18px 14px; margin: 0 0 22px; }
 .rg-detail-head { display: flex; align-items: flex-start; gap: 10px; }
 .rg-detail h2 { font-size: 19px; margin: 0; }
 .rg-detail .meta { font-size: 13px; color: var(--ink-2); margin: 2px 0 0; }

@@ -48,13 +48,28 @@ PAGES = [
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
-    ('sandbox', '/sandbox', 'What if', 'sandbox.html'),
-    ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not a tab
-    ('glossary', '/glossary', 'Glossary', 'glossary.html'),  # linked from the credits and the term popovers
+    ('sandbox', '/sandbox', 'What if?', 'sandbox.html'),
+    ('glossary', '/glossary', 'Glossary', 'glossary.html'),
+    ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not in the menus
 ]
+# The pages in the menus: groups in order, each page's group and a one-line description
+NAV_GROUPS = [('now', 'Now'), ('system', 'Running the grid'), ('time', 'Over time'), ('explore', 'Explore')]
+PAGE_META = {
+    'overview': ('now', 'What Britain is using now, and the next 48 hours'),
+    'map': ('now', 'Every power station and interconnector, live'),
+    'stations': ('now', 'Output by fuel, nation and station, in tables'),
+    'regions': ('now', 'Carbon intensity across the 14 regions'),
+    'frequency': ('system', 'Live frequency, inertia and the response held'),
+    'balancing': ('system', 'Who NESO is paying to turn up or down'),
+    'outages': ('system', 'Spare capacity, offline units and grid notices'),
+    'timeline': ('time', 'Notable moments, kept for a year'),
+    'history': ('time', 'The mix, carbon and price since 2009'),
+    'sandbox': ('explore', 'Trip a power station and see what happens'),
+    'glossary': ('explore', 'Every term the dashboard uses, in plain English'),
+}
 STATIC_TYPES = {
     '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
-    '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
+    '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
 }
 MISSING_PAGE = (b'<!doctype html><title>GB Grid</title>'
                 b'<p>This page is missing from the image. Rebuild or pull it again.</p>')
@@ -69,9 +84,12 @@ HEAD_HTML = (
     '<link rel="stylesheet" href="{{static:base.css}}">\n'
     '<link rel="icon" href="{{static:favicon.svg}}" type="image/svg+xml">\n'
     '<link rel="apple-touch-icon" href="{{static:icon-180.png}}">\n'
-    "<script>try{var t=localStorage.getItem('gb-grid-theme'),m=location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];"
-    "if(t==='light'||t==='dark')"
-    "document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>")
+    '<link rel="preload" href="/static/fonts/hanken-grotesk.woff2" as="font" type="font/woff2" crossorigin>\n'
+    # Light unless the viewer chose dark or their device's setting; set before the page paints
+    "<script>(function(){var t='light';try{t=localStorage.getItem('gb-theme')||'light'}catch(e){}"
+    "var m=location.search.match(/[?&]theme=(light|dark|system|auto)/);if(m)t=m[1];"
+    "var d=t==='dark'||((t==='system'||t==='auto')&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);"
+    "document.documentElement.setAttribute('data-theme',d?'dark':'light')})()</script>")
 ELEXON_CREDIT = ('Contains BMRS data © Elexon Limited copyright and database right <span class="year">2026</span> '
                  '(<a href="https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/" '
                  'rel="noopener">licence</a>).')
@@ -92,20 +110,89 @@ CREDITS_SHORT_HTML = (
     'Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>')
 
 
+ICONS = {
+    'search': '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m13 13 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    'display': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 17h6M10 13.5V17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    'menu': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    'close': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    'light': '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 1.8v2.1M10 16.1v2.1M1.8 10h2.1M16.1 10h2.1M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    'dark': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.4A7 7 0 0 1 7.6 3.5a7 7 0 1 0 8.9 8.9Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    'system': '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor"/></svg>',
+}
+
+
+def nav_groups():
+    """[(group key, group name, [(key, path, label, description)])]"""
+    groups = []
+    for gkey, gname in NAV_GROUPS:
+        items = [(key, path, label, PAGE_META[key][1]) for key, path, label, _ in PAGES
+                 if key in PAGE_META and PAGE_META[key][0] == gkey]
+        groups.append((gkey, gname, items))
+    return groups
+
+
 def header_html(current):
-    tabs = ''.join('<a href="%s"%s%s>%s</a>' % (
-        path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
-        ' aria-current="page"' if key == current else '', label) for key, path, label, _ in PAGES if key not in ('display', 'glossary'))
+    def link(key, path, label, desc, extra=''):
+        return '<a href="%s"%s%s data-desc="%s"%s>%s</a>' % (
+            path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
+            ' aria-current="page"' if key == current else '', html_escape(desc), extra, label)
+    bar = ''.join('<div class="nav-group" role="group" aria-label="%s">%s</div>' % (
+        html_escape(gname), ''.join(link(*item) for item in items)) for gkey, gname, items in nav_groups())
+    sheet = ''.join('<section class="sheet-group"><h2>%s</h2><ul>%s</ul></section>' % (
+        html_escape(gname), ''.join('<li><a href="%s"%s%s><b>%s</b><span>%s</span></a></li>' % (
+            path, ' data-view="%s"' % key if key in ('map', 'stations') else '',
+            ' aria-current="page"' if key == current else '', label, html_escape(desc))
+            for key, path, label, desc in items)) for gkey, gname, items in nav_groups())
     return (
+        '<a class="skip" href="#main" id="skip">Skip to content</a>\n'
         '<div class="alert-bar" id="alert-bar" role="region" aria-label="Grid notices" hidden></div>\n'
-        '<header class="top">\n  <div class="wrap top-inner">\n'
+        '<header class="top">\n  <div class="wrap top-bar">\n'
         '    <a class="brand" href="/" aria-label="GB grid overview">' + BRAND_SVG + '<span>GB grid</span></a>\n'
-        '    <nav class="nav" aria-label="Pages">' + tabs + '</nav>\n'
-        '    <p class="live"><span class="dot" id="live-dot"></span>'
+        '    <p class="live" title=""><span class="dot" id="live-dot"></span>'
         '<span id="live-text">Connecting to the dashboard server…</span></p>\n'
-        '    <div class="tools"><a class="tool-btn" href="/display" title="A full-screen view for a spare screen or tablet">'
-        'Display</a><button class="theme-btn" id="theme-btn" type="button">Theme: auto</button></div>\n'
-        '  </div>\n</header>\n<script type="module" src="{{static:js/gb.js}}"></script>')
+        '    <div class="tools">'
+        '<button class="tool-btn search-btn" id="search-btn" type="button" aria-label="Search pages and terms" aria-keyshortcuts="/ Control+K Meta+K">'
+        + ICONS['search'] + '<span class="tool-word">Search</span><kbd>/</kbd></button>'
+        '<a class="tool-btn" href="/display" title="A full-screen view for a spare screen or tablet">' + ICONS['display']
+        + '<span class="tool-word">Display</span></a>'
+        '<div class="theme-wrap"><button class="tool-btn" id="theme-btn" type="button" aria-haspopup="true" aria-expanded="false">'
+        '<span class="theme-icon" id="theme-icon">' + ICONS['light'] + '</span><span class="tool-word" id="theme-word">Light</span></button>'
+        '<div class="theme-menu" id="theme-menu" role="radiogroup" aria-label="Colour theme" hidden>'
+        + ''.join('<button type="button" role="radio" aria-checked="false" data-theme-choice="%s">%s<span>%s</span></button>'
+                  % (k, ICONS[k], n) for k, n in (('light', 'Light'), ('dark', 'Dark'), ('system', 'Match my device')))
+        + '</div></div>'
+        '<button class="tool-btn menu-btn" id="menu-btn" type="button" aria-haspopup="dialog" aria-controls="menu-sheet">'
+        + ICONS['menu'] + '<span class="tool-word">Menu</span></button>'
+        '</div>\n  </div>\n'
+        '  <nav class="navbar" aria-label="Pages"><div class="wrap nav">' + bar + '</div></nav>\n'
+        '</header>\n'
+        '<dialog class="sheet" id="menu-sheet" aria-label="Menu">'
+        '<div class="sheet-head"><span class="brand">' + BRAND_SVG + '<span>GB grid</span></span>'
+        '<button class="tool-btn" type="button" data-close aria-label="Close the menu">' + ICONS['close'] + '</button></div>'
+        '<nav aria-label="Pages">' + sheet + '</nav>'
+        '<div class="sheet-tools"><button class="tool-btn" type="button" data-open-search>' + ICONS['search'] + '<span>Search</span></button>'
+        '<a class="tool-btn" href="/display">' + ICONS['display'] + '<span>Display mode</span></a>'
+        '<div class="theme-seg" role="radiogroup" aria-label="Colour theme">'
+        + ''.join('<button type="button" role="radio" aria-checked="false" data-theme-choice="%s">%s<span>%s</span></button>'
+                  % (k, ICONS[k], n) for k, n in (('light', 'Light'), ('dark', 'Dark'), ('system', 'Device')))
+        + '</div></div></dialog>\n'
+        '<dialog class="palette" id="palette" aria-label="Search">'
+        '<div class="palette-box"><label class="palette-input">' + ICONS['search']
+        + '<input id="palette-q" type="search" placeholder="Search pages and terms" autocomplete="off" spellcheck="false" '
+        'role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"></label>'
+        '<ul class="palette-list" id="palette-list" role="listbox" aria-label="Results"></ul>'
+        '<p class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to open</span><span><kbd>Esc</kbd> to close</span></p></div></dialog>\n'
+        '<script type="module" src="{{static:js/gb.js}}"></script>')
+
+
+def html_escape(text):
+    return (str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;'))
+
+
+def sitemap_html():
+    cols = ''.join('<div><h2>%s</h2><ul>%s</ul></div>' % (html_escape(gname), ''.join(
+        '<li><a href="%s">%s</a></li>' % (path, label) for key, path, label, desc in items)) for gkey, gname, items in nav_groups())
+    return '<nav class="sitemap" aria-label="All pages">' + cols + '</nav>\n'
 
 
 class UI:
@@ -143,7 +230,7 @@ class UI:
                 sources[filename] = load_file(source, 'the app folder', MISSING_PAGE)[0].decode('utf-8', 'replace')
             html = sources[filename].replace('<!--#head-->', HEAD_HTML.replace('<!--#importmap-->', importmap))
             html = html.replace('<!--#header-->', header_html(key))
-            html = html.replace('<!--#credits-->', CREDITS_HTML).replace('<!--#credits-short-->', CREDITS_SHORT_HTML)
+            html = html.replace('<!--#credits-->', sitemap_html() + CREDITS_HTML).replace('<!--#credits-short-->', CREDITS_SHORT_HTML)
             html = re.sub(r'\{\{static:([\w./-]+)\}\}', lambda m: self._static_url(m.group(1), static), html)
             body = html.encode('utf-8')
             pages[key] = (body, '"' + hashlib.sha1(body).hexdigest()[:16] + '"')
@@ -336,7 +423,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         encoding = None
-        if len(body) > 1024 and 'gzip' in (self.headers.get('Accept-Encoding') or ''):
+        compressed = content_type.startswith(('font/', 'image/png'))
+        if len(body) > 1024 and not compressed and 'gzip' in (self.headers.get('Accept-Encoding') or ''):
             body = gzip.compress(body, compresslevel=5)
             encoding = 'gzip'
         self.send_response(code)

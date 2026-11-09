@@ -138,7 +138,7 @@ function setView(view, push) {
   document.body.className = 'mode-' + view;
   byId('view-map').hidden = view !== 'map';
   byId('view-stations').hidden = view !== 'stations';
-  Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (link) {
+  Array.prototype.forEach.call(document.querySelectorAll('.nav a, .sheet a'), function (link) {
     if (link.getAttribute('data-view') === view) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
@@ -148,11 +148,15 @@ function setView(view, push) {
   render();
   if (push) window.scrollTo(0, 0);
 }
-document.querySelector('.nav').addEventListener('click', function (event) {
-  var link = event.target.closest('a[data-view]');
-  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
-  event.preventDefault();
-  if (link.getAttribute('data-view') !== state.view) setView(link.getAttribute('data-view'), true);
+/* Map and Stations share this page: switch views without reloading, from the bar or the phone menu */
+Array.prototype.forEach.call(document.querySelectorAll('.nav, .sheet'), function (menu) {
+  menu.addEventListener('click', function (event) {
+    var link = event.target.closest('a[data-view]');
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+    event.preventDefault();
+    if (menu.close) menu.close();
+    if (link.getAttribute('data-view') !== state.view) setView(link.getAttribute('data-view'), true);
+  });
 });
 window.addEventListener('popstate', function () { setView(viewFromPath(), false); });
 

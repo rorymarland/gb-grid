@@ -1,38 +1,86 @@
-/* The page frame shared by every page: colour theme, page tabs and the grid
-   warning banner. Runs once, when gb.js is first imported. */
+/* The page frame shared by every page: colour theme, menus, search and the
+   grid warning banner. Runs once, when gb.js is first imported. */
 
 import { byId, clear, h } from './dom.js';
 import { plural, when, resetChanged } from './format.js';
 import { poll } from './net.js';
+import { TERMS as GLOSSARY } from './glossary.js';
 
-var themes = ['auto', 'light', 'dark'];
-/* Shared, changing page state: the colour theme and the latest grid notices */
-export const state = { theme: 'auto', alerts: null };
-try { state.theme = localStorage.getItem('gb-grid-theme') || 'auto'; } catch (error) { state.theme = 'auto'; }
-var urlTheme = location.search.match(/[?&]theme=(light|dark|auto)/);
-if (urlTheme) state.theme = urlTheme[1];  /* the Display view and its frames */
-function applyTheme(name) {
-  state.theme = themes.indexOf(name) >= 0 ? name : 'auto';
-  if (state.theme === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', state.theme);
-  var button = byId('theme-btn');
-  if (!button) return;
-  clear(button);
-  button.appendChild(h('span', { cls: 'theme-word', text: 'Theme: ' }));
-  button.appendChild(document.createTextNode(state.theme));
-  button.setAttribute('aria-label', 'Colour theme is ' + state.theme + '. Select to change.');
+/* Colour theme. Light unless the viewer picks otherwise: dark, or whatever
+   their device is set to. "theme" is what is showing, "choice" what they picked. */
+var CHOICES = ['light', 'dark', 'system'];
+export const state = { choice: 'light', theme: 'light', alerts: null };
+try { state.choice = localStorage.getItem('gb-theme') || 'light'; } catch (error) { state.choice = 'light'; }
+var urlTheme = location.search.match(/[?&]theme=(light|dark|system|auto)/);
+if (urlTheme) state.choice = urlTheme[1] === 'auto' ? 'system' : urlTheme[1];  /* the Display view and its frames */
+if (CHOICES.indexOf(state.choice) < 0) state.choice = 'light';
+var deviceDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+var THEME_WORDS = { light: 'Light', dark: 'Dark', system: 'Device' };
+
+function resolve() { return state.choice === 'dark' || (state.choice === 'system' && deviceDark && deviceDark.matches) ? 'dark' : 'light'; }
+function applyTheme() {
+  var before = state.theme;
+  state.theme = resolve();
+  document.documentElement.setAttribute('data-theme', state.theme);
+  var icon = byId('theme-icon'), word = byId('theme-word'), button = byId('theme-btn');
+  if (icon) {
+    var source = document.querySelector('[data-theme-choice="' + state.choice + '"] svg');
+    if (source) { clear(icon); icon.appendChild(source.cloneNode(true)); }
+  }
+  if (word) word.textContent = THEME_WORDS[state.choice];
+  if (button) button.setAttribute('aria-label', 'Colour theme: ' + (state.choice === 'system' ? 'match my device' : state.choice) + '. Select to change.');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-theme-choice]'), function (b) {
+    b.setAttribute('aria-checked', String(b.getAttribute('data-theme-choice') === state.choice));
+  });
+  return before !== state.theme;
+}
+function choose(choice) {
+  state.choice = CHOICES.indexOf(choice) >= 0 ? choice : 'light';
+  try { localStorage.setItem('gb-theme', state.choice); } catch (error) { /* storage unavailable */ }
+  if (applyTheme()) themeChanged();
 }
 function themeChanged() {
   resetChanged();
   window.dispatchEvent(new CustomEvent('gb:theme', { detail: state.theme }));
 }
-export function isDark() {
-  if (state.theme === 'dark') return true;
-  if (state.theme === 'light') return false;
-  return Boolean(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+export function isDark() { return state.theme === 'dark'; }
+
+function setupTheme() {
+  var button = byId('theme-btn'), menu = byId('theme-menu');
+  if (button && menu) {
+    var close = function () { menu.hidden = true; button.setAttribute('aria-expanded', 'false'); };
+    var open = function () {
+      menu.hidden = false; button.setAttribute('aria-expanded', 'true');
+      var current = menu.querySelector('[aria-checked="true"]') || menu.querySelector('button');
+      if (current) current.focus();
+    };
+    button.addEventListener('click', function () { if (menu.hidden) open(); else close(); });
+    menu.addEventListener('keydown', function (ev) {
+      var items = Array.prototype.slice.call(menu.querySelectorAll('button')), i = items.indexOf(document.activeElement);
+      if (ev.key === 'Escape') { close(); button.focus(); }
+      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowRight') { ev.preventDefault(); items[(i + 1) % items.length].focus(); }
+      else if (ev.key === 'ArrowUp' || ev.key === 'ArrowLeft') { ev.preventDefault(); items[(i + items.length - 1) % items.length].focus(); }
+    });
+    document.addEventListener('click', function (ev) { if (!menu.hidden && !ev.target.closest('.theme-wrap')) close(); });
+    menu.addEventListener('focusout', function (ev) { if (!menu.hidden && ev.relatedTarget && !ev.relatedTarget.closest('.theme-wrap')) close(); });
+    menu.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-theme-choice]');
+      if (b) { choose(b.getAttribute('data-theme-choice')); close(); button.focus(); }
+    });
+  }
+  var sheetSeg = document.querySelector('.sheet .theme-seg');
+  if (sheetSeg) sheetSeg.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-theme-choice]');
+    if (b) choose(b.getAttribute('data-theme-choice'));
+  });
+  if (deviceDark) {
+    var onDevice = function () { if (state.choice === 'system' && applyTheme()) themeChanged(); };
+    if (deviceDark.addEventListener) deviceDark.addEventListener('change', onDevice);
+    else if (deviceDark.addListener) deviceDark.addListener(onDevice);
+  }
 }
 
-/* ---------- page tabs ---------- */
+/* ---------- page menus ---------- */
 
 function setupNav() {
   var nav = document.querySelector('.nav');
@@ -49,6 +97,130 @@ function setupNav() {
   nav.addEventListener('scroll', fades, { passive: true });
   window.addEventListener('resize', fades);
   fades();
+}
+
+/* The phone menu: a sheet listing every page by group */
+function setupSheet() {
+  var sheet = byId('menu-sheet'), button = byId('menu-btn');
+  if (!sheet || !button || !sheet.showModal) return;
+  button.addEventListener('click', function () {
+    sheet.showModal();
+    var current = sheet.querySelector('[aria-current="page"]');
+    if (current) current.focus();
+  });
+  sheet.addEventListener('click', function (ev) {
+    if (ev.target === sheet || ev.target.closest('[data-close]')) sheet.close();
+  });
+  sheet.addEventListener('close', function () { button.focus(); });
+}
+
+/* Skip link: focus whichever main region is showing */
+function setupSkip() {
+  var skip = byId('skip');
+  if (!skip) return;
+  skip.addEventListener('click', function (ev) {
+    var main = Array.prototype.filter.call(document.querySelectorAll('main'), function (m) { return !m.hidden; })[0];
+    if (!main) return;
+    ev.preventDefault();
+    main.setAttribute('tabindex', '-1');
+    main.focus();
+  });
+}
+
+/* ---------- search: pages and glossary terms ---------- */
+
+var palette = { items: null, results: [], active: 0 };
+
+function paletteItems() {
+  if (palette.items) return palette.items;
+  var items = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
+    items.push({ kind: 'Page', title: a.textContent, text: a.getAttribute('data-desc') || '', href: a.getAttribute('href') });
+  });
+  items.push({ kind: 'Page', title: 'Display', text: 'Full-screen slides for a spare screen or tablet', href: '/display' });
+  Object.keys(GLOSSARY).forEach(function (key) {
+    var t = GLOSSARY[key];
+    items.push({ kind: 'Term', title: t.name, text: t.text, href: '/glossary#' + key, extra: t.phrases.join(' ') });
+  });
+  palette.items = items;
+  return items;
+}
+
+function score(item, words) {
+  var title = item.title.toLowerCase(), all = (item.title + ' ' + item.text + ' ' + (item.extra || '')).toLowerCase(), total = 0;
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (title.indexOf(w) === 0) total += 30;
+    else if (new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(title)) total += 20;
+    else if (title.indexOf(w) >= 0) total += 12;
+    else if (all.indexOf(w) >= 0) total += 4;
+    else return 0;
+  }
+  return total + (item.kind === 'Page' ? 3 : 0);
+}
+
+function renderPalette() {
+  var q = byId('palette-q'), list = clear(byId('palette-list'));
+  var words = q.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  var items = paletteItems();
+  palette.results = words.length
+    ? items.map(function (it) { return [score(it, words), it]; }).filter(function (x) { return x[0] > 0; })
+      .sort(function (a, b) { return b[0] - a[0]; }).slice(0, 12).map(function (x) { return x[1]; })
+    : items.filter(function (it) { return it.kind === 'Page'; });
+  palette.active = Math.min(palette.active, Math.max(0, palette.results.length - 1));
+  if (!palette.results.length) {
+    list.appendChild(h('li', { cls: 'palette-none', text: 'Nothing matches “' + q.value.trim() + '”.' }));
+    q.removeAttribute('aria-activedescendant');
+    return;
+  }
+  palette.results.forEach(function (it, i) {
+    var li = h('li', { id: 'pal-' + i, role: 'option', 'aria-selected': String(i === palette.active), cls: 'palette-item' }, [
+      h('span', { cls: 'pk', text: it.kind }),
+      h('span', { cls: 'pt' }, [h('b', { text: it.title }), h('span', { text: it.text.length > 110 ? it.text.slice(0, 108).replace(/\s+\S*$/, '') + '…' : it.text })])
+    ]);
+    li.addEventListener('click', function () { go(it); });
+    li.addEventListener('pointermove', function () { if (palette.active !== i) { palette.active = i; mark(); } });
+    list.appendChild(li);
+  });
+  mark();
+}
+function mark() {
+  var q = byId('palette-q');
+  Array.prototype.forEach.call(byId('palette-list').children, function (li, i) { li.setAttribute('aria-selected', String(i === palette.active)); });
+  var el = byId('pal-' + palette.active);
+  if (el) { q.setAttribute('aria-activedescendant', el.id); el.scrollIntoView({ block: 'nearest' }); }
+}
+function go(it) { location.href = it.href; }
+
+function setupPalette() {
+  var dialog = byId('palette'), q = byId('palette-q'), button = byId('search-btn');
+  if (!dialog || !q || !dialog.showModal) { if (button) button.hidden = true; return; }
+  function open() {
+    if (dialog.open) return;
+    var sheet = byId('menu-sheet');
+    if (sheet && sheet.open) sheet.close();
+    q.value = ''; palette.active = 0;
+    renderPalette();
+    dialog.showModal();
+    q.focus();
+  }
+  if (button) button.addEventListener('click', open);
+  document.addEventListener('keydown', function (ev) {
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || ev.target.isContentEditable;
+    if ((ev.key === 'k' || ev.key === 'K') && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); open(); }
+    else if (ev.key === '/' && !typing && !ev.metaKey && !ev.ctrlKey && !ev.altKey) { ev.preventDefault(); open(); }
+  });
+  q.addEventListener('input', function () { palette.active = 0; renderPalette(); });
+  q.addEventListener('keydown', function (ev) {
+    var n = palette.results.length;
+    if (ev.key === 'ArrowDown' && n) { ev.preventDefault(); palette.active = (palette.active + 1) % n; mark(); }
+    else if (ev.key === 'ArrowUp' && n) { ev.preventDefault(); palette.active = (palette.active + n - 1) % n; mark(); }
+    else if (ev.key === 'Enter' && n) { ev.preventDefault(); go(palette.results[palette.active]); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); dialog.close(); }
+  });
+  dialog.addEventListener('click', function (ev) { if (ev.target === dialog) dialog.close(); });
+  var sheetSearch = document.querySelector('[data-open-search]');
+  if (sheetSearch) sheetSearch.addEventListener('click', open);
 }
 
 /* ---------- grid warning banner ---------- */
@@ -102,22 +274,12 @@ function renderAlerts(data) {
 /* ---------- start ---------- */
 
 function start() {
-  applyTheme(state.theme);
-  var button = byId('theme-btn');
-  if (button) {
-    button.addEventListener('click', function () {
-      applyTheme(themes[(themes.indexOf(state.theme) + 1) % themes.length]);
-      try { localStorage.setItem('gb-grid-theme', state.theme); } catch (error) { /* storage unavailable */ }
-      themeChanged();
-    });
-  }
-  if (window.matchMedia) {
-    var scheme = window.matchMedia('(prefers-color-scheme: dark)');
-    var onScheme = function () { if (state.theme === 'auto') themeChanged(); };
-    if (scheme.addEventListener) scheme.addEventListener('change', onScheme);
-    else if (scheme.addListener) scheme.addListener(onScheme);
-  }
+  applyTheme();
+  setupTheme();
   setupNav();
+  setupSheet();
+  setupSkip();
+  setupPalette();
   Array.prototype.forEach.call(document.querySelectorAll('.year'), function (node) { node.textContent = String(new Date().getFullYear()); });
   if (byId('alert-bar')) poll('/api/alerts', { onData: renderAlerts, interval: function () { return 60; } });
 

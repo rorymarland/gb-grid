@@ -24,6 +24,13 @@ standard library inside.
 | Glossary | `/glossary` | Every term the dashboard uses, in plain English |
 | Display | `/display` | A full-screen slideshow for a spare screen |
 
+**Getting around.** On a computer the pages sit in a bar along the top,
+grouped as Now, Running the grid, Over time and Explore; the bar stays
+pinned as you scroll. On a phone they're in the Menu, with a line on what
+each page shows. Press `/` or `⌘K` (`Ctrl+K` on Windows) anywhere to search
+the pages and glossary terms. The site is light by default; the theme
+button switches to dark or to match your device, and remembers the choice.
+
 ### Overview
 
 What Britain is using right now and where it comes from: generation mix,
@@ -339,9 +346,10 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | `app/server.py` | Starts the dashboard |
 | `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`, `frequency`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
-| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
+| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
 | `app/static/vendor/` | uPlot, served from the image |
+| `app/static/fonts/` | Hanken Grotesk and Instrument Sans, with their licences |
 
 No build step: the browser loads the modules directly, and an import map in
 each page adds a version to every module's address so they can be cached. Pushes to `main` and version tags (`v1.2.3`) run
@@ -382,6 +390,9 @@ rebuild.
 - Station locations derived from the
   [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT).
 - Map outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
+- Type is [Hanken Grotesk](https://github.com/marcologous/hanken-grotesk) and
+  [Instrument Sans](https://github.com/Instrument/instrument-sans), both under
+  the SIL Open Font Licence and served from your own server.
 - Charts on the History page use [uPlot](https://github.com/leeoniya/uPlot) (MIT),
   served from the image rather than a CDN.
 - Inspired by Kate Morley's [National Grid: Live](https://grid.iamkate.com/).

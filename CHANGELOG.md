@@ -31,6 +31,17 @@ releases that keep working with your existing settings and data.
   the grid now, a moment in the last week or a preset.
 - New API endpoints: `/api/frequency`, `/api/events` and `/api/sandbox`. New settings:
   `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
+- **A new look and easier navigation.** Pages are grouped (Now, Running the
+  grid, Over time, Explore) in a bar that stays pinned as you scroll; on
+  phones they're in a Menu with a line on what each page shows, instead of a
+  sideways-scrolling strip. Search pages and glossary terms with `/` or
+  `⌘K`/`Ctrl+K`. A site map in the footer and a skip-to-content link.
+  Sections are open rather than boxed, with Hanken Grotesk for text and
+  figures and Instrument Sans for headings, both served locally.
+- **Light by default.** The theme button now offers Light, Dark or Match my
+  device (it used to follow the device unless changed). Choices made before
+  this version aren't carried over.
+- **Fixed:** at some desktop widths the page tabs overlapped the live status.
 - The image now runs Python 3.14 (was 3.13, which only gets security fixes
   now).
 - **Security:** images are rebuilt weekly on a fresh base image (for `latest`

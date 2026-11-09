@@ -97,7 +97,7 @@ html.fs-lock, html.fs-lock body { overflow: hidden; }
 .notes { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
 .notes p { margin: 0 0 8px; }
 .explain-btn { border: 0; background: none; padding: 0; color: var(--ink-2); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.detail { border: 1px solid var(--hair); border-radius: 14px; padding: 14px 14px 10px; margin: 0 0 18px; background: var(--page); }
+.detail { border: 0; border-radius: 12px; padding: 14px 16px 10px; margin: 0 0 18px; background: var(--wash); }
 .detail-head { display: flex; gap: 10px; align-items: flex-start; }
 .detail-head h2 { margin: 0; font-size: 17px; line-height: 1.3; }
 .detail-head .close { margin-left: auto; border: 1px solid var(--hair); background: var(--surface); border-radius: 999px; width: 28px; height: 28px; cursor: pointer; flex: none; display: grid; place-items: center; padding: 0; font-size: 16px; line-height: 1; color: var(--ink-2); }
@@ -118,9 +118,6 @@ html.fs-lock, html.fs-lock body { overflow: hidden; }
 .page-head { padding: 34px 0 20px; }
 .page-head h1 { font-size: clamp(26px, 1rem + 1.8vw, 38px); line-height: 1.1; font-weight: 650; letter-spacing: -0.022em; margin: 0 0 10px; }
 .lede { font-size: 17px; line-height: 1.5; color: var(--ink-2); margin: 0; max-width: 70ch; }
-.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: 18px; padding: 22px 24px 24px; margin: 0 0 24px; min-width: 0; }
-.panel h2 { font-size: 19px; font-weight: 650; letter-spacing: -0.012em; margin: 0; }
-.panel .sub { color: var(--ink-2); font-size: 14.5px; margin: 6px 0 16px; max-width: 76ch; }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .nations { display: grid; gap: 12px; margin-top: 6px; position: relative; }
 .nation { display: grid; grid-template-columns: 120px minmax(0, 1fr) 84px; gap: 14px; align-items: center; }
@@ -190,7 +187,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 }
 @media (max-width: 640px) {
   .side { padding: 18px 16px 30px; }
-  .panel { padding: 18px 16px 20px; border-radius: 16px; }
   .nation { grid-template-columns: 82px minmax(0, 1fr) 64px; gap: 10px; }
   .hide-sm { display: none; }
   .search { min-width: 0; flex: 1 1 100%; }
