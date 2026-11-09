@@ -31,6 +31,8 @@ releases that keep working with your existing settings and data.
   the grid now, a moment in the last week or a preset.
 - New API endpoints: `/api/frequency`, `/api/events` and `/api/sandbox`. New settings:
   `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
+- The image now runs Python 3.14 (was 3.13, which only gets security fixes
+  now).
 - **Security:** images are rebuilt weekly on a fresh base image (for `latest`
   and the latest release's tags) and scanned with Trivy before publishing;
   Alpine packages are upgraded at build time and pip is removed from the

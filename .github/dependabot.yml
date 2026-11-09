@@ -1,6 +1,6 @@
 # Weekly pull requests for newer GitHub Actions (pinned to commit SHAs, with
 # the version in a comment that Dependabot keeps up to date) and for a newer
-# Python base image. Security fixes within Python 3.13 and Alpine arrive
+# Python base image. Security fixes within Python 3.14 and Alpine arrive
 # through the weekly rebuild instead, so these are for version bumps.
 version: 2
 updates:
@@ -21,3 +21,8 @@ updates:
       day: monday
     commit-message:
       prefix: Base image
+    # Staying on 3.14 until 3.15 has had a couple of bugfix releases (about
+    # 3.15.2, spring 2027); remove this to get the 3.15 pull request again
+    ignore:
+      - dependency-name: python
+        versions: ['>=3.15']
