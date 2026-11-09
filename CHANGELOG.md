@@ -7,7 +7,7 @@ releases that keep working with your existing settings and data.
 ## 1.3.0 (unreleased)
 
 - **Plain English layer:** grid terms in the explanations are underlined and
-  open a short definition; a new Glossary page (`/glossary`) lists all 47.
+  open a short definition; a new Glossary page (`/glossary`) lists all 48.
 - **Today on the grid:** the Overview opens with a written summary of the day
   so far or yesterday, led by the most notable event (negative prices, a
   notice, the cleanest day of the week, heavy curtailment). The Display view
@@ -24,7 +24,12 @@ releases that keep working with your existing settings and data.
   records, expensive constraint days and daily markers), filterable by kind.
   Recent ones open the map's time machine at that moment; the Map and History
   pages take `?at=<unix time>` for this. The Overview lists the latest few.
-- New API endpoints: `/api/frequency` and `/api/events`. New settings:
+- **What if?** (`/sandbox`): trip a power station and watch the first minute
+  (inertia, response services, governors, reserve, old loss-of-mains
+  protection and demand disconnection), then a simplified merit order for the
+  next hour with gas, carbon and European prices to play with. Starts from
+  the grid now, a moment in the last week or a preset.
+- New API endpoints: `/api/frequency`, `/api/events` and `/api/sandbox`. New settings:
   `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.

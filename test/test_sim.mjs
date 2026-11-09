@@ -1,5 +1,6 @@
 // Tests for the sandbox's frequency model (run: node test/test_sim.mjs)
 import { simulate, estimateInertia } from '../app/static/js/gridsim.js';
+import { buildStack, clear, gasCost } from '../app/static/js/meritorder.js';
 
 let failures = 0;
 function check(name, ok, detail) { if (!ok) { failures++; console.log('FAIL', name, detail === undefined ? '' : JSON.stringify(detail)); } }
@@ -24,6 +25,25 @@ const old = simulate({ loss: 980, lossSync: false, inertia: 210, demand: 29000, 
   later: [{ t: 57, mw: 210, sync: true }, { t: 80, mw: 190, sync: true }], seconds: 120, reserveStart: 1e9 }).summary;
 check('double trip reaches 48.8 Hz after the second loss', old.lfdd && old.nadirAt > 57 && old.lom === 500, old);
 check('inertia estimate', estimateInertia(20, { a: 6, b: 30 }) === 150 && estimateInertia(0) === 40);
+
+// ---- the merit order ----
+const fleet = { stations: [
+  { id: 1, n: 'Wind A', c: 'wind', cap: 8000, mw: 6000 }, { id: 2, n: 'Nuke', c: 'nuclear', cap: 5000, mw: 4500 },
+  { id: 3, n: 'CCGT1', c: 'gas', cap: 1200, mw: 800 }, { id: 4, n: 'CCGT2', c: 'gas', cap: 900, mw: 0 }, { id: 5, n: 'CCGT3', c: 'gas', cap: 1500, mw: 0 },
+  { id: 6, n: 'Peaker', c: 'other', cap: 500, mw: 0 }, { id: 7, n: 'Drax', c: 'biomass', cap: 2600, mw: 2000 } ], links: [{ name: 'IFA', cap: 2000, ci: 53 }] };
+const g = gasCost(0.5, { gas: 100, carbon: 50 });
+check('gas cost', Math.abs(g.cost - (1000 / 29.3071 / 0.5 + 0.184 / 0.5 * 50)) < 0.01 && g.ci === 368, g);
+const mo = (opts, demand) => clear(buildStack(fleet, opts), demand, { exportCap: 2000 });
+const normal = mo({}, 14000);
+check('sorted cheapest first', buildStack(fleet, {}).blocks.every((b, i, a) => !i || a[i - 1].cost <= b.cost));
+const calm = mo({ windScale: 0.2 }, 14000);
+check('less wind, higher price and carbon', calm.price > normal.price && calm.ci > normal.ci, [normal.price, calm.price]);
+const windy = mo({ windScale: 2 }, 9000);
+check('surplus exports at a low price', windy.exporting === 2000 && windy.price < 50, windy);
+const short = mo({ remove: { Drax: true } }, 20000);
+check('shortfall', short.short > 0 && short.price === 1000, short);
+const dearGas = mo({ gas: 200 }, 14000);
+check('dear gas, imports set the price', dearGas.marginal && dearGas.marginal.link && dearGas.price === 82, dearGas.marginal);
 
 console.log('sim tests:', failures ? failures + ' failed' : 'all passed');
 process.exit(failures ? 1 : 0);

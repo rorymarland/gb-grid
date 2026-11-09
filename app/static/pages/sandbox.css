@@ -61,3 +61,21 @@
 .story-steps li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; font-size: 14.5px; line-height: 1.5; }
 .story-steps time { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; font-size: 13.5px; padding-top: 1px; }
 .story-steps p { margin: 0; color: var(--ink-2); }
+
+/* The next hour */
+#m-chart svg { width: 100%; display: block; }
+.blk { opacity: 0.28; stroke: none; }
+.blk.used { opacity: 0.9; }
+.blk.marginal { stroke: var(--ink); stroke-width: 2; opacity: 1; }
+.d-before { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.d-after { stroke: var(--ink); stroke-width: 2.2; }
+.p-line { stroke: var(--bad); stroke-width: 1.5; }
+.p-text { fill: var(--bad); font-size: 12.5px; font-weight: 600; }
+.d-key { display: inline-block; width: 2px; height: 12px; background: var(--ink); }
+.d-key.before { background: none; border-left: 2px dashed var(--ink-2); }
+.sw.faded { background: var(--muted); opacity: 0.3; }
+.m-changes h3 { font-size: 14px; font-weight: 650; margin: 16px 0 8px; }
+.deltas { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink-2); }
+.deltas li { display: inline-flex; align-items: center; gap: 7px; }
+.note-bad { margin: 12px 0 0; font-size: 14px; color: var(--bad); line-height: 1.5; max-width: 76ch; }
+#m-chart { margin-top: 4px; }

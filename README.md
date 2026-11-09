@@ -75,6 +75,25 @@ any Unix time), and older moments open History zoomed to that week
 
 ![The timeline page](docs/timeline.png)
 
+### What if?
+
+A sandbox for seeing how the pieces fit. **The first minute** simulates a
+trip: frequency falls at a rate set by the size of the loss and the inertia,
+then demand easing off, Dynamic Containment, Moderation and Regulation,
+generators' governors and reserve close the gap on their typical curves and
+delays. Old loss-of-mains protection on small generators and automatic
+demand disconnection at 48.8 Hz are modelled too. Start from the grid now
+(inertia estimated from the spinning generation), any moment the time
+machine holds, or a preset such as a double trip shaped like 9 August 2019.
+
+**The next hour** is a simplified merit order: every source as a block of
+megawatts at its running cost, from your gas, carbon and European prices.
+Take a station or cable offline, change the wind or demand, and see the
+price, who sets it, carbon intensity and the mix move. Both are one-node
+teaching models, not studies of the real system.
+
+![The what if page](docs/sandbox.png)
+
 ### Balancing
 
 Who the grid operator is paying to switch off or turn up right now, what each
@@ -244,6 +263,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/summary?day=today` | Today on the grid (or `yesterday`), as text parts with glossary terms marked |
 | `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
 | `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
+| `/api/sandbox?at=` | Starting figures for the sandbox: response held at that moment and the inertia fit |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
 
@@ -275,7 +295,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | `app/server.py` | Starts the dashboard |
 | `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`, `frequency`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
-| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
+| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
 | `app/static/vendor/` | uPlot, served from the image |
 

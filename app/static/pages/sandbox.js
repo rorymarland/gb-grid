@@ -1,5 +1,6 @@
 import G from '/static/js/gb.js';
 import { simulate, estimateInertia, LIMITS } from '/static/js/gridsim.js';
+import { buildStack, clear as clearMarket, COLOURS, DEFAULT_SETTINGS } from '/static/js/meritorder.js';
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var SYNC = { nuclear: 1, gas: 1, biomass: 1, hydro: 1, coal: 1, other: 1, storage: 0.5 };
@@ -12,24 +13,26 @@ var PARTS = [
 var PRESETS = {
   windy: {
     name: 'Windy night', note: 'Low demand and lots of wind, so few spinning machines and little inertia. The largest interconnector trips while importing.',
-    demand: 22000, inertia: 110, trip: { name: 'North Sea Link', mw: 1400, sync: false },
+    demand: 22000, inertia: 110, wind: 16000, trip: { name: 'North Sea Link', mw: 1400, sync: false },
     held: { DCL: 1400, DML: 500, DRL: 500, PQR: 500 }, governors: 200
   },
   winter: {
     name: 'Still winter evening', note: 'High demand, little wind, plenty of gas and nuclear spinning. Sizewell B’s reactor trips, taking both turbines.',
-    demand: 42000, inertia: 240, trip: { name: 'Sizewell B', mw: 1230, sync: true },
+    demand: 42000, inertia: 240, wind: 2500, trip: { name: 'Sizewell B', mw: 1230, sync: true },
     held: { DCL: 1400, DML: 500, DRL: 500, PQR: 500 }, governors: 500
   },
   double: {
     name: 'A double trip, like 9 August 2019',
     note: 'An offshore wind farm and a gas plant’s steam turbine trip together, small generators disconnect on old protection settings, and two more gas turbines follow within 80 seconds. Before Dynamic Containment; figures are illustrative, not the official reconstruction.',
-    demand: 29000, inertia: 210, trip: { name: 'An offshore wind farm and a steam turbine', mw: 980, sync: false },
+    demand: 29000, inertia: 210, wind: 9000, trip: { name: 'An offshore wind farm and a steam turbine', mw: 980, sync: false },
     held: {}, governors: 1000, old: true, noReserve: true, seconds: 120,
     later: [{ t: 57, mw: 210, sync: true, label: 'A gas turbine at the same plant tripped' }, { t: 80, mw: 190, sync: true, label: 'Its second gas turbine tripped' }]
   }
 };
 
-var state = { start: 'now', preset: 'winter', map: null, api: null, replay: null, at: null, base: null, p: null, result: null, anim: 0, drawn: 1 };
+var IMPORT_CI = { France: 53, Netherlands: 474, Belgium: 179, Ireland: 458, Norway: 25, Denmark: 150 };
+var CAT_NAMES = { nuclear: 'Nuclear', wind: 'Wind', solar: 'Solar', hydro: 'Hydro', biomass: 'Biomass', gas: 'Gas', other: 'Peaking plant', storage: 'Storage', imports: 'Imports', coal: 'Coal' };
+var state = { m: null, outages: {}, start: 'now', preset: 'winter', map: null, api: null, replay: null, at: null, base: null, p: null, result: null, anim: 0, drawn: 1 };
 
 /* ---- starting points ------------------------------------------------------ */
 
@@ -56,7 +59,12 @@ function baseNow() {
   m.categories.forEach(function (c) { cats[c.key] = (c.measured || 0) + (c.embedded || 0); });
   var trips = candidatesFromStations(m.stations);
   (m.links || []).forEach(function (l) { if (l.mw > 300) trips.push({ name: l.name, label: l.name + ' (importing)', mw: Math.round(l.mw), sync: false }); });
-  return finishBase({ t: m.time, demand: m.demand_gw * 1000, cats: cats, trips: trips, label: 'The grid at ' + G.hm(m.time) });
+  var mapped = {};
+  m.categories.forEach(function (c) { mapped[c.key] = c.mapped || 0; });
+  var market = { stations: m.stations.map(function (st) { return { id: st.id, n: st.n, c: st.c, cap: st.cap, mw: st.mw }; }),
+    extra: { wind: Math.max(0, cats.wind - mapped.wind), solar: Math.max(0, cats.solar - (mapped.solar || 0)) },
+    links: links(), offline: state.outages, windTotal: cats.wind };
+  return finishBase({ t: m.time, demand: m.demand_gw * 1000, cats: cats, trips: trips, label: 'The grid at ' + G.hm(m.time), market: market });
 }
 
 function baseAt(i) {
@@ -73,7 +81,14 @@ function baseAt(i) {
     var series = r.links[l.code], mw = series ? series[i] : null;
     if (mw > 300) trips.push({ name: l.name, label: l.name + ' (importing)', mw: Math.round(mw), sync: false });
   });
-  return finishBase({ t: r.t[i], demand: v('demand'), cats: cats, trips: trips, label: 'The grid at ' + G.when(r.t[i]) });
+  var mappedWind = stations.filter(function (st) { return st.c === 'wind'; }).reduce(function (a, st) { return a + Math.max(0, st.mw); }, 0);
+  var market = { stations: m.stations.map(function (st) { var series = r.stations[st.id]; return { id: st.id, n: st.n, c: st.c, cap: st.cap, mw: series ? series[i] || 0 : 0 }; }),
+    extra: { wind: Math.max(0, cats.wind - mappedWind), solar: cats.solar }, links: links(), offline: state.outages, windTotal: cats.wind };
+  return finishBase({ t: r.t[i], demand: v('demand'), cats: cats, trips: trips, label: 'The grid at ' + G.when(r.t[i]), market: market });
+}
+
+function links() {
+  return (state.map.links || []).map(function (l) { return { name: l.name, cap: l.cap || Math.abs(l.mw) || 0, ci: IMPORT_CI[l.country] || 200 }; });
 }
 
 function finishBase(b) {
@@ -86,7 +101,12 @@ function finishBase(b) {
 
 function basePreset() {
   var p = PRESETS[state.preset];
-  return { t: null, demand: p.demand, sync: null, inertia: p.inertia, trips: [Object.assign({ label: p.trip.name }, p.trip)], label: p.name, preset: p };
+  var market = null;
+  if (state.map) {
+    var now = baseNow().market;
+    market = Object.assign({}, now, { windTarget: p.wind });
+  }
+  return { t: null, demand: p.demand, sync: null, inertia: p.inertia, trips: [Object.assign({ label: p.trip.name }, p.trip)], label: p.name, preset: p, market: market };
 }
 
 function params(base) {
@@ -105,6 +125,7 @@ function setBase(base) {
   renderStart();
   renderKnobs();
   run(false);
+  resetMarket();
 }
 
 /* ---- the start panel ------------------------------------------------------- */
@@ -326,8 +347,9 @@ byId('start').addEventListener('click', function (ev) {
 byId('go').addEventListener('click', function () { run(true); });
 window.addEventListener('gb:width', function () { if (state.result) draw(); });
 
-Promise.all([G.fetchJSON('/api/map'), G.fetchJSON('/api/sandbox')]).then(function (res) {
+Promise.all([G.fetchJSON('/api/map'), G.fetchJSON('/api/sandbox'), G.fetchJSON('/api/outages').catch(function () { return { offline: [] }; })]).then(function (res) {
   state.map = res[0]; state.api = res[1];
+  (res[2].offline || []).forEach(function (o) { if (o.sid !== null && o.sid !== undefined) state.outages[o.sid] = (state.outages[o.sid] || 0) + o.lost; });
   setBase(baseNow());
   G.setLive('good', 'Starting from the grid at ' + G.hm(state.map.time) + '.');
 }).catch(function () {
@@ -336,3 +358,157 @@ Promise.all([G.fetchJSON('/api/map'), G.fetchJSON('/api/sandbox')]).then(functio
   byId('start').querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.start === 'preset')); });
   setBase(basePreset());
 });
+
+/* ---- the next hour: merit order ------------------------------------------------ */
+
+function removable(market) {
+  var list = [];
+  (market.stations || []).forEach(function (st) {
+    if (['nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other', 'coal'].indexOf(st.c) >= 0 && (st.cap || 0) >= 300) list.push({ name: st.n, mw: st.cap, cat: st.c, running: st.mw || 0 });
+  });
+  list.sort(function (a, b) { return b.running - a.running || b.mw - a.mw; });
+  list = list.slice(0, 40);
+  (market.links || []).forEach(function (l) { if (l.cap >= 300) list.push({ name: l.name, mw: l.cap, cat: 'imports' }); });
+  return list;
+}
+
+function resetMarket() {
+  var b = state.base;
+  if (!b.market) { clear(byId('mknobs')).appendChild(h('p', { cls: 'empty', text: 'Needs the live station list, which couldn’t be loaded.' })); return; }
+  var opts = removable(b.market), trip = b.trips[state.p.trip];
+  var match = trip ? opts.filter(function (o) { return trip.name.indexOf(o.name) === 0 || o.name.indexOf(trip.name) === 0; })[0] : null;
+  var keep = state.m || {};
+  state.m = { wind: 100, demand: 0, remove: match ? match.name : '', gas: keep.gas || DEFAULT_SETTINGS.gas, carbon: keep.carbon || DEFAULT_SETTINGS.carbon, europe: keep.europe || DEFAULT_SETTINGS.europe, opts: opts };
+  renderMarketKnobs();
+  runMarket();
+}
+
+function mslider(key, label, min, max, step, fmt, note) {
+  var m = state.m, out = h('output', { text: fmt(m[key]) });
+  var input = h('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(m[key]), 'aria-label': label });
+  input.addEventListener('input', function () { m[key] = +input.value; out.textContent = fmt(m[key]); runMarket(); });
+  return h('div', { cls: 'knob' }, [h('div', { cls: 'knob-head' }, [h('label', { text: label }), out]), input, note ? h('p', { cls: 'knob-note' }, note) : null]);
+}
+
+function renderMarketKnobs() {
+  var form = clear(byId('mknobs')), m = state.m;
+  var select = h('select', { 'aria-label': 'Take offline' });
+  select.appendChild(h('option', { value: '', text: 'Nothing' }));
+  m.opts.forEach(function (o) { select.appendChild(h('option', { value: o.name, text: o.name + ' (' + G.int(o.mw) + ' MW' + (o.cat === 'imports' ? ' cable' : '') + ')' })); });
+  select.value = m.remove;
+  select.addEventListener('change', function () { m.remove = select.value; runMarket(); });
+  form.appendChild(h('div', { cls: 'knob' }, [h('div', { cls: 'knob-head' }, [h('label', { text: 'Take offline' })]), select,
+    h('p', { cls: 'knob-note', text: 'Starts as whatever tripped above, when it’s a power station or cable.' })]));
+  form.appendChild(mslider('wind', 'Wind output', 0, 200, 5, function (v) { return v + '%'; }, ['Of the starting point’s ', G.int(windNow() / 1000 * 10) / 10 + ' GW', '.']));
+  form.appendChild(mslider('demand', 'Change in demand', -6000, 8000, 100, function (v) { return (v > 0 ? '+' : v < 0 ? '−' : '') + G.int(Math.abs(v)) + ' MW'; }));
+  form.appendChild(h('h3', { text: 'Prices' }));
+  form.appendChild(mslider('gas', 'Gas', 20, 300, 5, function (v) { return v + 'p/therm'; }, ['Wholesale gas. The main driver of Britain’s power price.']));
+  form.appendChild(mslider('carbon', 'Carbon', 0, 150, 5, function (v) { return '£' + v + '/t'; }, ['UK carbon price including the carbon price support.']));
+  form.appendChild(mslider('europe', 'Europe’s power price', 0, 300, 5, function (v) { return '£' + v + '/MWh'; }, ['What imports cost, and what exports earn.']));
+}
+
+function windNow() {
+  var mk = state.base.market;
+  return mk.windTarget || mk.windTotal || 0;
+}
+function windScale(extraPct) {
+  var mk = state.base.market;
+  var base = mk.windTarget && mk.windTotal ? mk.windTarget / mk.windTotal : 1;
+  return base * extraPct / 100;
+}
+
+function runMarket() {
+  var b = state.base, m = state.m, mk = b.market;
+  if (!mk) return;
+  var settings = { gas: m.gas, carbon: m.carbon, europe: m.europe };
+  var linkCap = function (removed) { return mk.links.filter(function (l) { return l.name !== removed; }).reduce(function (a, l) { return a + l.cap; }, 0); };
+  var demand0 = Math.round(b.demand || 28000);
+  var beforeStack = buildStack(mk, Object.assign({ windScale: windScale(100) }, settings));
+  var before = clearMarket(beforeStack, demand0, { exportCap: linkCap('') });
+  var remove = {}; if (m.remove) remove[m.remove] = true;
+  var afterStack = buildStack(mk, Object.assign({ windScale: windScale(m.wind), remove: remove }, settings));
+  var after = clearMarket(afterStack, demand0 + m.demand, { exportCap: linkCap(m.remove) });
+  state.market = { before: before, after: after, stack: afterStack, beforeStack: beforeStack };
+  renderMarket();
+}
+
+function money(v) { return v >= 999 ? 'Shortfall' : (v < 0 ? '−£' : '£') + Math.abs(v).toFixed(0); }
+
+function renderMarket() {
+  var r = state.market, a = r.after, b = r.before, host = clear(byId('m-figs'));
+  function fig(label, value, note) { host.appendChild(h('div', null, [h('span', { text: label }), h('b', { text: value }), note ? h('small', { text: note }) : null])); }
+  fig('Price', money(a.price) + (a.price < 999 ? '/MWh' : ''), 'Was ' + money(b.price) + (b.price < 999 ? '/MWh' : ''));
+  fig('Set by', a.short > 0 ? 'Not enough supply' : a.marginal ? a.marginal.name : '–', a.marginal && a.marginal.note ? a.marginal.note : a.marginal && a.marginal.link ? 'Imports at the European price' : null);
+  fig('Carbon intensity', Math.round(a.ci) + ' g/kWh', 'Was ' + Math.round(b.ci));
+  var hourCost = a.price * a.demand / 1e6, hourWas = b.price * b.demand / 1e6;
+  fig('An hour’s electricity', a.short > 0 ? '–' : '£' + hourCost.toFixed(1) + 'm', 'Was £' + hourWas.toFixed(1) + 'm, at the wholesale price');
+  drawStack();
+  var changes = clear(byId('m-changes'));
+  var cats = {};
+  Object.keys(a.byCat).concat(Object.keys(b.byCat)).forEach(function (k) { cats[k] = (a.byCat[k] || 0) - (b.byCat[k] || 0); });
+  if (a.exporting || b.exporting) cats.exports = -((a.exporting || 0) - (b.exporting || 0));
+  var rows = Object.keys(cats).filter(function (k) { return Math.abs(cats[k]) >= 50; }).sort(function (x, y) { return Math.abs(cats[y]) - Math.abs(cats[x]); });
+  if (!rows.length) {
+    var m = state.m;
+    changes.appendChild(h('p', { cls: 'empty', text: m.remove
+      ? 'Taking ' + m.remove + ' offline changes nothing here: there is spare capacity at the same cost to replace it. In this model every cable imports at the same European price; real cables differ, as Norway’s hydro is usually cheaper than French or Dutch power.'
+      : 'Nothing changes yet. Take something offline, change the wind or demand, or move a price.' }));
+    return;
+  }
+  var list = h('ul', { cls: 'deltas' });
+  rows.forEach(function (k) {
+    var v = cats[k], name = k === 'exports' ? 'Exports' : CAT_NAMES[k] || k;
+    var text = k === 'exports' ? (v > 0 ? 'Exports fall by ' : 'Exports rise by ') + G.gw(Math.abs(v)) + ' GW' : name + (v > 0 ? ' up ' : ' down ') + G.gw(Math.abs(v)) + ' GW';
+    list.appendChild(h('li', null, [h('i', { cls: 'sw', style: 'background:var(' + (COLOURS[k] || '--muted') + ')' }), text]));
+  });
+  changes.appendChild(h('h3', { text: 'What changes' }));
+  changes.appendChild(list);
+  if (a.short > 0) changes.appendChild(h('p', { cls: 'note-bad', text: 'Supply runs out ' + G.gw(a.short) + ' GW short. In reality NESO would call on the Balancing Mechanism, issue a margin notice, ask for demand flexibility and, as a last resort, plan rota disconnections.' }));
+}
+
+function drawStack() {
+  var r = state.market, st = r.stack, a = r.after, b = r.before, host = clear(byId('m-chart'));
+  var W = Math.max(320, host.clientWidth || 700), H = 300, padL = 46, padR = 12, padT = 12, padB = 26;
+  var need = Math.max(a.demand + a.exporting, b.demand + b.exporting);
+  var xmax = Math.min(st.total, Math.max(need * 1.25, need + 5000)), ylo = -20, yhi = 220;
+  var x = function (mw) { return padL + Math.min(mw, xmax) / xmax * (W - padL - padR); };
+  var y = function (c) { return padT + (yhi - G.clamp(c, ylo, yhi)) / (yhi - ylo) * (H - padT - padB); };
+  var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img', 'aria-label': 'Supply curve: every source sorted by cost. Price ' + money(a.price) + ' per MWh, set by ' + (a.marginal ? a.marginal.name : 'nothing') });
+  [-20, 0, 50, 100, 150, 200].forEach(function (c) {
+    svg.appendChild(s('line', { 'class': c === 0 ? 'zero-line' : 'grid-line', x1: padL, x2: W - padR, y1: y(c), y2: y(c) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: y(c) + 3.5, 'text-anchor': 'end', text: (c < 0 ? '−£' : '£') + Math.abs(c) }));
+  });
+  var stepGW = xmax > 40000 ? 10000 : 5000;
+  for (var g = 0; g <= xmax; g += stepGW) svg.appendChild(s('text', { 'class': 'axis-text', x: x(g), y: H - 7, 'text-anchor': 'middle', text: g / 1000 + (g === 0 ? ' GW' : '') }));
+  var tip = G.makeTip(host);
+  st.blocks.forEach(function (bl, i) {
+    if (bl.from >= xmax) return;
+    var used = a.used[i] > 0, top = y(Math.max(0, bl.cost)), bottom = y(Math.min(0, bl.cost));
+    var rect = s('rect', { x: x(bl.from) + 0.5, y: Math.min(top, bottom), width: Math.max(0.5, x(bl.to) - x(bl.from) - 1), height: Math.max(2, Math.abs(bottom - top)),
+      'class': 'blk' + (used ? ' used' : '') + (a.marginal && a.marginal === bl ? ' marginal' : ''), style: 'fill:var(' + (COLOURS[bl.cat] || '--muted') + ')' });
+    rect.addEventListener('pointerenter', function (ev) {
+      var hb = host.getBoundingClientRect();
+      tip.show(bl.name, [{ value: G.int(bl.mw) + ' MW', label: used ? 'running' : 'not needed', color: 'var(' + (COLOURS[bl.cat] || '--muted') + ')' },
+        { value: money(bl.cost) + '/MWh', label: 'running cost' }], ev.clientX - hb.left, ev.clientY - hb.top, bl.note);
+    });
+    rect.addEventListener('pointerleave', function () { tip.hide(); });
+    svg.appendChild(rect);
+  });
+  // Demand before and after, and the price
+  svg.appendChild(s('line', { 'class': 'd-before', x1: x(b.demand + b.exporting), x2: x(b.demand + b.exporting), y1: padT, y2: H - padB }));
+  svg.appendChild(s('line', { 'class': 'd-after', x1: x(a.demand + a.exporting), x2: x(a.demand + a.exporting), y1: padT, y2: H - padB }));
+  if (a.price < 999) {
+    svg.appendChild(s('line', { 'class': 'p-line', x1: padL, x2: W - padR, y1: y(a.price), y2: y(a.price) }));
+    svg.appendChild(s('text', { 'class': 'p-text', x: padL + 6, y: y(a.price) - 6, text: 'Price ' + money(a.price) + '/MWh' }));
+  }
+  host.appendChild(svg);
+  var legend = clear(byId('m-legend'));
+  legend.appendChild(h('li', null, [h('i', { cls: 'd-key after' }), 'Demand' + (a.exporting ? ' plus exports' : '')]));
+  legend.appendChild(h('li', null, [h('i', { cls: 'd-key before' }), 'Before the change']));
+  var seen = {};
+  st.blocks.forEach(function (bl) { if (bl.from < xmax) seen[bl.cat] = true; });
+  Object.keys(CAT_NAMES).forEach(function (k) { if (seen[k]) legend.appendChild(h('li', null, [h('i', { cls: 'sw', style: 'background:var(' + COLOURS[k] + ')' }), CAT_NAMES[k]])); });
+  legend.appendChild(h('li', null, [h('i', { cls: 'sw faded' }), 'Faded: not needed']));
+}
+
+window.addEventListener('gb:width', function () { if (state.market) drawStack(); });

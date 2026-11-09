@@ -10,7 +10,7 @@
 <main class="wrap">
   <section class="page-head">
     <h1>What if?</h1>
-    <p class="lede">Trip a power station, take away inertia or response, and watch what the grid does in the first minute. A simplified model for seeing how the pieces fit, not a study of the real system.</p>
+    <p class="lede">Trip a power station, take away inertia or response, and watch what the grid does in the first minute, then see who fills the gap over the next hour and what it does to the price. Simplified models for seeing how the pieces fit, not studies of the real system.</p>
   </section>
 
   <section class="panel" aria-labelledby="start-title">
@@ -44,6 +44,21 @@
       </div>
     </div>
     <p class="explain">The grid is treated as one spinning mass. When a generator trips, the missing power comes out of the energy stored in every spinning machine, so frequency falls at a rate set by the size of the loss and the inertia. Demand falls a little with frequency, response services and generators’ governors push power back in within seconds, and reserve takes over within a minute. Service shapes and delays are typical values, not measurements.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="hour-title">
+    <div class="panel-head"><h2 id="hour-title">The next hour: who fills the gap, and at what price</h2></div>
+    <p class="sub">A simplified merit order. Every source that could run is a block of megawatts at its running cost; the market uses the cheapest first, and the last block needed sets the price for everyone. Change the situation and see how the price, carbon and mix move.</p>
+    <div class="sim">
+      <form class="knobs" id="mknobs" onsubmit="return false"></form>
+      <div class="sim-out">
+        <div class="sim-figs" id="m-figs"></div>
+        <div class="chart" id="m-chart"></div>
+        <ul class="legend" id="m-legend"></ul>
+        <div class="m-changes" id="m-changes"></div>
+      </div>
+    </div>
+    <p class="explain">Costs are typical running costs, not real bids: gas from your gas and carbon prices and an efficiency for each plant, near zero for wind, solar and nuclear, low for subsidised biomass, and the European price for imports. Cables export when Britain is cheaper than Europe. The real market clears through several markets and NESO’s balancing actions, so this shows the logic, not a forecast.</p>
   </section>
 
   <footer class="foot"><!--#credits--></footer>
