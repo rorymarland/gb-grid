@@ -5,6 +5,7 @@ import re
 import statistics
 import time
 from datetime import date
+from urllib.parse import quote
 
 from . import fetch
 from .config import ELEXON, NESO, log
@@ -109,8 +110,13 @@ class FrequencyData:
 
     def poll_inertia(self):
         resource = newest_resource('system-inertia', lambda n: 'inertia' in n.lower() and 'cost' not in n.lower())
-        data = fetch.get_json(NESO + '/api/3/action/datastore_search?resource_id=%s&limit=700&sort=_id%%20desc'
-                              % resource['id'], timeout=60).get('result') or {}
+        # Sort by date rather than row id: the rows aren't always stored in date order
+        sql = 'SELECT * FROM "%s" ORDER BY "Settlement Date" DESC, "Settlement Period" DESC LIMIT 700' % resource['id']
+        try:
+            data = fetch.get_json(NESO + '/api/3/action/datastore_search_sql?sql=' + quote(sql), timeout=60).get('result') or {}
+        except FetchError:
+            data = fetch.get_json(NESO + '/api/3/action/datastore_search?resource_id=%s&limit=700&sort=_id%%20desc'
+                                  % resource['id'], timeout=60).get('result') or {}
         rows = []
         for record in data.get('records') or []:
             keys = {k.lower().replace(' ', '').replace('_', ''): v for k, v in record.items()}
