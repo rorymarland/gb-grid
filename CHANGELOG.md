@@ -31,6 +31,12 @@ releases that keep working with your existing settings and data.
   the grid now, a moment in the last week or a preset.
 - New API endpoints: `/api/frequency`, `/api/events` and `/api/sandbox`. New settings:
   `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
+- **Security:** images are rebuilt weekly on a fresh base image (for `latest`
+  and the latest release's tags) and scanned with Trivy before publishing;
+  Alpine packages are upgraded at build time and pip is removed from the
+  image. The server closes connections idle for 30 seconds and accepts at
+  most 100 at once. GitHub Actions are pinned to commit SHAs, updated to their
+  current major versions, and kept current by Dependabot.
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.

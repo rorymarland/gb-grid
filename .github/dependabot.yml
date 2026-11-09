@@ -1,0 +1,23 @@
+# Weekly pull requests for newer GitHub Actions (pinned to commit SHAs, with
+# the version in a comment that Dependabot keeps up to date) and for a newer
+# Python base image. Security fixes within Python 3.13 and Alpine arrive
+# through the weekly rebuild instead, so these are for version bumps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: CI
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: Base image

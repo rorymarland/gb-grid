@@ -3,7 +3,6 @@
 import logging
 import signal
 import threading
-from http.server import ThreadingHTTPServer
 
 from .config import BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, log
 from .store import Store
@@ -17,7 +16,7 @@ from .longterm import LongHistory, Outlook
 from .grid import Grid
 from .frequency import FrequencyData
 from .events import Events
-from .web import App, Handler, UI, load_file
+from .web import App, Handler, Server, UI, load_file
 
 
 def main():
@@ -70,8 +69,7 @@ def main():
     threading.Thread(target=run_backfill, args=(ingest, stop, frequency), name='backfill', daemon=True).start()
     threading.Thread(target=run_maintenance, args=(store, stop), name='maintenance', daemon=True).start()
 
-    server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
-    server.daemon_threads = True
+    server = Server(('0.0.0.0', PORT), Handler)
 
     def shutdown(signum, frame):
         log.info('Shutting down')

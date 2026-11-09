@@ -222,6 +222,26 @@ Proxy a whole host name, such as `grid.example.com`, to the container over plain
 HTTP; serving it under a sub-path such as `/grid/` isn't supported. No websockets
 are needed.
 
+### Security
+
+The dashboard has no login and serves plain HTTP, so keep it on your own
+network: reach it from outside through a VPN such as Tailscale or WireGuard,
+or a reverse proxy that adds TLS and authentication, rather than forwarding
+the port. It only reads public data and holds no secrets.
+
+- Images are rebuilt every Monday on a freshly pulled base image, for both
+  `latest` and the latest release's tags, so Python and Alpine fixes arrive
+  without a new release. Alpine packages are upgraded during the build.
+- Each build is scanned with [Trivy](https://trivy.dev) and isn't published
+  if it has a high or critical vulnerability with a fix available. Trivy
+  can't see CPython itself (it's built from source in the base image), so
+  Python's own security releases arrive through the weekly rebuild.
+- The server closes connections that stay idle for 30 seconds and accepts at
+  most 100 at once, so slow or stuck clients can't tie it up.
+- The example compose file runs it read-only as an unprivileged user with no
+  Linux capabilities. GitHub Actions are pinned to commit SHAs and kept up to
+  date by Dependabot.
+
 ### DNS blocklists
 
 Some DNS blocklists used with Pi-hole or AdGuard Home block whole top-level

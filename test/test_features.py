@@ -359,5 +359,36 @@ sb = grid.sandbox_payload()
 check('sandbox payload', sb['held'].get('DCL') == 1200 or sb['held'] == {} or 'DCL' in sb['held'], sb)
 check('sandbox fit falls back', not sb['fit']['fitted'] and sb['fit']['a'] == 6.5, sb['fit'])
 
+# ---- the web server: idle timeout and connection cap ---------------------------
+
+import socket as _socket
+
+class TinyServer(server.Server):
+    max_connections = 2
+
+class QuickHandler(server.Handler):
+    timeout = 1
+
+srv = TinyServer(('127.0.0.1', 0), QuickHandler)
+server.threading.Thread(target=srv.serve_forever, daemon=True).start()
+port = srv.server_address[1]
+idle = [_socket.create_connection(('127.0.0.1', port)) for _ in range(2)]
+server.time.sleep(0.2)
+third = _socket.create_connection(('127.0.0.1', port))
+third.settimeout(3)
+check('over the cap gets a 503', third.recv(200).startswith(b'HTTP/1.1 503'))
+third.close()
+for c in idle:
+    c.settimeout(3)
+check('idle connections are closed', all(c.recv(10) == b'' for c in idle))
+server.time.sleep(0.3)
+again = _socket.create_connection(('127.0.0.1', port))
+again.settimeout(3)
+again.sendall(b'GET /no-such-page HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n')
+reply = again.recv(200)
+check('slots free up afterwards', reply.startswith(b'HTTP/1.1') and not reply.startswith(b'HTTP/1.1 503'), reply[:40])
+again.close()
+srv.shutdown()
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

@@ -16,6 +16,13 @@ ENV PYTHONUNBUFFERED=1 \
     GRID_INTERNAL_PORT=8080 \
     GRID_VERSION=${VERSION}
 
+# Pick up Alpine security fixes released since the base image was built, and
+# remove pip and its bundled wheel: the app never installs anything, and
+# vulnerability scanners would otherwise report pip's issues as the image's.
+RUN apk upgrade --no-cache \
+ && python -m pip uninstall --yes --root-user-action=ignore pip \
+ && rm -rf "$(python -c 'import ensurepip, os; print(os.path.dirname(ensurepip.__file__))')"/_bundled
+
 # Runs as an unprivileged user (UID 10001). /data is created owned by that
 # user, so a new named volume starts out writable.
 COPY --chown=10001:10001 docker/data/ /data/

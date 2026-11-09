@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import ACCESS_LOG, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
@@ -168,7 +168,45 @@ PAGE_PATHS['/index.html'] = 'overview'
 STATIC_NAME = re.compile(r'^(?:[a-z0-9][a-z0-9_-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*$')
 
 
+class Server(ThreadingHTTPServer):
+    """ThreadingHTTPServer with a cap on open connections.
+
+    Each connection gets a thread, so without a cap a client that opens
+    connections and never finishes a request (a slowloris) could tie up
+    threads without limit. Over the cap, a connection gets a quick 503."""
+
+    daemon_threads = True
+    max_connections = 100
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(self.max_connections)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            try:
+                request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
 class Handler(BaseHTTPRequestHandler):
+    # Close connections that go quiet: an idle keep-alive, or a client
+    # sending its request too slowly. Open pages poll well within this.
+    timeout = 30
     server_version = 'gb-grid-live/' + VERSION
     protocol_version = 'HTTP/1.1'
 
