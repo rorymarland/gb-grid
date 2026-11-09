@@ -304,6 +304,35 @@ def constraint_records():
     return out
 
 
+TRIP_PERIOD, TRIP_OFFSET = 37800, 9000   # a mock trip every 10.5 hours
+TRIP_UNITS = [('T_HEYM12', 'HEYM12', 'Nuclear', 610), ('T_WBURB-2', 'WBURB-2', 'Fossil Gas', 440),
+              ('T_SCCL-3', 'SCCL-3', 'Fossil Gas', 380)]
+
+
+def trip_offset(t):
+    """Frequency change (Hz) from the most recent mock trip: every fourth one
+    is an exporting cable tripping, which pushes frequency up instead."""
+    k = int((t - TRIP_OFFSET) // TRIP_PERIOD)
+    dt = t - (k * TRIP_PERIOD + TRIP_OFFSET)
+    if dt < 0 or dt > 900:
+        return 0.0
+    depth = 0.24 + 0.05 * (k % 3)
+    shape = min(1.0, dt / 8.0) * math.exp(-max(0.0, dt - 8) / 55.0)
+    return (0.6 if k % 4 == 3 else -1.0) * depth * shape
+
+
+def mock_trips(now):
+    out = []
+    k = int((now - TRIP_OFFSET) // TRIP_PERIOD)
+    for j in range(k - 9, k + 1):
+        t = j * TRIP_PERIOD + TRIP_OFFSET
+        if j % 4 == 3 or t > now:
+            continue
+        asset, unit, fuel, lost = TRIP_UNITS[j % 3]
+        out.append((asset, unit, fuel, 'Unplanned', lost, lost, t + 60, t + 8 * 3600, 'Trip'))
+    return out
+
+
 def mock_remit():
     now = _clock.time()
     day = 86400
@@ -312,9 +341,10 @@ def mock_remit():
             ('I_IEG-FRAN1', 'IEG-FRAN1', None, 'Unplanned', 1500, 2000, now - 12 * day, now + 6 * day, 'Under Investigation'),
             ('I_IED-FRAN1', 'IED-FRAN1', None, 'Unplanned', 1500, 2000, now - 12 * day, now + 6 * day, 'Under Investigation'),
             ('T_DIDCB5', 'DIDCB5', 'Fossil Gas', 'Planned', 780, 780, now - 5 * day, now + 20 * day, 'Major overhaul'),
-            ('T_PEMB-21', 'PEMB-21', 'Fossil Gas', 'Unplanned', 460, 460, now - 3600, now + 2 * day, 'Boiler tube leak'),
+            ('T_PEMB-21', 'PEMB-21', 'Fossil Gas', 'Unplanned', 460, 460, now - now % day - 3600, now + 2 * day, 'Boiler tube leak'),
             ('T_DRAXX-4', 'DRAXX-4', 'Biomass', 'Planned', 645, 645, now + 3 * day, now + 30 * day, 'Statutory outage'),
             ('T_SIZB-1', 'SIZB-1', 'Nuclear', 'Planned', 600, 600, now + 9 * day, now + 40 * day, 'Refuelling')]
+    rows += mock_trips(now)
     out = []
     for asset, unit, fuel, kind, lost, normal, start, end, cause in rows:
         out.append({'messageType': 'UnavailabilitiesOfElectricityFacilities', 'eventStatus': 'Active', 'assetId': asset,
@@ -409,7 +439,7 @@ class Handler(BaseHTTPRequestHandler):
             out = []
             t = start - start % 15
             while t <= end - 60:
-                hz = 50 + 0.06 * math.sin(t / 97.0) + 0.03 * math.sin(t / 13.0)
+                hz = 50 + 0.06 * math.sin(t / 97.0) + 0.03 * math.sin(t / 13.0) + trip_offset(t)
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
@@ -567,7 +597,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/bmrs/api/v1/remit':
             ids = [int(v) for v in urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('messageId', [])]
             events = mock_remit()
-            return self.send(200, {'data': [dict(events[i - 900000], id=i, mrid='MOCK-%d' % (i - 900000), revisionNumber=1)
+            return self.send(200, {'data': [dict(events[i - 900000], id=i, mrid='MOCK-%s-%s' % (events[i - 900000]['assetId'], events[i - 900000]['eventStartTime'][:13]), revisionNumber=1)
                                             for i in ids if 0 <= i - 900000 < len(events)]})
         if path == '/bmrs/api/v1/system/warnings':
             return self.send(200, {'data': mock_warnings(parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo']))})
@@ -627,6 +657,43 @@ class Handler(BaseHTTPRequestHandler):
                     lines.append('%s,%d,25000,%s,26000,23000,%d,6600,%d,17000,0,0,0,0,0,0,0,0,0,0,0,0,0' % (
                         date_text, period, flag, emb_wind, sol))
             return self.send(200, '\n'.join(lines) + '\n', 'text/csv')
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'system-inertia':
+            return self.send(200, {'success': True, 'result': {'resources': [
+                {'id': 'in-2025', 'name': 'GB System Inertia - 2025-2026', 'datastore_active': True},
+                {'id': 'in-cost', 'name': 'GB System Inertia Costs 2026', 'datastore_active': True},
+                {'id': 'in-2026', 'name': 'GB System Inertia - 2026-2027', 'datastore_active': True}]}})
+        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id') == 'in-2026':
+            now = _clock.time()
+            records = []
+            day = datetime.fromtimestamp(now - 8 * 86400, timezone.utc).date()
+            while day < datetime.fromtimestamp(now - 86400, timezone.utc).date():
+                for sp in range(1, 49):
+                    t = datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp() + (sp - 1) * 1800
+                    outturn = 175 - 35 * math.sin(math.pi * (hour_of_day(t) - 4) / 12) + 15 * math.sin(t / 90000.0)
+                    records.append({'_id': len(records) + 1, 'Settlement Date': day.isoformat(), 'Settlement Period': sp,
+                                    'Outturn Inertia': round(outturn), 'Market Provided Inertia': round(outturn - 12)})
+                day += timedelta(days=1)
+            records.reverse()
+            return self.send(200, {'success': True, 'result': {'records': records[:int(q.get('limit', 100))]}})
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'eac-auction-results':
+            return self.send(200, {'success': True, 'result': {'resources': [
+                {'id': 'eac-daily', 'name': 'NESO Response-Reserve Daily Results Summary', 'datastore_active': True},
+                {'id': 'eac-sum', 'name': 'NESO Response-Reserve Results Summary', 'datastore_active': True},
+                {'id': 'eac-arch', 'name': 'NESO Response-Reserve Results Summary FY2023 (Archive)', 'datastore_active': True}]}})
+        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id') == 'eac-sum':
+            now = _clock.time()
+            first = int((now - 2 * 86400) // 14400) * 14400 - 3600
+            records = []
+            products = [('Dynamic Containment LF', 1150), ('Dynamic Containment HF', 900), ('DML', 480), ('DMH', 450),
+                        ('DRL', 260), ('DRH', 310), ('PQR', 320), ('NQR', 180)]
+            for block in range(first, int(now + 86400), 14400):
+                for name, base in products:
+                    records.append({'auctionID': 100, 'auctionProduct': name, 'serviceType': 'Response',
+                                    'deliveryStart': iso(block), 'deliveryEnd': iso(block + 14400),
+                                    'clearedVolume': round(base * (0.85 + 0.3 * abs(math.sin(block / 50000.0)))),
+                                    'clearingPrice': round(2 + 3 * abs(math.sin(block / 70000.0)), 2)})
+            records.reverse()
+            return self.send(200, {'success': True, 'result': {'records': records}})
         if path == '/neso/api/3/action/package_show' and q.get('id') == 'historic-generation-mix':
             return self.send(200, {'success': True, 'result': {'resources': [
                 {'id': 'hgm-csv', 'datastore_active': False}, {'id': 'hgm', 'datastore_active': True}]}})

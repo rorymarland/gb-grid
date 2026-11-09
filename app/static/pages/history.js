@@ -294,13 +294,20 @@ byId('zoom-reset').addEventListener('click', loadPreset);
 window.addEventListener('gb:theme', function () { buildPlots(); renderLegend(); if (state.summary) renderSummary(); });
 window.addEventListener('gb:width', resize);
 
+/* /history?at=<unix time>: open zoomed to the week around that moment (links from the timeline) */
+var AT = +(new URLSearchParams(location.search).get('at') || 0);
+
 // The summary poll also notices when the first download finishes.
 state.poll = G.poll('/api/longterm/summary', {
   onData: function (sm) {
     var wasReady = state.data && state.data.ready;
     state.summary = sm;
     renderSummary();
-    if (!wasReady && sm.ready) { var r; state.data = { ready: true, extent: sm.extent }; r = presetRange(); load(r[0], r[1]); }
+    if (!wasReady && sm.ready) {
+      var r; state.data = { ready: true, extent: sm.extent };
+      if (AT) { zoomTo(AT - 3 * DAY, AT + 3 * DAY); AT = 0; byId('chart-title').scrollIntoView({ block: 'start' }); }
+      else { r = presetRange(); load(r[0], r[1]); }
+    }
     else if (!sm.ready) { state.data = sm; render(); updateHeader(); }
   },
   onTick: function (p) { if (G.offline(p)) G.setLive('bad', 'Can’t reach the dashboard server. Retrying.'); else updateHeader(); },

@@ -44,6 +44,36 @@ ahead, with each region's generation mix and solar output.
 
 ![The regions page](docs/regions.png)
 
+### Frequency
+
+The grid's frequency live against its limits, as an hour, six hours, a day or
+a week of Elexon's 15-second readings. Below that: how steady it's been today
+and how the readings spread around 50 Hz, NESO's estimate of the grid's
+inertia, and how much fast frequency response (Dynamic Containment,
+Moderation and Regulation) and quick reserve NESO is holding for the current
+four-hour block.
+
+Sudden falls and rises are picked out as **frequency events**, usually a power
+station or interconnector tripping. Each one shows the minutes around it, how
+far and how fast frequency moved, how long it took to recover, the likely cause
+(an unplanned outage notice or an interconnector's flow dropping at the same
+moment) and the response NESO held at the time.
+
+![The frequency page](docs/frequency.png)
+
+### Timeline
+
+Notable moments, spotted in the data as they happen and kept for a year:
+frequency events, large unplanned outages, negative prices and price spikes,
+grid notices, new records in NESO's history since 2009, expensive constraint
+days, and daily markers such as the demand peak and the first half hour that
+wind supplied over half of Britain's electricity. Filter by kind; anything from
+the last week opens on the map's time machine at that moment (`/map?at=` takes
+any Unix time), and older moments open History zoomed to that week
+(`/history?at=`). The Overview lists the latest few next to Today on the grid.
+
+![The timeline page](docs/timeline.png)
+
 ### Balancing
 
 Who the grid operator is paying to switch off or turn up right now, what each
@@ -183,6 +213,14 @@ Allowlist `api.neso.energy` to fix it.
 - **Locations** come from the Power Station Dictionary plus hand-added recent
   stations. Units that can't be matched still count in the totals; they're
   listed on the Stations page and logged once a day.
+- **Frequency events** are found in Elexon's 15-second readings: a change of
+  0.08 Hz or more within 30 seconds, or a crossing of 49.8 or 50.2 Hz. A trip
+  pulls frequency to its lowest point within a few seconds, so the 15-second
+  readings usually miss the true nadir and understate the fall. The cause is a
+  best guess: an unplanned REMIT notice starting within ten minutes either
+  side, or an interconnector's flow falling by 300 MW or more. Nobody
+  publishes which units delivered response during an event, so the page shows
+  what was held instead, from NESO's daily auction results.
 - **Northern Ireland** is part of the all-island grid with Ireland rather than
   the GB grid, so it only appears through the Moyle interconnector.
 
@@ -203,6 +241,8 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/longterm/summary` | Records, the year-apart comparison and yearly mix |
 | `/api/outlook` | Demand, wind, solar and carbon forecasts for the next 48 hours |
 | `/api/summary?day=today` | Today on the grid (or `yesterday`), as text parts with glossary terms marked |
+| `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
+| `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
 
@@ -232,7 +272,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`); the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`, `frequency`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, tabs and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -270,8 +310,9 @@ rebuild.
 - Supported by National Energy SO Open Data
   ([licence](https://www.neso.energy/data-portal/neso-open-licence)): carbon
   intensity from the [NESO Carbon Intensity API](https://carbonintensity.org.uk/),
-  and embedded generation, region boundaries, constraint costs and the historic
-  generation mix from the [NESO Data Portal](https://www.neso.energy/data-portal).
+  and embedded generation, region boundaries, constraint costs, the historic
+  generation mix, system inertia and frequency response auction results from
+  the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).
 - Station locations derived from the
   [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT).

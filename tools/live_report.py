@@ -156,15 +156,37 @@ def main():
     except Exception as error:
         print('== Outlook unavailable:', error)
 
+    def words(parts):
+        return ''.join(p if isinstance(p, str) else p['t'] for p in parts)
+
     for day in ('today', 'yesterday'):
         try:
             sm = get(base, '/api/summary?day=' + day)
-            words = lambda parts: ''.join(p if isinstance(p, str) else p['t'] for p in parts)
             print('== Summary, %s (%s, ready %s): %s' % (day, sm.get('date'), sm.get('ready'), words(sm.get('headline', []))))
             for point in sm.get('points', []):
                 print('    - %s' % words(point['parts']))
         except Exception as error:
             print('== Summary %s unavailable: %s' % (day, error))
+
+    try:
+        fq = get(base, '/api/frequency?range=24h')
+        t = fq.get('today') or {}
+        print('== Frequency: latest %s, %d readings in 24 h, sd %s mHz, low %s, high %s' % (
+            fq.get('latest'), len(fq['series']['t']), t.get('sd_mhz'), t.get('min'), t.get('max')))
+        print('  inertia:', {k: v for k, v in (fq.get('inertia') or {}).items() if k != 'series'})
+        print('  response held:', fq['response'])
+        for e in fq.get('events', [])[:6]:
+            print('  event %s: %s | %s' % (e['id'], words(e['title']), words(e['detail'])))
+    except Exception as error:
+        print('== Frequency unavailable:', error)
+
+    try:
+        ev = get(base, '/api/events?days=7')
+        print('== Timeline: %s' % ev['counts'])
+        for e in ev['events'][:15]:
+            print('  %s %-9s L%d %s | %s' % (e['t'], e['kind'], e['level'], words(e['title']), [l['href'] for l in e['links']]))
+    except Exception as error:
+        print('== Timeline unavailable:', error)
 
     print('== Interconnectors (MW, positive = importing)')
     print('  ' + ', '.join('%s %s' % (link['name'], link['mw']) for link in data['links']))

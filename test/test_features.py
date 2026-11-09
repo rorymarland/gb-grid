@@ -279,5 +279,76 @@ check('terms marked', any(isinstance(p, dict) and p.get('term') == 'carbon-inten
 check('article', server.article('Electricity Margin Notice') == 'an Electricity Margin Notice' and server.article('High risk of demand reduction') == 'a high risk of demand reduction')
 check('today so far', grid.summary('today')['day'] == 'today' and grid.summary('bogus')['day'] == 'today')
 
+# ---- frequency: products, events, statistics ----------------------------------
+
+check('product codes', [server.product_code(n) for n in ('DCL', 'Dynamic Containment LF', 'Dynamic Moderation HF', 'dr l',
+                                                          'Positive Quick Reserve', 'Negative Slow Reserve', 'Mystery')]
+      == ['DCL', 'DCL', 'DMH', 'DRL', 'PQR', 'NSR', None])
+
+def readings_with(trip_at, depth, base=50.0, start=0, end=3600, up=False):
+    out = []
+    for t in range(start, end, 15):
+        dt = t - trip_at
+        v = base + 0.01 * ((t // 15) % 3 - 1)
+        if 0 <= dt <= 600:
+            shape = min(1.0, dt / 8.0) * server.math.exp(-max(0.0, dt - 8) / 50.0)
+            v += (depth if up else -depth) * shape
+        out.append((float(t), v))
+    return out
+
+found = server.find_events(readings_with(1800, 0.3))
+check('one dip found', len(found) == 1, found)
+f = found[0] if found else {}
+check('dip figures', f.get('direction') == 'low' and f.get('start') == 1800 - 15 + 15 or f.get('start') in (1785, 1800), f)
+check('dip size', f.get('peak', 50) < 49.8 and f.get('outside') and f.get('level') == 3 and f.get('recovery') and f['recovery'] < 400, f)
+rise = server.find_events(readings_with(1800, 0.15, up=True))
+check('rise found', len(rise) == 1 and rise[0]['direction'] == 'high' and rise[0]['level'] == 2, rise)
+check('quiet day', server.find_events(readings_with(10 ** 9, 0.3)) == [])
+stats = server.frequency_stats([(0, 49.85), (15, 50.0), (30, 50.05), (45, 50.25)])
+check('frequency stats', stats['min']['hz'] == 49.85 and stats['max']['hz'] == 50.25 and stats['outside_02_s'] == 15
+      and stats['outside_01'] == 50.0 and stats['within_005'] == 50.0, stats)
+hist = server.histogram([(0, 49.995), (15, 50.004), (30, 49.0)])
+check('histogram', sum(hist['counts']) == 3 and hist['counts'][0] == 1 and len(hist['counts']) == 60, hist)
+
+# ---- the timeline ------------------------------------------------------------
+
+trip = server.floor_to(now - 5 * 3600, 300) + 37
+fr = [(t, v) for t, v in readings_with(trip, 0.3, start=int(trip - 3600), end=int(now - 60))]
+store.write(server.UPSERT_FREQ, fr, history=False)
+store.write(server.UPSERT_RESP, [(int(trip - 3600), int(trip + 10000), 'DCL', 1200.0, 3.0)], history=False)
+store.write(server.UPSERT_HH, [('inertia', server.floor_to(trip, 1800), 155.0)], history=False)
+# IFA drops 1,000 MW of imports at the trip
+store.write(server.UPSERT_GEN, [(t, 'INTFR', 1000) for t in range(server.floor_to(trip, 300) + 300, server.floor_to(trip, 300) + 1800, 300)])
+store.write(server.UPSERT_WARN, [(now - 7200, 'ELECTRICITY MARGIN NOTICE', 'ELECTRICITY MARGIN NOTICE from 16:00 to 19:00 on 01/01/2030, shortfall 500 MW')], history=False)
+grid = server.Grid(store, server.Status())
+events = server.Events(grid)
+events.poll()
+payload = grid.events_payload(days=4)
+by_kind = {}
+for e in payload['events']:
+    by_kind.setdefault(e['kind'], []).append(e)
+check('negative prices on the timeline', len(by_kind.get('price', [])) >= 2 and words(by_kind['price'][0]['title']).startswith('Prices went negative for 2 hours'), [words(e['title']) for e in by_kind.get('price', [])])
+check('wind over half', any('Wind supplied over half' in words(e['title']) for e in by_kind.get('clean', [])))
+check('demand peak marker', any(e['level'] == 1 for e in by_kind.get('demand', [])))
+fe = by_kind.get('frequency', [])
+check('frequency event', len(fe) == 1 and 'dipped to 49.' in words(fe[0]['title']), [words(e['title']) for e in fe])
+detail = words(fe[0]['detail']) if fe else ''
+check('cause found', 'IFA' in detail and '1,000 MW' in detail, detail)
+check('response held quoted', '1,200 MW of Dynamic Containment' in detail, detail)
+check('notice on the timeline', any('Electricity Margin Notice' in words(e['title']) for e in by_kind.get('notice', [])), by_kind.get('notice'))
+check('history link only when covered', all(l['href'].startswith(('/frequency', '/map')) for e in payload['events'] for l in e['links']))
+count = store.scalar('SELECT COUNT(*) FROM ev')
+events.poll()
+check('rerun is idempotent', store.scalar('SELECT COUNT(*) FROM ev') == count, count)
+fp = grid.frequency_payload('1h', fe[0]['id'] if fe else None)
+check('frequency payload', fp['latest'] and fp['series']['step'] == 15 and fp['response']['held'].get('DCL') is None
+      and fp['event'] and fp['event']['data']['inertia'] == 155, {k: fp[k] for k in ('latest', 'response')})
+fp7 = grid.frequency_payload('7d')
+check('frequency week in buckets', fp7['series']['step'] == 300 and len(fp7['series']['min']) == len(fp7['series']['t']))
+links = server.event_links({'id': 'x', 't': now - 3 * 86400, 'kind': 'price'}, now, replay_from=now - 7 * 86400, history_to=now)
+check('map link inside the replay', links and links[0]['href'].startswith('/map?at='), links)
+links = server.event_links({'id': 'x', 't': now - 30 * 86400, 'kind': 'price'}, now, replay_from=now - 7 * 86400, history_to=now)
+check('history link after a week', links and links[0]['href'].startswith('/history?at='), links)
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

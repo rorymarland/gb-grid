@@ -5,6 +5,7 @@ import time
 
 from .config import HISTORY_DAYS, REGION_ID, log
 from .fetch import FetchError
+from .store import FREQUENCY_DAYS
 
 
 # --------------------------------------------------------------------------
@@ -33,7 +34,7 @@ def run_job(name, function, interval, status, stop):
         stop.wait(delay + random.uniform(0, min(3.0, delay * 0.1)))
 
 
-def run_backfill(ingest, stop):
+def run_backfill(ingest, stop, frequency=None):
     """Fill the history on first start (newest first), politely and sequentially."""
     stop.wait(5)
     steps = [
@@ -42,6 +43,7 @@ def run_backfill(ingest, stop):
         ('carbon', lambda: ingest.backfill_carbon(HISTORY_DAYS)),
         ('region', lambda: ingest.backfill_carbon(HISTORY_DAYS, REGION_ID) if REGION_ID else None),
         ('price', lambda: ingest.backfill_price(HISTORY_DAYS)),
+        ('frequency', lambda: frequency.backfill(min(HISTORY_DAYS, FREQUENCY_DAYS - 1)) if frequency else None),
     ]
     for name, step in steps:
         if stop.is_set():

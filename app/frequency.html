@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>GB grid frequency</title>
+<link rel="stylesheet" href="{{static:pages/frequency.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap">
+  <section class="page-head">
+    <h1>Grid frequency</h1>
+    <p class="lede" id="lede">How closely supply matches demand, second by second, and what keeps it there.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="now-title">
+    <div class="panel-head">
+      <h2 id="now-title">Right now</h2>
+      <div class="controls">
+        <div class="toggle" role="group" aria-label="Chart range" id="range">
+          <button type="button" data-range="1h" aria-pressed="true">Hour</button>
+          <button type="button" data-range="6h" aria-pressed="false">6 hours</button>
+          <button type="button" data-range="24h" aria-pressed="false">24 hours</button>
+          <button type="button" data-range="7d" aria-pressed="false">7 days</button>
+        </div>
+      </div>
+    </div>
+    <div class="reading" id="reading"></div>
+    <div class="chart fchart" id="chart"></div>
+    <p class="explain">Every generator on the grid spins in step at 50 times a second. When demand runs ahead of supply, the difference comes out of the energy stored in those spinning machines and they slow down, so the frequency falls; when supply runs ahead, it rises. NESO keeps it within 0.2 Hz of 50 Hz in normal running and must never let it pass 49.5 or 50.5 Hz. Readings are Elexon’s, every 15 seconds.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="steady-title">
+    <div class="panel-head"><h2 id="steady-title">How steady</h2></div>
+    <p class="sub">Today so far, and how the last 24 hours of readings spread around 50 Hz.</p>
+    <div class="steady">
+      <dl class="figures" id="figures"></dl>
+      <div class="chart" id="hist"></div>
+    </div>
+  </section>
+
+  <div class="two">
+    <section class="panel" aria-labelledby="inertia-title">
+      <div class="panel-head"><h2 id="inertia-title">Inertia</h2></div>
+      <p class="sub">NESO’s estimate of the energy stored in the grid’s spinning machines, in gigavolt-ampere seconds. More inertia means frequency falls more slowly after a trip, giving response services time to act.</p>
+      <div id="inertia"></div>
+    </section>
+    <section class="panel" aria-labelledby="held-title">
+      <div class="panel-head"><h2 id="held-title">Response held now</h2></div>
+      <p class="sub">What NESO bought in its daily auction for this four-hour block. Low services push power in when frequency falls; high services take it out when it rises.</p>
+      <div id="held"></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="events-title" id="events-panel">
+    <div class="panel-head"><h2 id="events-title">Frequency events</h2></div>
+    <p class="sub">Sudden falls and rises in the last week, usually a power station or interconnector tripping. At 15-second resolution the true lowest point, reached within seconds, is usually missed, so these figures understate how far it went.</p>
+    <div class="fevents" id="events"></div>
+  </section>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/frequency.js}}"></script>
+</body>
+</html>

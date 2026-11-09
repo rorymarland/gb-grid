@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>GB grid timeline</title>
+<link rel="stylesheet" href="{{static:pages/timeline.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap">
+  <section class="page-head">
+    <h1>What happened on the grid</h1>
+    <p class="lede" id="lede">Trips, frequency dips, price swings, notices and records, spotted in the data as they happen. Anything from the last week opens on the map at that moment.</p>
+  </section>
+
+  <section class="panel tl-panel" aria-label="Timeline">
+    <div class="tl-controls">
+      <div class="chips" id="kinds" role="group" aria-label="Show these kinds of event"></div>
+      <div class="controls">
+        <label class="check"><input type="checkbox" id="daily"> Daily markers</label>
+        <div class="toggle" role="group" aria-label="How far back" id="span">
+          <button type="button" data-days="7" aria-pressed="true">Week</button>
+          <button type="button" data-days="30" aria-pressed="false">Month</button>
+          <button type="button" data-days="365" aria-pressed="false">Year</button>
+        </div>
+      </div>
+    </div>
+    <div id="timeline"></div>
+  </section>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/timeline.js}}"></script>
+</body>
+</html>

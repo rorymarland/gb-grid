@@ -43,8 +43,10 @@ PAGES = [
     ('map', '/map', 'Map', 'map.html'),
     ('stations', '/stations', 'Stations', 'map.html'),
     ('regions', '/regions', 'Regions', 'regions.html'),
+    ('frequency', '/frequency', 'Frequency', 'frequency.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
+    ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
     ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not a tab
     ('glossary', '/glossary', 'Glossary', 'glossary.html'),  # linked from the credits and the term popovers
@@ -77,7 +79,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'region boundaries, constraint costs and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'region boundaries, constraint costs, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
@@ -207,6 +209,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(App.grid.longterm_summary(), send_body)
             elif parts.path == '/api/summary':
                 self.respond_json(App.grid.summary(query.get('day', ['today'])[0]), send_body)
+            elif parts.path == '/api/events':
+                try:
+                    days = int(query.get('days', ['30'])[0])
+                except ValueError:
+                    days = 30
+                kinds = [k for k in query.get('kind', [''])[0].split(',') if k] or None
+                self.respond_json(App.grid.events_payload(days, kinds), send_body)
+            elif parts.path == '/api/frequency':
+                event = query.get('event', [''])[0][:40] or None
+                self.respond_json(App.grid.frequency_payload(query.get('range', ['1h'])[0], event), send_body)
             elif parts.path == '/api/outlook':
                 self.respond_json(App.grid.outlook_payload(), send_body)
             elif parts.path == '/api/outages':

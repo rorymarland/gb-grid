@@ -27,6 +27,8 @@ SOURCE_LABELS = {
     'longhistory': 'Long-term history (NESO historic generation mix)',
     'longprices': 'Long-term prices (Elexon market index since 2018)',
     'outlook': 'Outlook (Elexon demand and wind forecasts)',
+    'response': 'Inertia and frequency response (NESO)',
+    'events': 'Timeline (built from the other feeds)',
 }
 
 

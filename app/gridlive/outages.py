@@ -90,7 +90,7 @@ class Outages:
             mrid = d.get('mrid') or str(d.get('id'))
             if mrid in latest and latest[mrid]['rev'] >= (d.get('revisionNumber') or 0):
                 continue
-            latest[mrid] = {'rev': d.get('revisionNumber') or 0, 'asset': d.get('assetId') or '', 'unit': d.get('affectedUnit') or '',
+            latest[mrid] = {'mrid': mrid, 'rev': d.get('revisionNumber') or 0, 'asset': d.get('assetId') or '', 'unit': d.get('affectedUnit') or '',
                             'lost': lost, 'normal': as_float(d.get('normalCapacity')), 'type': d.get('unavailabilityType') or '',
                             'cause': (d.get('cause') or '').strip(), 'start': start, 'end': end, 'fuel': d.get('fuelType') or '',
                             'published': parse_time(d['publishTime']) if d.get('publishTime') else None}

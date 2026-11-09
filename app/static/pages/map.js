@@ -83,6 +83,7 @@ function tick() {
         state.data = state.live;
         render();
       }
+      openAt();
     }
   }).catch(function () {
     state.failures += 1;
@@ -906,6 +907,20 @@ function frameData(i) {
     stations: stations, links: links, categories: categories, unplaced: [],
     demand_gw: num(demand) ? demand / 1000 : null, exports_gw: num(exports) ? Math.abs(exports) / 1000 : null
   };
+}
+
+/* /map?at=<unix time>: open the time machine at that moment (links from the timeline) */
+var AT = +(new URLSearchParams(location.search).get('at') || 0);
+function openAt() {
+  if (!AT || viewFromPath() !== 'map') return;
+  var at = AT;
+  AT = 0;
+  loadReplay(function () {
+    var ts = R.data.t, i = 0;
+    while (i < ts.length - 1 && ts[i] < at) i++;
+    if (at < ts[0] - 900 || at > ts[ts.length - 1] + 900) return;
+    showFrame(i);
+  });
 }
 
 function showFrame(i) {

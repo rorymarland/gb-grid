@@ -1324,4 +1324,22 @@ setInterval(function () { if (state.live) { renderForecast(state.live); renderFe
 tick();
 
 mountOutlook(byId('outlook'));
+/* Recent events: the latest notable moments from the timeline */
+var KIND_COLOUR = { frequency: '--down', outage: '--bad', price: '--warn', notice: '--alert-line', record: '--c-nuclear', clean: '--ci-very-low', balancing: '--c-imports', demand: '--muted' };
+G.poll('/api/events?days=3', {
+  interval: function () { return 120; },
+  onData: function (d) {
+    var host = clear(byId('recent'));
+    var list = d.events.filter(function (e) { return e.level >= 2; }).slice(0, 5);
+    if (!list.length) { host.appendChild(h('li', { cls: 'none', text: 'Nothing notable in the last three days.' })); return; }
+    list.forEach(function (e) {
+      host.appendChild(h('li', null, [
+        h('i', { style: 'background:var(' + (KIND_COLOUR[e.kind] || '--muted') + ')', 'aria-hidden': 'true' }),
+        h('span', { cls: 'when', text: G.when(e.t) }),
+        h('a', { href: '/timeline#' + e.id, text: e.title.map(function (p) { return typeof p === 'string' ? p : p.t; }).join('') })
+      ]));
+    });
+  }
+});
+
 mountSummary(byId('story'), { toggleHost: byId('story-toggle'), onRender: function (d) { byId('story-title').textContent = d.day === 'today' ? 'Today on the grid' : 'Yesterday on the grid'; } });

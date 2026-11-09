@@ -46,9 +46,9 @@
       <h2 class="kpi-head">Grid frequency <button class="info" type="button" aria-expanded="false" aria-controls="ex-freq" aria-label="About grid frequency">i</button></h2>
       <p class="kpi-value" id="k-freq">–</p>
       <p class="kpi-note" id="k-freq-note"></p>
-      <div class="explain" id="ex-freq" hidden><p>The grid runs at 50 Hz. When demand runs ahead of supply the frequency dips slightly; when supply runs ahead it rises. NESO keeps it between 49.8 and 50.2 Hz in normal operation, and the legal limits are 49.5 to 50.5 Hz.</p><p>Readings are 15 seconds apart. The line shows the last hour, scaled to the normal band.</p></div>
+      <div class="explain" id="ex-freq" hidden><p>The grid runs at 50 Hz. When demand runs ahead of supply the frequency dips slightly; when supply runs ahead it rises. NESO keeps it between 49.8 and 50.2 Hz in normal operation, and the legal limits are 49.5 to 50.5 Hz.</p><p>Readings are 15 seconds apart. The line shows the last hour, scaled to the normal band. <a href="/frequency">More on frequency</a>, including inertia, the response NESO holds and recent dips.</p></div>
       <svg class="spark" id="s-freq" aria-hidden="true"></svg>
-      <p class="spark-cap">Last hour</p>
+      <p class="spark-cap">Last hour. <a href="/frequency">More detail</a></p>
     </div>
   </section>
 
@@ -59,7 +59,14 @@
       <h2 id="story-title">Today on the grid</h2>
       <div class="controls" id="story-toggle"></div>
     </div>
-    <div class="story" id="story"></div>
+    <div class="story-grid">
+      <div class="story" id="story"></div>
+      <aside class="recent" aria-labelledby="recent-title">
+        <h3 id="recent-title">Recent events</h3>
+        <ol id="recent"></ol>
+        <p><a href="/timeline">The full timeline</a></p>
+      </aside>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="forecast-title">

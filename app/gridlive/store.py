@@ -38,9 +38,19 @@ UPSERT_BAL = ('INSERT INTO bal (d, sp, unit, elexon, vol_bid, vol_offer, cash_bi
               'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (d, sp, unit) DO UPDATE SET elexon = excluded.elexon, '
               'vol_bid = excluded.vol_bid, vol_offer = excluded.vol_offer, cash_bid = excluded.cash_bid, '
               'cash_offer = excluded.cash_offer')
+UPSERT_RESP = ('INSERT INTO resp (start, end, product, mw, price) VALUES (?, ?, ?, ?, ?) '
+               'ON CONFLICT (start, product) DO UPDATE SET end = excluded.end, mw = excluded.mw, price = excluded.price '
+               'WHERE resp.mw IS NOT excluded.mw OR resp.price IS NOT excluded.price OR resp.end IS NOT excluded.end')
+UPSERT_EV = ('INSERT INTO ev (id, t, kind, level, title, detail, data, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+             'ON CONFLICT (id) DO UPDATE SET t = excluded.t, kind = excluded.kind, level = excluded.level, title = excluded.title, '
+             'detail = excluded.detail, data = excluded.data, updated = excluded.updated '
+             'WHERE ev.title IS NOT excluded.title OR ev.detail IS NOT excluded.detail OR ev.data IS NOT excluded.data '
+             'OR ev.level IS NOT excluded.level OR ev.t IS NOT excluded.t')
 UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
                'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
 STATION_HISTORY_DAYS = 7
+FREQUENCY_DAYS = 8        # 15-second frequency readings (about 46,000 rows)
+EVENT_DAYS = 400          # the timeline
 
 
 class Store:
@@ -84,6 +94,11 @@ class Store:
             CREATE TABLE IF NOT EXISTS lp (t INTEGER PRIMARY KEY, price REAL);
             CREATE TABLE IF NOT EXISTS balp (d TEXT NOT NULL, sp INTEGER NOT NULL, t INTEGER NOT NULL,
                 fetched INTEGER NOT NULL, PRIMARY KEY (d, sp)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS resp (start INTEGER NOT NULL, end INTEGER NOT NULL, product TEXT NOT NULL,
+                mw REAL, price REAL, PRIMARY KEY (start, product)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS ev (id TEXT PRIMARY KEY, t INTEGER NOT NULL, kind TEXT NOT NULL, level INTEGER NOT NULL,
+                title TEXT NOT NULL, detail TEXT, data TEXT, updated INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS ev_t ON ev (t);
         ''')
 
     def write(self, sql, rows, history=True):
@@ -130,7 +145,9 @@ class Store:
             self.db.execute('DELETE FROM gen WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM hh WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM ci WHERE t < ?', (cutoff,))
-            self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - 26 * 3600,))
+            self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - FREQUENCY_DAYS * 86400,))
+            self.db.execute('DELETE FROM resp WHERE end < ?', (time.time() - 10 * 86400,))
+            self.db.execute('DELETE FROM ev WHERE t < ?', (time.time() - EVENT_DAYS * 86400,))
             self.db.execute('DELETE FROM st WHERE t < ?', (time.time() - STATION_HISTORY_DAYS * 86400,))
             self.db.execute('DELETE FROM warn WHERE t < ?', (time.time() - 400 * 86400,))
             self.db.execute('DELETE FROM reg WHERE t < ?', (time.time() - 3 * 86400,))

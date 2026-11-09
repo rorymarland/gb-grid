@@ -7,12 +7,25 @@ releases that keep working with your existing settings and data.
 ## 1.3.0 (unreleased)
 
 - **Plain English layer:** grid terms in the explanations are underlined and
-  open a short definition; a new Glossary page (`/glossary`) lists all 41.
+  open a short definition; a new Glossary page (`/glossary`) lists all 47.
 - **Today on the grid:** the Overview opens with a written summary of the day
   so far or yesterday, led by the most notable event (negative prices, a
   notice, the cleanest day of the week, heavy curtailment). The Display view
   has it as a slide too, so the default slide list is now
   `now,story,day,map,regions,balancing,outlook,outages,records`.
+- **Frequency page** (`/frequency`): live frequency against its limits, an hour
+  to a week of 15-second readings, how steady it's been, NESO's inertia
+  estimates and the frequency response held now. Sudden falls and rises are
+  picked out as frequency events with their recovery time, likely cause and
+  the response held at the time. Frequency readings are now kept for 8 days
+  (about 46,000 rows) and backfilled on first start.
+- **Timeline** (`/timeline`): notable moments kept for a year (frequency
+  events, large unplanned outages, negative prices and spikes, grid notices,
+  records, expensive constraint days and daily markers), filterable by kind.
+  Recent ones open the map's time machine at that moment; the Map and History
+  pages take `?at=<unix time>` for this. The Overview lists the latest few.
+- New API endpoints: `/api/frequency` and `/api/events`. New settings:
+  `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.

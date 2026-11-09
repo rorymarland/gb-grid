@@ -15,6 +15,8 @@ from .balancing import Balancing
 from .outages import Outages
 from .longterm import LongHistory, Outlook
 from .grid import Grid
+from .frequency import FrequencyData
+from .events import Events
 from .web import App, Handler, UI, load_file
 
 
@@ -33,6 +35,8 @@ def main():
     longhistory, outlook = LongHistory(store), Outlook()
     App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing, outages), UI()
     App.grid.outlook = outlook
+    frequency = FrequencyData(store)
+    events = Events(App.grid)
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
@@ -51,6 +55,8 @@ def main():
         ('balancing', balancing.poll),
         ('outages', outages.poll),
         ('outlook', outlook.poll),
+        ('response', frequency.poll_neso),
+        ('events', events.poll),
     ]
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]
@@ -61,7 +67,7 @@ def main():
             stop.wait(offset)
             run_job(name, function, POLL[name], status, stop)
         threading.Thread(target=start, name=name, daemon=True).start()
-    threading.Thread(target=run_backfill, args=(ingest, stop), name='backfill', daemon=True).start()
+    threading.Thread(target=run_backfill, args=(ingest, stop, frequency), name='backfill', daemon=True).start()
     threading.Thread(target=run_maintenance, args=(store, stop), name='maintenance', daemon=True).start()
 
     server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
