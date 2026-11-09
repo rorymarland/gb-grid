@@ -131,6 +131,11 @@ class FrequencyData:
                 rows.append(('inertia_mkt', t, market))
         if not rows:
             raise FetchError('The inertia data was empty')
+        latest = max(r[1] for r in rows)
+        if resource['id'] != self.inertia_resource:
+            self.inertia_resource = resource['id']
+            log.info('[response] inertia from "%s": %d half hours, latest %s', resource.get('name'), len(rows) // 2 or len(rows),
+                     iso_minute(latest))
         self.store.write(UPSERT_HH, rows, history=False)
 
     # ---- NESO: response and reserve held, from the daily auction results ---

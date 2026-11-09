@@ -204,7 +204,7 @@ function renderInertia() {
   var d = state.data.inertia, host = clear(byId('inertia'));
   if (!d) { host.appendChild(h('p', { cls: 'empty', text: 'Waiting for NESO’s inertia figures, which are published after the day.' })); return; }
   host.appendChild(h('div', { cls: 'big small' }, [h('b', { text: G.int(d.gvas) }), h('span', { cls: 'unit', text: 'GVA·s' }),
-    h('p', { text: 'Latest published half hour: ' + G.when(d.t) + '. Over the last week it ranged from ' + G.int(d.low) + ' to ' + G.int(d.high) + ' GVA·s.' })]));
+    h('p', { text: 'Latest published half hour: ' + G.when(d.t) + '. Over the week to then it ranged from ' + G.int(d.low) + ' to ' + G.int(d.high) + ' GVA·s.' })]));
   var se = d.series, W = Math.max(280, host.clientWidth || 480), H = 120, padL = 36, padB = 20, padT = 6;
   var lo = Math.floor(d.low / 20) * 20, hi = Math.ceil(d.high / 20) * 20 || 1;
   var t0 = se.t[0], t1 = se.t[se.t.length - 1];

@@ -143,7 +143,9 @@ class Store:
         with self.lock:
             before = self.db.total_changes
             self.db.execute('DELETE FROM gen WHERE t < ?', (cutoff,))
-            self.db.execute('DELETE FROM hh WHERE t < ?', (cutoff,))
+            # NESO publishes inertia some days after the fact, so it is kept longer
+            self.db.execute("DELETE FROM hh WHERE t < ? AND k NOT IN ('inertia', 'inertia_mkt')", (cutoff,))
+            self.db.execute("DELETE FROM hh WHERE t < ? AND k IN ('inertia', 'inertia_mkt')", (time.time() - 90 * 86400,))
             self.db.execute('DELETE FROM ci WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - FREQUENCY_DAYS * 86400,))
             self.db.execute('DELETE FROM resp WHERE end < ?', (time.time() - 10 * 86400,))

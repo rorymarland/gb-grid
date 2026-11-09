@@ -62,8 +62,10 @@ class EventViews:
         last24 = [r for r in rows if r[0] > end - 86400]
         latest = {'t': int(rows[-1][0]), 'hz': round(rows[-1][1], 3)} if rows else None
         # Inertia: the latest published half hour, and the last week
-        inertia_rows = self.store.query("SELECT t, v FROM hh WHERE k = 'inertia' AND t >= ? ORDER BY t", (now - 8 * 86400,))
-        market = dict(self.store.query("SELECT t, v FROM hh WHERE k = 'inertia_mkt' AND t >= ?", (now - 8 * 86400,)))
+        # Inertia: the latest published week, however far behind NESO is
+        inertia_last = self.store.scalar("SELECT MAX(t) FROM hh WHERE k = 'inertia'") or now
+        inertia_rows = self.store.query("SELECT t, v FROM hh WHERE k = 'inertia' AND t > ? ORDER BY t", (inertia_last - 7 * 86400,))
+        market = dict(self.store.query("SELECT t, v FROM hh WHERE k = 'inertia_mkt' AND t > ?", (inertia_last - 7 * 86400,)))
         inertia = None
         if inertia_rows:
             t, v = inertia_rows[-1]
