@@ -350,5 +350,14 @@ check('map link inside the replay', links and links[0]['href'].startswith('/map?
 links = server.event_links({'id': 'x', 't': now - 30 * 86400, 'kind': 'price'}, now, replay_from=now - 7 * 86400, history_to=now)
 check('history link after a week', links and links[0]['href'].startswith('/history?at='), links)
 
+# ---- the sandbox --------------------------------------------------------------
+
+line = server.fit_line([(x, 6.0 * x + 30 + (1 if x % 2 else -1)) for x in range(60)])
+check('inertia fit', abs(line[0] - 6.0) < 0.05 and abs(line[1] - 30) < 1.5 and line[2] > 0.99, line)
+check('too few points', server.fit_line([(1, 2)] * 10) is None)
+sb = grid.sandbox_payload()
+check('sandbox payload', sb['held'].get('DCL') == 1200 or sb['held'] == {} or 'DCL' in sb['held'], sb)
+check('sandbox fit falls back', not sb['fit']['fitted'] and sb['fit']['a'] == 6.5, sb['fit'])
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

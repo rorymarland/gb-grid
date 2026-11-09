@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>GB grid what if</title>
+<link rel="stylesheet" href="{{static:pages/sandbox.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap">
+  <section class="page-head">
+    <h1>What if?</h1>
+    <p class="lede">Trip a power station, take away inertia or response, and watch what the grid does in the first minute. A simplified model for seeing how the pieces fit, not a study of the real system.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="start-title">
+    <div class="panel-head">
+      <h2 id="start-title">Start from</h2>
+      <div class="controls">
+        <div class="toggle" role="group" aria-label="Starting point" id="start">
+          <button type="button" data-start="now" aria-pressed="true">The grid now</button>
+          <button type="button" data-start="past" aria-pressed="false">Earlier</button>
+          <button type="button" data-start="preset" aria-pressed="false">A preset</button>
+        </div>
+      </div>
+    </div>
+    <div class="start-extra" id="start-extra"></div>
+    <dl class="start-figs" id="start-figs"></dl>
+  </section>
+
+  <section class="panel" aria-labelledby="trip-title">
+    <div class="panel-head">
+      <h2 id="trip-title">The first minute after a trip</h2>
+      <div class="controls"><button type="button" class="go" id="go">Trip it</button></div>
+    </div>
+    <div class="sim">
+      <form class="knobs" id="knobs" onsubmit="return false"></form>
+      <div class="sim-out">
+        <div class="sim-figs" id="sim-figs"></div>
+        <div class="chart" id="f-chart"></div>
+        <div class="chart" id="p-chart"></div>
+        <ul class="legend" id="p-legend"></ul>
+        <ol class="story-steps" id="story"></ol>
+      </div>
+    </div>
+    <p class="explain">The grid is treated as one spinning mass. When a generator trips, the missing power comes out of the energy stored in every spinning machine, so frequency falls at a rate set by the size of the loss and the inertia. Demand falls a little with frequency, response services and generators’ governors push power back in within seconds, and reserve takes over within a minute. Service shapes and delays are typical values, not measurements.</p>
+  </section>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/sandbox.js}}"></script>
+</body>
+</html>

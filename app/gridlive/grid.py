@@ -12,6 +12,7 @@ from .views_system import SystemViews
 from .views_longterm import LongtermViews
 from .views_summary import SummaryViews
 from .views_events import EventViews
+from .views_sandbox import SandboxViews
 
 
 # --------------------------------------------------------------------------
@@ -19,7 +20,7 @@ from .views_events import EventViews
 # --------------------------------------------------------------------------
 
 
-class Grid(LiveViews, MapViews, SystemViews, LongtermViews, SummaryViews, EventViews):
+class Grid(LiveViews, MapViews, SystemViews, LongtermViews, SummaryViews, EventViews, SandboxViews):
     """Builds the /api/live and /api/history payloads from the store."""
 
     def __init__(self, store, status, fleet=None, units=None, balancing=None, outages=None):

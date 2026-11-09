@@ -48,6 +48,7 @@ PAGES = [
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
+    ('sandbox', '/sandbox', 'What if', 'sandbox.html'),
     ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not a tab
     ('glossary', '/glossary', 'Glossary', 'glossary.html'),  # linked from the credits and the term popovers
 ]
@@ -216,6 +217,12 @@ class Handler(BaseHTTPRequestHandler):
                     days = 30
                 kinds = [k for k in query.get('kind', [''])[0].split(',') if k] or None
                 self.respond_json(App.grid.events_payload(days, kinds), send_body)
+            elif parts.path == '/api/sandbox':
+                try:
+                    at = int(query.get('at', ['0'])[0])
+                except ValueError:
+                    at = 0
+                self.respond_json(App.grid.sandbox_payload(at or None), send_body)
             elif parts.path == '/api/frequency':
                 event = query.get('event', [''])[0][:40] or None
                 self.respond_json(App.grid.frequency_payload(query.get('range', ['1h'])[0], event), send_body)
