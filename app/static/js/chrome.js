@@ -1,6 +1,7 @@
 /* The page frame shared by every page: colour theme, menus, search and the
    grid warning banner. Runs once, when gb.js is first imported. */
 
+import { mountFeeds } from './feeds.js';
 import { byId, clear, h } from './dom.js';
 import { plural, when, resetChanged } from './format.js';
 import { poll } from './net.js';
@@ -302,6 +303,7 @@ function start() {
   setupSheet();
   setupSkip();
   setupPalette();
+  mountFeeds();
   Array.prototype.forEach.call(document.querySelectorAll('.year'), function (node) { node.textContent = String(new Date().getFullYear()); });
   if (byId('alert-bar')) poll('/api/alerts', { onData: renderAlerts, interval: function () { return 60; } });
 

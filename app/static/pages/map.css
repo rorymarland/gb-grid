@@ -119,9 +119,6 @@ html.fs-lock, html.fs-lock body { overflow: hidden; }
 .empty { color: var(--muted); font-size: 13.5px; margin: 6px 0; }
 
 /* Stations view */
-.page-head { padding: 34px 0 20px; }
-.page-head h1 { font-size: clamp(26px, 1rem + 1.8vw, 38px); line-height: 1.1; font-weight: 650; letter-spacing: -0.022em; margin: 0 0 10px; }
-.lede { font-size: 17px; line-height: 1.5; color: var(--ink-2); margin: 0; max-width: 70ch; }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .nations { display: grid; gap: 12px; margin-top: 6px; position: relative; }
 .nation { display: grid; grid-template-columns: 120px minmax(0, 1fr) 84px; gap: 14px; align-items: center; }

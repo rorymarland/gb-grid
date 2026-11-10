@@ -330,8 +330,9 @@ the port. It only reads public data and holds no secrets.
 
 Some DNS blocklists used with Pi-hole or AdGuard Home block whole top-level
 domains, including `.energy`, which NESO uses for `api.neso.energy`. The
-embedded wind and solar feeds then fail with "Connection refused", and the
-data feeds section at the bottom of the overview says DNS is blocking them.
+embedded wind and solar feeds then fail with "Connection refused", and
+**Data sources** at the foot of every page names them as unavailable (open it
+for the error).
 Allowlist `api.neso.energy` to fix it.
 
 ## How the numbers are made

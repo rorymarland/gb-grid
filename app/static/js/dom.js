@@ -40,3 +40,10 @@ export function s(tag, attrs, kids) {
   }
   return add(node, kids);
 }
+
+/* A station's name, linked to its page when it has one (sid is its station id) */
+export function stationName(name, sid, cls) {
+  var classes = 'name' + (cls ? ' ' + cls : '');
+  if (typeof sid !== 'number') return h('span', { cls: classes, text: name });
+  return h('a', { cls: classes + ' st-link', href: '/station?id=' + sid, text: name });
+}

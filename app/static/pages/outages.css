@@ -35,3 +35,22 @@
 .cat-tiles b { color: var(--ink); font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .nuke li { grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) 5.5em; } }
+/* Offline now: the reason column only on wide screens; on phones each outage becomes a block */
+@media (min-width: 861px) and (max-width: 1100px) { .offline-table .c-since, .offline-table th:nth-child(4) { display: none; } }
+@media (max-width: 860px) {
+  .offline-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .offline-table, .offline-table tbody { display: block; }
+  .offline-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name mw" "back kind" "why why"; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
+  .offline-table td { display: block; padding: 0; border: 0; }
+  .offline-table td[colspan] { grid-column: 1 / -1; }
+  .offline-table .c-name { grid-area: name; min-width: 0; }
+  .offline-table .c-mw { grid-area: mw; align-self: start; }
+  .offline-table .c-back { grid-area: back; font-size: 13.5px; color: var(--ink-2); }
+  .offline-table .c-back::before { content: attr(data-label) " "; }
+  .offline-table .c-kind { grid-area: kind; justify-self: end; }
+  .offline-table .c-since { display: none; }
+  .offline-table .c-why { grid-area: why; font-size: 13px; }
+  .offline-table .c-why.none { display: none; }
+  .offline-table .tag { margin-left: 6px; }
+  .offline-table .lostbar { width: 0 !important; margin: 0; }
+}

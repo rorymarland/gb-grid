@@ -1,9 +1,13 @@
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
-.tile { background: var(--wash); border-radius: 12px; padding: 14px 16px; min-width: 0; }
-.tile .k { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
-.tile .v { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; }
-.tile .v small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 3px; letter-spacing: 0; }
-.tile .n { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+/* Open figures between hairlines, as on the Overview */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin: 0 0 24px; }
+.tile { padding: 18px 20px 16px; border-left: 1px solid var(--hair); min-width: 0; }
+.tile:first-child { border-left: 0; padding-left: 0; }
+.tile:last-child { padding-right: 0; }
+.tile .k { font-size: 14px; color: var(--ink-2); font-weight: 500; display: flex; align-items: center; gap: 7px; }
+.tile .v { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; margin-top: 8px; white-space: nowrap; }
+.tile .v small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 4px; letter-spacing: 0; }
+.tile .n { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+.none-now { margin: 0 0 8px; font-size: 15px; color: var(--ink-2); max-width: 70ch; }
 .dot-down, .dot-up { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .dot-down { background: var(--down); } .dot-up { background: var(--up); }
 .bal-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 0 28px; align-items: start; }
@@ -32,5 +36,8 @@
   .bal-grid { grid-template-columns: minmax(0, 1fr); }
   .ulist { margin-top: 20px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .tile:nth-child(even) { padding-right: 0; }
+  .tile:nth-child(n + 3) { border-top: 1px solid var(--hair); }
 }
-@media (max-width: 480px) { .tile .v { font-size: 22px; } }
+@media (max-width: 480px) { .tile { padding: 14px 12px 12px; } .tile .v { font-size: 24px; } }

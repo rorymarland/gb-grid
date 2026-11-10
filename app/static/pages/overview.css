@@ -134,12 +134,6 @@ table { border-collapse: collapse; width: 100%; }
 /* Footer */
 .foot { padding-top: 6px; padding-bottom: 56px; color: var(--ink-2); font-size: 13.5px; }
 .foot h2 { font-size: 16px; color: var(--ink); margin: 0 0 4px; font-weight: 650; }
-.feeds { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px 28px; list-style: none; padding: 0; margin: 14px 0 26px; }
-.feed { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 1px 9px; }
-.feed svg { grid-row: span 3; width: 16px; height: 16px; margin-top: 2px; }
-.feed .name { color: var(--ink); font-weight: 550; }
-.feed .state { font-size: 12.5px; }
-.feed .err { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .attrib { font-size: 12.5px; color: var(--muted); max-width: 96ch; margin: 0 0 6px; }
 
 

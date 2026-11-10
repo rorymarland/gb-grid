@@ -17,7 +17,8 @@ function renderTiles() {
   }
   tile('Turned down now', G.gw(now.down), 'GW', G.plural(now.units.filter(function (u) { return u.delta < 0; }).length, 'unit', 'units'), 'dot-down');
   tile('Turned up now', G.gw(now.up), 'GW', G.plural(now.units.filter(function (u) { return u.delta > 0; }).length, 'unit', 'units'), 'dot-up');
-  tile('Cost now', num(now.cost_hour) ? G.money(now.cost_hour) : '–', 'an hour', num(now.cost_hour) ? 'Estimate from bid and offer prices' : 'Waiting for prices');
+  if (!now.units.length) tile('Cost now', G.money(0), 'an hour', 'Nothing is being instructed');
+  else tile('Cost now', num(now.cost_hour) ? G.money(now.cost_hour) : '–', 'an hour', num(now.cost_hour) ? 'Estimate from bid and offer prices' : 'Waiting for prices');
   tile('Paid so far today', t.periods ? G.money(t.paid) : '–', '', t.periods ? 'Wind turned down ' + mwh(t.wind_down_mwh) + ', ' + G.money(t.wind_paid) : 'Waiting for Elexon’s figures');
 }
 
@@ -80,7 +81,7 @@ function renderList() {
   byId('ulist-title').textContent = units.length ? G.plural(units.length, 'unit is', 'units are') + ' following instructions' : 'Units following instructions';
   units.forEach(function (u) {
     var row = h('tr', { 'data-sid': u.sid === null ? '' : String(u.sid), onmouseenter: function () { if (u.sid !== null) highlight(u.sid); }, onmouseleave: function () { highlight(null); } }, [
-      h('td', null, [h('span', { cls: 'name', text: u.name }), h('span', { cls: 'tag', text: CAT_NAME[u.cat] || u.cat })]),
+      h('td', null, [G.stationName(u.name, u.sid), h('span', { cls: 'tag', text: CAT_NAME[u.cat] || u.cat })]),
       h('td', { cls: 'num' }, [h('i', { cls: 'bar', style: 'width:' + Math.max(2, 60 * Math.abs(u.delta) / max).toFixed(0) + 'px;background:var(' + (u.delta < 0 ? '--down' : '--up') + ')' }), (u.delta > 0 ? '+' : '−') + mwText(Math.abs(u.delta))]),
       h('td', { cls: 'num hide-sm muted', text: num(u.price) ? (u.price < 0 ? '−£' : '£') + Math.abs(u.price).toFixed(0) + '/MWh' : '–' })
     ]);
@@ -147,7 +148,7 @@ function renderTop() {
   var body = clear(byId('top'));
   state.data.top.forEach(function (u) {
     body.appendChild(h('tr', null, [
-      h('td', { cls: 'name', text: u.name }),
+      h('td', null, G.stationName(u.name, u.sid)),
       h('td', { cls: 'hide-sm', text: CAT_NAME[u.cat] || u.cat }),
       h('td', { cls: 'num', text: u.down >= 0.5 ? mwh(u.down) : '–' }),
       h('td', { cls: 'num', text: u.up >= 0.5 ? mwh(u.up) : '–' }),
@@ -196,6 +197,10 @@ function renderConstraints() {
 
 function renderAll() {
   if (!state.data) return;
+  // Nothing instructed (most of the time): one line instead of an empty map and table
+  var none = !state.data.now.units.length;
+  byId('none-now').hidden = !none;
+  byId('bal-grid').hidden = none;
   renderLede(); renderTiles(); renderList(); renderMap(); renderDay(); renderTop(); renderConstraints();
 }
 

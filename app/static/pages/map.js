@@ -792,6 +792,14 @@ function sortValue(st, key) {
   return st[key];
 }
 
+/* The name opens the station's page; the rest of the row opens its card in place */
+function stationLink(st) {
+  var link = G.stationName(st.n, st.id);
+  link.addEventListener('click', function (e) { e.stopPropagation(); });
+  link.addEventListener('keydown', function (e) { e.stopPropagation(); });
+  return link;
+}
+
 function renderStationsTable(data) {
   if (!data) return;
   var table = clear(byId('stations-table'));
@@ -827,7 +835,7 @@ function renderStationsTable(data) {
     var open = state.openRow === st.id;
     var tr = h('tr', { cls: 'row' + (open ? ' open' : ''), tabindex: '0', 'aria-expanded': String(open), onclick: function () { toggleRow(st.id); },
       onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(st.id); } } }, [
-      h('td', null, [h('span', { cls: 'name', text: st.n }), st.off ? h('span', { cls: 'tag', text: 'Offshore' }) : null, st.i ? h('span', { cls: 'tag', text: 'Instructed' }) : null]),
+      h('td', null, [stationLink(st), st.off ? h('span', { cls: 'tag', text: 'Offshore' }) : null, st.i ? h('span', { cls: 'tag', text: 'Instructed' }) : null]),
       h('td', { cls: 'hide-sm' }, h('span', { cls: 'typ' }, [h('span', { cls: 'sw b-' + st.c }), NAMES[st.c]])),
       h('td', { cls: 'hide-sm muted', text: st.na }),
       h('td', { cls: 'num', text: st.mw <= -1 ? '−' + mw(-st.mw) : mw(Math.max(0, st.mw)) }),

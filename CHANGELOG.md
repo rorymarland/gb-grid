@@ -32,6 +32,25 @@ releases that keep working with your existing settings and data.
   doesn't list are now placed by the government's Renewable Energy Planning
   Database, or by the site they stand on; 214 of 246 stations no longer rely
   on the Power Station Dictionary's coordinates.
+- **Power station names link to their pages** wherever they're listed: on
+  Outages, Balancing and the Stations table.
+- **Data sources** now sit at the foot of every page as one line ("Data
+  sources: All 9 working", or the feed with a problem named), opening to the
+  full list. They used to be at the bottom of the Overview only.
+- **Outages on phones:** the tables of units offline, upcoming outages and the
+  nuclear fleet no longer run off the side of the screen; each unit becomes a
+  short block with what's out, when it's due back and why.
+- **Map on phones:** fewer labels until you zoom in, so place and station
+  names no longer pile on top of each other.
+- **Balancing:** the figures are open rather than boxed, as on the Overview,
+  and when nothing is being instructed the empty map is replaced by a line
+  saying so.
+- **Colours easier to tell apart**, including with colour-blindness: hydro is
+  a deeper blue, biomass a slightly brighter green, and "other" a plain grey,
+  so wind, hydro and storage no longer blur together. The Stations page
+  heading matches the other pages.
+- **Wide screens** (1560 px and up) give charts and maps more room; text keeps
+  its reading width.
 - Station locations are checked two new ways: against the map's coastline
   (in the tests), and against where each station's photo was taken (when the
   photo list is rebuilt).

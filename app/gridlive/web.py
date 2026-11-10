@@ -195,7 +195,9 @@ def html_escape(text):
 def sitemap_html():
     cols = ''.join('<div><h2>%s</h2><ul>%s</ul></div>' % (html_escape(gname), ''.join(
         '<li><a href="%s">%s</a></li>' % (path, label) for key, path, label, desc in items)) for gkey, gname, items in nav_groups())
-    return '<nav class="sitemap" aria-label="All pages">' + cols + '</nav>\n'
+    return ('<nav class="sitemap" aria-label="All pages">' + cols + '</nav>\n'
+            '<details class="feeds-box" id="feeds-box"><summary id="feeds-summary"><span><b>Data sources</b></span></summary>'
+            '<ul class="feeds" id="feeds"></ul></details>\n')
 
 
 class UI:
@@ -404,7 +406,8 @@ class Handler(BaseHTTPRequestHandler):
                 latest = status.get('generation', {}).get('data_time')
                 healthy = bool(latest and time.time() - latest < 30 * 60)
                 notifier = getattr(App.grid, 'notifier', None)
-                self.respond_json({'healthy': healthy, 'sources': status, 'notifications': notifier.state() if notifier else None},
+                self.respond_json({'healthy': healthy, 'sources': status, 'persistent': App.store.persistent,
+                                   'notifications': notifier.state() if notifier else None},
                                   send_body, code=200 if healthy else 503)
             elif parts.path == '/healthz':
                 self.respond(200, b'ok\n', 'text/plain; charset=utf-8', send_body, cache='no-store')

@@ -468,14 +468,19 @@ export function createStationMap(opts) {
     return boxes.some(function (b) { return box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]; });
   }
 
+  /* On a phone-sized map, fewer labels until you zoom in: they'd otherwise
+     cover the coast and each other */
+  function small() { return M.W < 520 && M.s / M.fitS < 1.8; }
+
   /* Interconnector labels first (largest flows win), then stations, then place names */
   function placeLinkLabels(taken) {
-    M.links.slice().sort(function (a, b) { return Math.abs(b.mw || 0) - Math.abs(a.mw || 0); }).forEach(function (link) {
+    var room = small() ? 3 : Infinity;
+    M.links.slice().sort(function (a, b) { return Math.abs(b.mw || 0) - Math.abs(a.mw || 0); }).forEach(function (link, rank) {
       var end = [sx(link.far[0]), sy(link.far[1])];
       var place = LINK_LABEL[link.code] || [8, 4, 'start'];
       var value = linkWords(link);
       var width = Math.max(textWidth(link.name, 11.5, 400), textWidth(value, 11.5, 650));
-      var onScreen = end[0] > -30 && end[0] < M.W + 30 && end[1] > -30 && end[1] < M.H + 30;
+      var onScreen = rank < room && end[0] > -30 && end[0] < M.W + 30 && end[1] > -30 && end[1] < M.H + 30;
       var chosen = null;
       if (onScreen) {
         [place[1], place[1] - 24, place[1] + 24].some(function (dy) {
@@ -502,7 +507,9 @@ export function createStationMap(opts) {
   }
 
   function placeGeoLabels(taken) {
+    var few = small();
     M.geoLabels.forEach(function (label) {
+      if (few && !/\bgb\b/.test(label.node.getAttribute('class'))) { label.node.style.display = 'none'; return; }
       var x = sx(label.x), y = sy(label.y);
       var width = textWidth(label.node.textContent, 12.5, 400);
       var box = [x - width / 2 - 2, y - 12, x + width / 2 + 2, y + 4];
@@ -558,7 +565,7 @@ export function createStationMap(opts) {
       .sort(function (a, b) { return (b.id === selected) - (a.id === selected) || b.st.mw - a.st.mw; });
     var placed = 0;
     candidates.forEach(function (item) {
-      if (placed >= (opts.maxLabels || 14) + zoom * 4) return;
+      if (placed >= (small() ? 4 + zoom * 2 : (opts.maxLabels || 14) + zoom * 4)) return;
       var text = shortName(item.st.n);
       var width = textWidth(text, 12, 600), tall = 15;
       var options = [

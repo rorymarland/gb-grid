@@ -40,13 +40,13 @@
   --c-nuclear: #6d52bc;
   --c-wind: #24a5da;
   --c-solar: #e5a600;
-  --c-hydro: #305eb7;
-  --c-biomass: #43963c;
+  --c-hydro: #224d97;   /* deep: nuclear and wind sit either side in lightness, for colour-blind readers */
+  --c-biomass: #3f9a3a;
   --c-imports: #b94082;
   --c-storage: #26bdae;
   --c-gas: #e36927;
   --c-coal: #5b4a3f;
-  --c-other: #9aa4ae;
+  --c-other: #889098;
   --ci-very-low: #2b9a58;
   --ci-low: #86b43a;
   --ci-moderate: #e1ad1f;
@@ -71,8 +71,8 @@
   --hair: #243140; --axis: #3a4a5b; --chip: #1c2631; --focus: #7aa7ff; --wash: rgba(233, 238, 243, 0.05);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px -8px rgba(0, 0, 0, 0.6); --bar-bg: rgba(14, 20, 27, 0.86);
   --sea: #0c1621; --land: #1c2a3a; --land-near: #142130; --coast: #3a4f65; --coast-near: #26384b;
-  --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #3967c1; --c-biomass: #3d8f35;
-  --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-coal: #8a7464; --c-other: #6e7a87;
+  --c-nuclear: #755dc0; --c-wind: #2698c8; --c-solar: #c08800; --c-hydro: #7d9fea; --c-biomass: #3d8f35;
+  --c-imports: #b53c7f; --c-storage: #20a89b; --c-gas: #d55c13; --c-coal: #8a7464; --c-other: #636363;
   --ci-very-low: #2f9a59; --ci-low: #7fae36; --ci-moderate: #c9a01e; --ci-high: #d4702b; --ci-very-high: #c84545;
   --good: #0ca30c; --warn: #fab219; --bad: #e05252; --line: #c3cfda;
   --alert-bg: #33270a; --alert-line: #7d5c12; --alert-ink: #f7e2a8;
@@ -96,6 +96,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 [hidden] { display: none !important; }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+/* Large screens: more room for charts and maps; paragraphs keep their own reading widths */
+@media (min-width: 1560px) { .wrap { max-width: 1440px; padding: 0 40px; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 kbd { font: 600 11px/1 var(--font); color: var(--muted); border: 1px solid var(--hair); border-bottom-width: 2px; border-radius: 5px; padding: 2px 5px; background: var(--page); }
 
@@ -280,6 +282,9 @@ table { border-collapse: collapse; width: 100%; }
 .data thead th { font-size: 12.5px; color: var(--muted); font-weight: 500; padding-top: 0; white-space: nowrap; }
 .data .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .data .name { font-weight: 550; }
+/* Station names that link to their page: quiet until hovered, so tables stay calm */
+a.st-link { color: inherit; text-decoration: underline; text-decoration-color: var(--axis); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a.st-link:hover { text-decoration-color: currentColor; }
 .data .muted { color: var(--muted); }
 .data tfoot td { border-bottom: 0; color: var(--ink-2); font-size: 13.5px; }
 .table-scroll { overflow-x: auto; }
@@ -395,3 +400,20 @@ table { border-collapse: collapse; width: 100%; }
 .sum-note { font-size: 12.5px; color: var(--muted); margin: 12px 0 0; }
 @media (max-width: 640px) { .sum-head { font-size: 19px; } .sum-points { font-size: 15px; } }
 .sheet .brand span { display: inline; }
+
+/* Data sources (js/feeds.js): a one-line summary in every footer that opens to the list */
+.feeds-box { margin: 26px 0 0; padding-top: 16px; border-top: 1px solid var(--hair); font-size: 13.5px; color: var(--ink-2); }
+.feeds-box summary { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; padding: 4px 0; border-radius: 6px; }
+.feeds-box summary::-webkit-details-marker { display: none; }
+.feeds-box summary::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-2px, -2px); margin-left: 4px; opacity: 0.6; transition: transform 0.15s ease; }
+.feeds-box[open] summary::after { transform: rotate(-135deg) translate(-1px, -1px); }
+.feeds-box summary b { color: var(--ink); font-weight: 600; }
+.feeds-box summary:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.status-icon { width: 16px; height: 16px; flex: none; }
+.feeds { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px 28px; list-style: none; padding: 0; margin: 14px 0 6px; }
+.feed { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 1px 9px; align-content: start; }
+.feed svg { grid-row: span 3; margin-top: 2px; }
+.feed .name { color: var(--ink); font-weight: 550; }
+.feed .state { font-size: 12.5px; }
+.feed .err { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .feeds-box summary::after { transition: none; } }

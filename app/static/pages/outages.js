@@ -63,12 +63,12 @@ function renderOffline() {
   var max = Math.max.apply(null, d.offline.map(function (o) { return o.lost; }).concat([1]));
   d.offline.forEach(function (o) {
     body.appendChild(h('tr', null, [
-      h('td', null, [h('span', { cls: 'name', text: o.name }), h('span', { cls: 'tag', text: CAT[o.cat] || o.cat })]),
-      h('td', { cls: 'num' }, [h('i', { cls: 'lostbar', style: 'width:' + Math.max(2, 60 * o.lost / max).toFixed(0) + 'px' }), G.int(o.lost) + ' MW' + (o.normal && o.normal !== o.lost ? ' of ' + G.int(o.normal) : '')]),
-      h('td', null, h('span', { cls: 'chip ' + (o.planned ? 'planned' : 'unplanned'), text: o.planned ? 'Planned' : 'Unplanned' })),
-      h('td', { cls: 'hide-sm muted', text: G.when(o.start) }),
-      h('td', { text: back(o.end) }),
-      h('td', { cls: 'hide-sm muted', text: o.cause || '–' })
+      h('td', { cls: 'c-name' }, [G.stationName(o.name, o.sid), h('span', { cls: 'tag', text: CAT[o.cat] || o.cat })]),
+      h('td', { cls: 'num c-mw' }, [h('i', { cls: 'lostbar', style: 'width:' + Math.max(2, 60 * o.lost / max).toFixed(0) + 'px' }), G.int(o.lost) + ' MW' + (o.normal && o.normal !== o.lost ? ' of ' + G.int(o.normal) : '')]),
+      h('td', { cls: 'c-kind' }, h('span', { cls: 'chip ' + (o.planned ? 'planned' : 'unplanned'), text: o.planned ? 'Planned' : 'Unplanned' })),
+      h('td', { cls: 'muted c-since', 'data-label': 'Since', text: G.when(o.start) }),
+      h('td', { cls: 'c-back', 'data-label': 'Due back', text: back(o.end) }),
+      h('td', { cls: 'muted c-why' + (o.cause ? '' : ' none'), text: o.cause || '–' })
     ]));
   });
   if (!d.offline.length) body.appendChild(h('tr', null, h('td', { colspan: '6', cls: 'muted', text: d.checked ? 'No outages over 10 MW reported.' : 'Waiting for the outage notices.' })));
@@ -80,7 +80,7 @@ function renderNuclear() {
   state.data.nuclear.forEach(function (n) {
     var cap = n.capacity, mw = num(n.mw) ? Math.max(0, n.mw) : null;
     host.appendChild(h('li', null, [
-      h('span', { cls: 'name', text: n.name }),
+      G.stationName(n.name, n.sid),
       h('span', { cls: 'track', role: 'img', 'aria-label': (num(mw) ? G.int(mw) + ' MW' : 'No output data') + ' of ' + G.int(cap) + ' MW' + (n.out ? ', ' + G.int(n.out) + ' MW out of action' : '') }, [
         n.out ? h('i', { cls: 'out', style: 'right:0;width:' + (100 * Math.min(cap, n.out) / cap).toFixed(1) + '%' }) : null,
         num(mw) ? h('i', { cls: 'gen', style: 'width:' + (100 * Math.min(cap, mw) / cap).toFixed(1) + '%' }) : null
@@ -96,7 +96,7 @@ function renderUpcoming() {
   var body = clear(byId('upcoming'));
   state.data.upcoming.forEach(function (o) {
     body.appendChild(h('tr', null, [
-      h('td', null, [h('span', { cls: 'name', text: o.name }), h('span', { cls: 'tag hide-sm', text: CAT[o.cat] || o.cat })]),
+      h('td', null, [G.stationName(o.name, o.sid), h('span', { cls: 'tag hide-sm', text: CAT[o.cat] || o.cat })]),
       h('td', { cls: 'num', text: G.int(o.lost) }),
       h('td', { text: G.day(o.start) }),
       h('td', { text: num(o.end) ? G.day(o.end) : '–' })

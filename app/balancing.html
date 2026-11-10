@@ -17,7 +17,8 @@
     <div class="panel-head"><h2 id="now-title">Right now</h2></div>
     <p class="sub" id="now-sub">NESO balances supply and demand second by second, and keeps power flows within what the lines can carry, by accepting bids to turn units down and offers to turn them up.</p>
     <div class="tiles" id="tiles"></div>
-    <div class="bal-grid">
+    <p class="none-now" id="none-now" hidden>No units are following instructions right now: every generator is running to the plan it gave the market. The map and list of instructed units appear here when NESO starts accepting bids and offers.</p>
+    <div class="bal-grid" id="bal-grid">
       <div class="bmap" id="bmap"><svg id="bsvg" role="img" aria-label="Map of units following NESO’s instructions now"></svg><p class="map-note" id="map-note" hidden></p></div>
       <div class="ulist">
         <h3 id="ulist-title">Units following instructions</h3>
