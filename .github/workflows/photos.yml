@@ -39,3 +39,18 @@ jobs:
           path: |
             app/station_wikidata.csv
             photo-report.md
+      - name: Check the server fetches photos from Commons
+        run: |
+          python3 -I -c "
+          import csv, os, sys, tempfile
+          sys.path.insert(0, 'app')
+          from gridlive.photos import Photos
+          rows = [r for r in csv.DictReader(open('app/station_wikidata.csv')) if r['file']]
+          store = Photos(tempfile.mkdtemp())
+          bad = 0
+          for r in rows[:: max(1, len(rows) // 8)]:
+              got = store.get(r['file'])
+              print(r['id'], r['file'][:60], got[1] if got else 'FAILED', len(got[0]) if got else '')
+              bad += got is None
+          sys.exit(1 if bad else 0)
+          "
