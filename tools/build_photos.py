@@ -62,6 +62,12 @@ ANCHORS = {
     'Saltend': 'Q116913766',                     # Saltend Chemicals Park
     'Grangemouth CHP': 'Q5595715',               # Grangemouth Refinery
 }
+# Station -> where its photo was taken, for wind farms that REPD and the
+# dictionary both put 17 km or more from their own photographs
+PHOTO_LOCATIONS = {
+    'Hill of Towie Wind Farm': (57.5067, -3.0795),
+    'Tullo': (56.8390, -2.3820),
+}
 # Stations whose REPD location is wrong
 REPD_SKIP = {
     'Dalquhandy Wind Farm',     # REPD's point is in South Ayrshire, 79 km from Coalburn, where it stands
@@ -70,7 +76,6 @@ REPD_SKIP = {
 # the names differ too much to match by themselves
 REPD_NAMES = {
     'Ewe Hill II Wind Farm': 'Ewe Hill (extension)',
-    'Hill of Towie Wind Farm': 'Hill of Towie (Drummuir)',
     'Minety': 'Minety South - Battery Storage',
 }
 # Station -> a Commons file chosen by eye, from the candidates that
@@ -439,7 +444,7 @@ def main():
     report_path = sys.argv[2] if len(sys.argv) > 2 else None
     stations = list(csv.DictReader(open(STATIONS, encoding='utf-8')))
     names = {st['name']: st['id'] for st in stations}
-    for table in (OVERRIDES, ANCHORS, REPD_NAMES, REPD_SKIP, PHOTOS, NO_PHOTO, KEEP_LOCATION):
+    for table in (OVERRIDES, ANCHORS, PHOTO_LOCATIONS, REPD_NAMES, REPD_SKIP, PHOTOS, NO_PHOTO, KEEP_LOCATION):
         unknown = [n for n in table if n not in names]
         assert not unknown, 'not in stations.csv: %s' % unknown
     overrides = {names[n]: q for n, q in OVERRIDES.items()}
@@ -505,7 +510,11 @@ def main():
     # Stations without an item of their own: the site they stand on, else REPD
     located = {}
     for st in stations:
-        if st['id'] in matches or st['name'] not in ANCHORS:
+        if st['name'] in PHOTO_LOCATIONS and st['id'] not in matches:
+            lat, lon = PHOTO_LOCATIONS[st['name']]
+            located[st['id']] = (lat, lon, 'photo', 'where its photo was taken')
+    for st in stations:
+        if st['id'] in matches or st['id'] in located or st['name'] not in ANCHORS:
             continue
         it = anchor_item(ANCHORS[st['name']])
         time.sleep(0.3)
