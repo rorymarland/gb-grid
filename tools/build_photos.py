@@ -89,27 +89,23 @@ def distance_km(lat1, lon1, lat2, lon2):
 
 def candidates():
     # Two cheap queries rather than one expensive one: the classes that are
-    # kinds of power station, then the items in the box with those classes.
+    # kinds of power station, then the UK items that are instances of them.
     classes = {r['c']['value'].rsplit('/', 1)[-1] for r in sparql('SELECT DISTINCT ?c WHERE { ?c wdt:P279* wd:Q159719 }')}
     print('  %d power station classes' % len(classes), file=sys.stderr)
     items = {}
     rows = []
-    # Split the box into strips so each query stays well inside the time limit
-    for south in [49.6, 51.0, 52.0, 53.0, 54.0, 55.0, 56.5, 58.0]:
-        north = {49.6: 51.0, 51.0: 52.0, 52.0: 53.0, 53.0: 54.0, 54.0: 55.0, 55.0: 56.5, 56.5: 58.0, 58.0: 61.2}[south]
+    # Instances of those classes in the UK; geography is checked locally.
+    # Batches of classes keep each query small.
+    ordered = sorted(classes)
+    for i in range(0, len(ordered), 40):
         query = """
-SELECT ?item ?type ?itemLabel ?coord ?image ?category WHERE {
-  SERVICE wikibase:box {
-    ?item wdt:P625 ?coord .
-    bd:serviceParam wikibase:cornerSouthWest "Point(-8.8 %s)"^^geo:wktLiteral .
-    bd:serviceParam wikibase:cornerNorthEast "Point(2.9 %s)"^^geo:wktLiteral .
-  }
-  ?item wdt:P31 ?type .
+SELECT ?item ?label ?coord ?image ?category WHERE {
   VALUES ?type { %s }
+  ?item wdt:P31 ?type ; wdt:P17 wd:Q145 ; wdt:P625 ?coord .
+  OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
   OPTIONAL { ?item wdt:P18 ?image }
   OPTIONAL { ?item wdt:P373 ?category }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}""" % (south, north, ' '.join('wd:' + c for c in sorted(classes)))
+}""" % ' '.join('wd:' + c for c in ordered[i:i + 40])
         rows += sparql(query)
         time.sleep(1)
     for row in rows:
@@ -117,7 +113,7 @@ SELECT ?item ?type ?itemLabel ?coord ?image ?category WHERE {
         m = re.match(r'Point\(([-\d.eE]+) ([-\d.eE]+)\)', row['coord']['value'])
         if not m:
             continue
-        it = items.setdefault(qid, {'qid': qid, 'label': row.get('itemLabel', {}).get('value', qid),
+        it = items.setdefault(qid, {'qid': qid, 'label': row.get('label', {}).get('value', qid),
                                     'lon': float(m.group(1)), 'lat': float(m.group(2)), 'images': [], 'category': None})
         if 'image' in row:
             name = urllib.parse.unquote(row['image']['value'].rsplit('/', 1)[-1])
