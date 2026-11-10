@@ -291,12 +291,24 @@ def item_details(qids):
                         return v
                 return None
             coord = first('P625') or {}
+            coords = [(c['mainsnak']['datavalue']['value'].get('latitude'), c['mainsnak']['datavalue']['value'].get('longitude'))
+                      for c in claims.get('P625', []) if c.get('mainsnak', {}).get('datavalue')]
             out[qid] = {'qid': qid, 'label': ent.get('labels', {}).get('en', {}).get('value', qid),
-                        'lat': coord.get('latitude'), 'lon': coord.get('longitude'),
+                        'lat': coord.get('latitude'), 'lon': coord.get('longitude'), 'coords': coords,
                         'images': [c['mainsnak']['datavalue']['value'] for c in claims.get('P18', []) if c.get('mainsnak', {}).get('datavalue')],
                         'category': first('P373'), 'types': set()}
         time.sleep(0.5)
     return out
+
+
+def nearest_coordinate(it, lat, lon):
+    """An item with several coordinates (a wind farm and its onshore substation,
+    say) takes the one nearest to where we already have the station."""
+    coords = [c for c in it.get('coords') or [] if c[0] is not None]
+    if len(coords) < 2:
+        return it
+    best = min(coords, key=lambda c: distance_km(lat, lon, c[0], c[1]))
+    return dict(it, lat=best[0], lon=best[1])
 
 
 def category_photo(category):
@@ -472,11 +484,12 @@ def main():
         if sid in overrides:
             it = items.get(overrides[sid])
             if it:
+                it = nearest_coordinate(it, lat, lon)
                 d = distance_km(lat, lon, it['lat'], it['lon']) if it.get('lat') is not None else None
                 matches[sid] = (it, 'override', d)
             continue
         if sid in linked and linked[sid] in items:
-            it = items[linked[sid]]
+            it = nearest_coordinate(items[linked[sid]], lat, lon)
             d = distance_km(lat, lon, it['lat'], it['lon']) if it.get('lat') is not None else None
             why = fuel_problem(st, it)
             if why:
