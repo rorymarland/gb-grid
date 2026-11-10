@@ -23,6 +23,7 @@ from geo import project, point_in_polygons  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'app', 'stations.csv')
+WIKIDATA = os.path.join(ROOT, 'app', 'station_wikidata.csv')
 
 FUEL_CODES = {
     'CCGT': 'CCGT', 'OCGT': 'OCGT', 'COAL': 'COAL', 'NUCLEAR': 'NUCLEAR', 'WIND': 'WIND',
@@ -58,7 +59,9 @@ OVERRIDES = {
     10214: {'name': 'Humber Gateway', 'capacity': 219}, 10215: {'name': 'Hywind Scotland', 'capacity': 30},
     10219: {'name': 'Lincs', 'capacity': 270}, 10221: {'name': 'London Array', 'capacity': 630},
     10233: {'name': 'Race Bank', 'capacity': 573}, 10234: {'name': 'Rampion', 'capacity': 400},
-    10239: {'name': 'Sheringham Shoal', 'capacity': 317}, 10242: {'name': 'Thanet', 'capacity': 300},
+    10239: {'name': 'Sheringham Shoal', 'capacity': 317},
+    # the dictionary has Thanet's onshore substation
+    10242: {'name': 'Thanet', 'capacity': 300, 'lat': 51.43, 'lon': 1.63},
     10246: {'name': 'Walney and Walney Extension', 'capacity': 1026},
     10248: {'name': 'Westermost Rough', 'capacity': 210}, 10250: {'name': 'West of Duddon Sands', 'capacity': 389},
     10290: {'name': 'Kincardine', 'capacity': 50}, 10294: {'name': 'Aberdeen Bay', 'capacity': 93},
@@ -66,7 +69,6 @@ OVERRIDES = {
     10301: {'name': 'Hornsea One', 'capacity': 1218}, 10304: {'name': 'Moray East', 'capacity': 950},
     10306: {'name': 'Triton Knoll', 'capacity': 857},
     10318: {'name': 'Seagreen', 'prefixes': 'SGRWO-', 'capacity': 1075},
-    10242: {'lat': 51.43, 'lon': 1.63},  # the dictionary has Thanet's onshore substation
     10029: {'name': "Connah's Quay"}, 10042: {'name': "King's Lynn"}, 10052: {'name': 'Saltend'},
     10032: {'name': 'Cottam Development Centre'}, 10068: {'name': 'Grangemouth CHP'},
     10104: {'name': "Taylor's Lane"}, 10231: {'name': "Paul's Hill Wind Farm"},
@@ -207,6 +209,14 @@ def main():
         offshore = 1 if fuel == 'WIND' and distance > 1.5 else 0
         return names[best[1]], offshore
 
+    # Locations from Wikidata (tools/build_photos.py), which beat the
+    # dictionary's: some of those are tens of kilometres out
+    wikidata = {}
+    if os.path.exists(WIKIDATA):
+        for r in read_csv(WIKIDATA):
+            if r.get('lat'):
+                wikidata[int(r['id'])] = (float(r['lat']), float(r['lon']))
+
     rows = []
     for r in ids:
         sid = int(r['dictionary_id'])
@@ -221,6 +231,7 @@ def main():
             continue
         lat = override.get('lat', float(loc['latitude']))
         lon = override.get('lon', float(loc['longitude']))
+        lat, lon = wikidata.get(sid, (lat, lon))
         counts = {}
         for unit in units:
             code = FUEL_CODES.get(fuels.get(unit, ''))
@@ -241,6 +252,7 @@ def main():
                      ' '.join(units), override.get('prefixes', ''), ''])
     for sid, name, fuel, lat, lon, capacity, prefixes, pattern in MANUAL:
         re.compile(pattern, re.I)
+        lat, lon = wikidata.get(sid, (lat, lon))
         nation, offshore = classify(lat, lon, fuel)
         rows.append([sid, name, fuel, '%.4f' % lat, '%.4f' % lon, nation, offshore, capacity, '', prefixes, pattern])
 

@@ -17,8 +17,9 @@ Photos come from Wikimedia Commons, found through Wikidata:
    in its Commons category; those are marked "category" for review.
 4. Commons supplies each photo's author and licence. Only licences that
    allow reuse with credit (CC BY, CC BY-SA, CC0, public domain) are kept.
-5. Where Wikidata's location differs from ours by more than a kilometre, it
-   is written out too; tools/build_stations.py uses it in place of ours.
+5. Each match's Wikidata location is written out too, and
+   tools/build_stations.py uses it in place of the dictionary's, some of
+   which are tens of kilometres out.
 
 Every photo has been looked at on the contact sheets (tools/photo_sheet.py);
 NO_PHOTO and the other tables below record what that review decided.
@@ -233,6 +234,15 @@ def category_photo(category):
     return None
 
 
+def clean_author(text):
+    """A name to credit, from Commons' Artist field."""
+    m = re.match(r'No machine-readable author provided\. (.+?) assumed', text)
+    if m:
+        text = m.group(1)
+    text = re.sub(r'^User:', '', text).strip()
+    return text[:120] or 'Unknown'
+
+
 def commons_info(files):
     """Author, licence and size of each Commons file."""
     out = {}
@@ -253,7 +263,7 @@ def commons_info(files):
             def text(key):
                 raw = (meta.get(key) or {}).get('value') or ''
                 return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', '', raw))).strip()
-            out[title] = {'author': text('Artist')[:120] or 'Unknown', 'licence': text('LicenseShortName'),
+            out[title] = {'author': clean_author(text('Artist')), 'licence': text('LicenseShortName'),
                           'licence_url': text('LicenseUrl'), 'width': info.get('width'), 'height': info.get('height'),
                           'mime': info.get('mime'), 'page': info.get('descriptionurl')}
         time.sleep(0.5)
@@ -355,8 +365,8 @@ def main():
             continue
         it, method, d = m
         row = {'id': st['id'], 'wikidata': it['qid'], 'lat': '', 'lon': ''}
-        # Wikidata's location where ours is more than a kilometre out
-        if d is not None and d > 1 and st['name'] not in KEEP_LOCATION:
+        # Wikidata's location, which tools/build_stations.py prefers to the dictionary's
+        if it.get('lat') is not None and st['name'] not in KEEP_LOCATION:
             row['lat'], row['lon'] = '%.4f' % it['lat'], '%.4f' % it['lon']
         c = chosen.get(st['id'])
         meta = info.get(c[0]) if c else None
