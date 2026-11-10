@@ -1,0 +1,23 @@
+name: Explore station sources
+
+# Run by hand. Looks up unmatched stations in Wikidata, the Renewable Energy
+# Planning Database and Wikimedia Commons, and prints what it finds for review.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  explore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.14'
+      - name: Look up stations
+        run: python3 -I tools/explore_stations.py
