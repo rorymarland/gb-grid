@@ -6,6 +6,13 @@ releases that keep working with your existing settings and data.
 
 ## 1.5.0 (unreleased)
 
+- **Notifications.** New timeline events can be pushed to your phone through
+  [ntfy](https://ntfy.sh/) (`NOTIFY_NTFY_URL`) or to a webhook such as Home
+  Assistant (`NOTIFY_WEBHOOK_URL`). Major events only by default;
+  `NOTIFY_LEVEL`, `NOTIFY_KINDS` and `NOTIFY_QUIET_HOURS` tune it, and
+  `PUBLIC_URL` makes each one link to its event. Off unless an address is
+  set. `python /app/server.py --test-notification` sends a test, and
+  `/api/status` reports what has been sent.
 - **More station photos:** 131 stations now have one (was 87), covering 65%
   of capacity, including 75 wind farms (was 36). The new ones were chosen by
   eye from Wikimedia Commons, mostly Geograph photographs.

@@ -17,6 +17,7 @@ from .longterm import LongHistory, Outlook
 from .grid import Grid
 from .frequency import FrequencyData
 from .events import Events
+from .notify import Notifier
 from .photos import Photos
 from .web import App, Handler, Server, UI, load_file
 
@@ -39,6 +40,13 @@ def main():
     App.photos = Photos(os.path.join(DATA_DIR, 'photos')) if PHOTOS else None
     frequency = FrequencyData(store)
     events = Events(App.grid)
+    notifier = Notifier(store)
+    App.grid.notifier = notifier
+
+    def poll_events():
+        changed = events.poll()
+        notifier.poll()
+        return changed
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
@@ -58,7 +66,7 @@ def main():
         ('outages', outages.poll),
         ('outlook', outlook.poll),
         ('response', frequency.poll_neso),
-        ('events', events.poll),
+        ('events', poll_events),
     ]
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]

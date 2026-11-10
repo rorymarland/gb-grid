@@ -122,6 +122,9 @@ any Unix time), and older moments open History zoomed to that week
 
 ![The timeline page](docs/timeline.png)
 
+The same moments can be pushed to your phone or another system as they
+happen: see [Notifications](#notifications).
+
 ### History
 
 The generation mix, carbon intensity and wholesale price since 2009 (prices
@@ -223,6 +226,13 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `BROWSER_REFRESH_SECONDS` | `10` | How often open pages check for new data |
 | `LONG_HISTORY` | `true` | Download NESO's record since 2009 for the History page (about 20 MB) |
 | `STATION_PHOTOS` | `true` | Show station photos from Wikimedia Commons (fetched by the server, kept in `/data`) |
+| `NOTIFY_NTFY_URL` | (off) | An [ntfy](https://ntfy.sh/) topic address to push timeline events to; see [Notifications](#notifications) |
+| `NOTIFY_WEBHOOK_URL` | (off) | An address that receives each event as a JSON POST |
+| `NOTIFY_LEVEL` | `major` | `major`, `notable` or `all` |
+| `NOTIFY_KINDS` | every kind | Any of `frequency,outage,price,notice,record,clean,demand,balancing` |
+| `NOTIFY_QUIET_HOURS` | (none) | UK-time hours to send nothing in, such as `23:00-07:00` |
+| `NOTIFY_NTFY_TOKEN` | (none) | Access token, if your ntfy topic needs one |
+| `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
 | `POLL_*_SECONDS` | varies | How often each upstream source is polled |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
@@ -231,6 +241,46 @@ Data is kept in a SQLite database in the `/data` volume. Everything in it can be
 downloaded again, so deleting the volume only costs the history download on
 the next start. The container runs as UID 10001; if you bind-mount a host
 folder instead of using a named volume, make it writable by that user.
+
+### Notifications
+
+The server can tell you when something notable happens on the grid: a large
+power station tripping, a frequency excursion, negative prices, a grid notice
+or a new record. It sends each new [Timeline](#timeline) event once, within a
+couple of minutes of spotting it.
+
+- **ntfy** (phone notifications): install the [ntfy](https://ntfy.sh/) app,
+  subscribe to a topic with a name nobody would guess, and set
+  `NOTIFY_NTFY_URL=https://ntfy.sh/<your-topic>`. A self-hosted ntfy server
+  works the same way (`http://nas.local:8090/<topic>`); set
+  `NOTIFY_NTFY_TOKEN` if the topic needs a token. Major events arrive as high
+  priority, and tapping one opens the event if `PUBLIC_URL` is set.
+- **Webhook** (Home Assistant, Node-RED, Slack-style relays and so on): set
+  `NOTIFY_WEBHOOK_URL`. Each event is a JSON POST with `id`, `time`, `kind`,
+  `level`, `title`, `message`, `url` and the event's `data` (for an outage,
+  the station and megawatts lost; for a frequency event, the low point and
+  recovery time).
+
+By default only major events are sent, which is a few a week: a loss of
+1,000 MW or more, frequency outside its operating limits, and the like.
+`NOTIFY_LEVEL=notable` adds smaller trips, price swings and notices (several
+a day); `all` adds the daily markers. `NOTIFY_KINDS` narrows it to the kinds
+you care about, and `NOTIFY_QUIET_HOURS` keeps the night quiet: events in
+those hours are not sent later. Events already old when first seen (after a
+restart or a backfill) are never sent: two hours for things that happen
+live, three days for records and costs, which are only published afterwards.
+Turning notifications on doesn't replay the past.
+
+To check it works:
+
+```sh
+docker compose exec gb-grid python /app/server.py --test-notification
+```
+
+`/api/status` reports the channels in use, how many have been sent, the last
+one and the last error. With ntfy.sh, the topic name is the only secret and
+the messages pass through their servers; use your own ntfy server or a
+webhook to keep everything on your network.
 
 ### Behind a reverse proxy
 
@@ -259,6 +309,8 @@ the port. It only reads public data and holds no secrets.
   Wikimedia Commons by the server, checked (JPEG, PNG or WebP, under 4 MB,
   redirects only to Wikimedia over HTTPS) and kept in `/data/photos`, so the
   pages' Content Security Policy still allows images from your server alone.
+- Notifications are off unless you set an address for them, and go only to
+  that address.
 - The example compose file runs it read-only as an unprivileged user with no
   Linux capabilities. GitHub Actions are pinned to commit SHAs and kept up to
   date by Dependabot.

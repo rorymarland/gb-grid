@@ -377,7 +377,9 @@ def repd_sites():
             continue
         lat, lon = osgb.grid_to_wgs84(x, y)
         sites.append({'name': col(row, 'site name'), 'tech': col(row, 'technology type').lower(), 'ref': col(row, 'ref id'),
-                      'mw': number(col(row, 'installed capacity')) or 0, 'lat': lat, 'lon': lon})
+                      'mw': number(col(row, 'installed capacity')) or 0, 'lat': lat, 'lon': lon,
+                      'operator': col(row, 'operator'), 'turbines': number(col(row, 'no. of turbines')),
+                      'turbine_mw': number(col(row, 'turbine capacity')), 'height': number(col(row, 'height of turbines'))})
     return sites, os.path.basename(link)
 
 
@@ -389,6 +391,72 @@ def repd_match(st, sites):
     techs = REPD_TECH.get(st['fuel'], ())
     found = [s for s in sites if (s['name'] == wanted if wanted else s['tech'] in techs and similarity(st['name'], s['name']) >= 0.99)]
     return max(found, key=lambda s: s['mw']) if found else None
+
+
+def repd_facts(st, sites):
+    """What REPD says about a station: who applied to build it and, for a wind
+    farm entered as a single site, its turbines."""
+    if st['name'] in REPD_SKIP:
+        return {}
+    wanted = REPD_NAMES.get(st['name'])
+    techs = REPD_TECH.get(st['fuel'], ()) + (('wind offshore',) if st['fuel'] == 'WIND' else ())
+    found = [s for s in sites if (s['name'] == wanted if wanted else s['tech'] in techs and similarity(st['name'], s['name']) >= 0.99)]
+    if len(found) != 1:          # several phases under one name: which is which isn't clear
+        return {}
+    site = found[0]
+    facts = {'repd': site['ref'], 'applicant': site['operator']}
+    if st['fuel'] == 'WIND' and site['turbines'] and site['turbines'] == int(site['turbines']):
+        facts['turbines'] = '%d' % site['turbines']
+        if site['turbine_mw']:
+            facts['turbine_mw'] = '%g' % site['turbine_mw']
+        if site['height']:
+            facts['turbine_height'] = '%g' % site['height']
+    return facts
+
+
+def wikidata_facts(qids):
+    """Owner, operator, year opened and English Wikipedia article for each item."""
+    raw, wanted = {}, set()
+    qids = sorted(qids)
+    for i in range(0, len(qids), 40):
+        data = get('https://www.wikidata.org/w/api.php?' + urllib.parse.urlencode({
+            'action': 'wbgetentities', 'ids': '|'.join(qids[i:i + 40]), 'props': 'claims|sitelinks', 'sitefilter': 'enwiki', 'format': 'json'}))
+        for qid, ent in (data.get('entities') or {}).items():
+            claims = ent.get('claims') or {}
+
+            def values(prop):
+                ranked = [c for c in claims.get(prop, []) if c.get('rank') != 'deprecated' and c.get('mainsnak', {}).get('datavalue')]
+                # Current holders: preferred rank if any, and nothing with an end date
+                best = [c for c in ranked if c.get('rank') == 'preferred'] or [c for c in ranked if 'P582' not in (c.get('qualifiers') or {})]
+                return [c['mainsnak']['datavalue']['value'] for c in best]
+            years = []
+            for prop in ('P729', 'P1619', 'P571'):      # service entry, official opening, inception
+                for v in values(prop):
+                    m = re.match(r'\+(\d{4})-', v.get('time', '')) if isinstance(v, dict) else None
+                    if m:
+                        years.append(int(m.group(1)))
+                if years:
+                    break
+            entry = {'owner': [v['id'] for v in values('P127') if isinstance(v, dict) and 'id' in v][:2],
+                     'operator': [v['id'] for v in values('P137') if isinstance(v, dict) and 'id' in v][:2],
+                     'opened': str(min(years)) if years else '',
+                     'wikipedia': ((ent.get('sitelinks') or {}).get('enwiki') or {}).get('title', '')}
+            wanted |= set(entry['owner']) | set(entry['operator'])
+            raw[qid] = entry
+        time.sleep(0.5)
+    labels, wanted = {}, sorted(wanted)
+    for i in range(0, len(wanted), 40):
+        data = get('https://www.wikidata.org/w/api.php?' + urllib.parse.urlencode({
+            'action': 'wbgetentities', 'ids': '|'.join(wanted[i:i + 40]), 'props': 'labels', 'languages': 'en', 'format': 'json'}))
+        for qid, ent in (data.get('entities') or {}).items():
+            labels[qid] = ent.get('labels', {}).get('en', {}).get('value', '')
+        time.sleep(0.5)
+    out = {}
+    for qid, entry in raw.items():
+        out[qid] = {'owner': ' and '.join(filter(None, (labels.get(q) for q in entry['owner']))),
+                    'operator': ' and '.join(filter(None, (labels.get(q) for q in entry['operator']))),
+                    'opened': entry['opened'], 'wikipedia': entry['wikipedia']}
+    return out
 
 
 def anchor_item(value):
@@ -569,13 +637,15 @@ def main():
             if f:
                 chosen[sid] = (f, it, method, d, 'category')
     info = commons_info([c[0] for c in chosen.values()])
+    facts = wikidata_facts({m[0]['qid'] for m in matches.values() if m[0]})
+    more = {st['id']: repd_facts(st, sites) for st in stations}
 
     rows, skipped = [], []
     for st in stations:
         m = matches.get(st['id'])
         it = m[0] if m else None
         c = chosen.get(st['id'])
-        if not it and st['id'] not in located and not c:
+        if not it and st['id'] not in located and not c and not more[st['id']]:
             continue
         row = {'id': st['id'], 'wikidata': it['qid'] if it else '', 'lat': '', 'lon': '', 'located': ''}
         # A better location, which tools/build_stations.py prefers to the dictionary's
@@ -591,10 +661,13 @@ def main():
         elif c:
             row.update({'file': c[0], 'width': meta['width'], 'height': meta['height'], 'author': meta['author'],
                         'licence': meta['licence'], 'licence_url': meta['licence_url'], 'source': c[4]})
+        row.update(facts.get(it['qid'], {}) if it else {})
+        row.update(more[st['id']])
         rows.append(row)
     with open(OUT, 'w', newline='', encoding='utf-8') as fh:
         w = csv.DictWriter(fh, fieldnames=['id', 'wikidata', 'lat', 'lon', 'located', 'file', 'width', 'height', 'author', 'licence',
-                                           'licence_url', 'source'], restval='')
+                                           'licence_url', 'source', 'owner', 'operator', 'opened', 'wikipedia', 'repd', 'applicant',
+                                           'turbines', 'turbine_mw', 'turbine_height'], restval='')
         w.writeheader()
         w.writerows(rows)
 
@@ -641,6 +714,13 @@ def main():
             n, f, it['label'], it['qid'], '%.1f km' % d if d is not None else '?', why) for n, f, it, d, why in rejected]
     if skipped:
         lines += ['', '## Skipped photos', ''] + ['- %s: %s (%s)' % s for s in skipped]
+    lines += ['', '## Facts', '', '| Station | Owner | Operator | Opened | Wikipedia | REPD applicant | Turbines |', '|---|---|---|---|---|---|---|']
+    for st in stations:
+        r = byid.get(st['id'])
+        if r and any(r.get(k) for k in ('owner', 'operator', 'opened', 'wikipedia', 'applicant', 'turbines')):
+            turbines = '%s × %s MW, %s m' % (r.get('turbines'), r.get('turbine_mw') or '?', r.get('turbine_height') or '?') if r.get('turbines') else ''
+            lines.append('| %s | %s | %s | %s | %s | %s | %s |' % (st['name'], r.get('owner', ''), r.get('operator', ''), r.get('opened', ''),
+                                                                   r.get('wikipedia', ''), r.get('applicant', ''), turbines))
     lines += ['', '## Located by REPD or by the site they stand on', '', 'REPD file: %s' % repd_file, '',
               '| Station | Fuel | Source | Ours | Theirs | Apart |', '|---|---|---|---|---|---|']
     for st in stations:

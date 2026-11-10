@@ -455,5 +455,85 @@ try:
 except server.PhotoError as error:
     check('plain http redirects refused', 'redirected' in str(error), error)
 
+# ---- notifications ----------------------------------------------------------
+
+import json as _json
+notify = sys.modules['gridlive.notify']
+NOW = 1_794_000_000          # 21:20 UK time on 6 November 2026
+def event_row(eid, t, kind='outage', level=3, title='Torness went offline unexpectedly, losing 1,200 MW'):
+    return (eid, t, kind, level, _json.dumps([title]), _json.dumps(['Reason given: turbine trip. ', {'t': 'See current outages', 'href': '/outages'}]),
+            _json.dumps({'name': 'Torness', 'lost': 1200, 'series': [[1, 2]]}), t)
+def notifier(**settings):
+    defaults = {'NOTIFY_NTFY_URL': 'https://ntfy.example/grid-alerts', 'NOTIFY_NTFY_TOKEN': '', 'NOTIFY_WEBHOOK_URL': '',
+                'NOTIFY_LEVEL': 'major', 'NOTIFY_KINDS': [], 'NOTIFY_QUIET_HOURS': '', 'PUBLIC_URL': 'http://nas:8080'}
+    defaults.update(settings)
+    for key, value in defaults.items():
+        setattr(notify, key, value)
+    store = server.Store(tempfile.mkdtemp())
+    posts = []
+    def post(url, payload, headers=None):
+        posts.append((url, payload, headers))
+        if 'broken' in url:
+            raise OSError('connection refused')
+        return 200
+    return notify.Notifier(store, post=post), store, posts
+
+n, store, posts = notifier()
+store.write(server.UPSERT_EV, [event_row('out-old', NOW - 600)], history=False)
+check('first run sends nothing', n.poll(NOW) == 0 and not posts, posts)
+store.write(server.UPSERT_EV, [event_row('out-1', NOW + 60), event_row('freq-1', NOW + 60, 'frequency', 2, 'Frequency dipped to 49.71 Hz'),
+                               event_row('late', NOW - 5 * 3600)], history=False)
+check('a new major event is sent once', n.poll(NOW + 120) == 1 and len(posts) == 1, posts)
+url, payload, headers = posts[0]
+check('ntfy json publish to the server root', url == 'https://ntfy.example/' and payload['topic'] == 'grid-alerts', (url, payload))
+check('ntfy title and message', payload['title'].startswith('Torness went offline') and payload['message'] == 'Reason given: turbine trip.', payload)
+check('ntfy priority, tag and link', payload['priority'] == 4 and payload['tags'] == ['warning'] and payload['click'] == 'http://nas:8080/timeline#out-1', payload)
+check('no token, no auth header', headers is None)
+check('not sent again', n.poll(NOW + 240) == 0 and len(posts) == 1)
+check('state reports the last one', n.state()['sent'] == 1 and n.state()['last']['title'].startswith('Torness') and n.state()['channels'] == ['ntfy'], n.state())
+
+n, store, posts = notifier(NOTIFY_LEVEL='notable', NOTIFY_KINDS=['frequency'], NOTIFY_WEBHOOK_URL='https://hook.example/x', NOTIFY_NTFY_TOKEN='tk_1')
+n.poll(NOW)
+store.write(server.UPSERT_EV, [event_row('out-2', NOW), event_row('freq-2', NOW, 'frequency', 2, 'Frequency dipped to 49.71 Hz')], history=False)
+check('level and kind filters', n.poll(NOW + 60) == 1 and len(posts) == 2 and all('Frequency' in p[1]['title'] for p in posts), [p[1]['title'] for p in posts])
+check('token sent as a bearer header', posts[0][2] == {'Authorization': 'Bearer tk_1'}, posts[0][2])
+hook = posts[1][1]
+check('webhook payload', hook['kind'] == 'frequency' and hook['level'] == 'notable' and hook['time'].endswith('Z') and 'series' not in hook['data']
+      and hook['url'] == 'http://nas:8080/timeline#freq-2', hook)
+
+n, store, posts = notifier(NOTIFY_QUIET_HOURS='21:00-22:00')
+n.poll(NOW - 60)
+store.write(server.UPSERT_EV, [event_row('out-3', NOW)], history=False)
+check('quiet hours send nothing', n.poll(NOW + 60) == 0 and not posts, (posts, server.uk_clock(NOW)[1]))
+check('and the event is not sent later', n.poll(NOW + 3 * 3600) == 0 and not posts)
+check('quiet hours across midnight', notify.in_quiet(notify.parse_quiet('23:00-07:00'), NOW + 8 * 3600)
+      and not notify.in_quiet(notify.parse_quiet('23:00-07:00'), NOW), server.uk_clock(NOW + 8 * 3600)[1])
+check('bad quiet hours ignored', notify.parse_quiet('late') is None and notify.parse_quiet('25:00-07:00') is None)
+
+n, store, posts = notifier(NOTIFY_NTFY_URL='https://broken.example/topic')
+n.poll(NOW)
+store.write(server.UPSERT_EV, [event_row('out-4', NOW)], history=False)
+check('a failed send is retried', n.poll(NOW + 60) == 0 and n.poll(NOW + 180) == 0 and len(posts) == 2 and 'refused' in n.state()['error'], (posts, n.state()))
+check('until the event is too old', n.poll(NOW + 3 * 3600) == 0 and len(posts) == 2)
+
+n, store, posts = notifier()
+n.poll(NOW)
+store.write(server.UPSERT_EV, [event_row('burst-%d' % i, NOW) for i in range(10)], history=False)
+check('a burst is capped', n.poll(NOW + 60) == notify.MAX_PER_POLL and n.poll(NOW + 120) == 0, len(posts))
+
+n, store, posts = notifier()
+n.poll(NOW)
+store.write(server.UPSERT_EV, [event_row('rec-1', NOW - 30 * 3600, 'record', 3, 'A new record for wind'),
+                               event_row('out-9', NOW - 30 * 3600)], history=False)
+check('late-published kinds get longer', n.poll(NOW + 60) == 1 and posts[0][1]['title'] == 'A new record for wind', posts)
+
+n, store, posts = notifier(NOTIFY_NTFY_URL='', NOTIFY_WEBHOOK_URL='')
+store.write(server.UPSERT_EV, [event_row('out-5', NOW)], history=False)
+check('no channels: nothing sent, test refuses', n.poll(NOW) == 0 and n.poll(NOW + 60) == 0 and not n.test() and n.state()['channels'] == [], n.state())
+check('ntfy address without a topic refused', notify.ntfy_target('https://ntfy.sh/') is None and notify.ntfy_target('ftp://x/y') is None)
+check('self-hosted ntfy under a path', notify.ntfy_target('http://nas:8090/ntfy/grid') == ('http://nas:8090/ntfy/', 'grid'), notify.ntfy_target('http://nas:8090/ntfy/grid'))
+n, store, posts = notifier()
+check('test message goes out', n.test() and posts[0][1]['title'] == 'Test notification from GB grid', posts)
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

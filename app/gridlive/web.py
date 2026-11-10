@@ -397,7 +397,9 @@ class Handler(BaseHTTPRequestHandler):
                 status = App.grid.status_payload(time.time())
                 latest = status.get('generation', {}).get('data_time')
                 healthy = bool(latest and time.time() - latest < 30 * 60)
-                self.respond_json({'healthy': healthy, 'sources': status}, send_body, code=200 if healthy else 503)
+                notifier = getattr(App.grid, 'notifier', None)
+                self.respond_json({'healthy': healthy, 'sources': status, 'notifications': notifier.state() if notifier else None},
+                                  send_body, code=200 if healthy else 503)
             elif parts.path == '/healthz':
                 self.respond(200, b'ok\n', 'text/plain; charset=utf-8', send_body, cache='no-store')
             elif parts.path == '/favicon.ico':  # for clients that ignore the page's icon link

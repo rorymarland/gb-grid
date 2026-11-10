@@ -68,6 +68,14 @@ LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
 ACCESS_LOG = env_str('ACCESS_LOG', 'false').lower() in ('1', 'true', 'yes', 'on')
 # Station photos from Wikimedia Commons, fetched by the server and kept in DATA_DIR/photos
 PHOTOS = env_str('STATION_PHOTOS', 'true').lower() not in ('0', 'false', 'no', 'off')
+# Notifications: push new timeline events to ntfy and/or a webhook (see README)
+NOTIFY_NTFY_URL = env_str('NOTIFY_NTFY_URL', '').strip()          # a topic address, e.g. https://ntfy.sh/my-topic
+NOTIFY_NTFY_TOKEN = env_str('NOTIFY_NTFY_TOKEN', '').strip()      # access token, if the topic needs one
+NOTIFY_WEBHOOK_URL = env_str('NOTIFY_WEBHOOK_URL', '').strip()    # receives a JSON POST per event
+NOTIFY_LEVEL = env_str('NOTIFY_LEVEL', 'major').strip().lower()   # major, notable or all
+NOTIFY_KINDS = [k.strip().lower() for k in env_str('NOTIFY_KINDS', '').split(',') if k.strip()]   # empty: every kind
+NOTIFY_QUIET_HOURS = env_str('NOTIFY_QUIET_HOURS', '').strip()    # e.g. 23:00-07:00 (UK time); nothing is sent then
+PUBLIC_URL = env_str('PUBLIC_URL', '').strip().rstrip('/')        # this site's address, for links in notifications
 UI_RELOAD = env_str('UI_RELOAD', 'false').lower() in ('1', 'true', 'yes', 'on')  # development: reread pages per request
 STATIC_DIR = os.path.join(APP_DIR, 'static')
 REGIONS_PATH = os.path.join(APP_DIR, 'regions.json')
