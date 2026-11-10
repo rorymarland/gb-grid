@@ -88,20 +88,31 @@ def distance_km(lat1, lon1, lat2, lon2):
 
 
 def candidates():
-    query = """
-SELECT ?item ?itemLabel ?coord ?image ?category WHERE {
+    # Two cheap queries rather than one expensive one: the classes that are
+    # kinds of power station, then the items in the box with those classes.
+    classes = {r['c']['value'].rsplit('/', 1)[-1] for r in sparql('SELECT DISTINCT ?c WHERE { ?c wdt:P279* wd:Q159719 }')}
+    print('  %d power station classes' % len(classes), file=sys.stderr)
+    items = {}
+    rows = []
+    # Split the box into strips so each query stays well inside the time limit
+    for south in [49.6, 51.0, 52.0, 53.0, 54.0, 55.0, 56.5, 58.0]:
+        north = {49.6: 51.0, 51.0: 52.0, 52.0: 53.0, 53.0: 54.0, 54.0: 55.0, 55.0: 56.5, 56.5: 58.0, 58.0: 61.2}[south]
+        query = """
+SELECT ?item ?type ?itemLabel ?coord ?image ?category WHERE {
   SERVICE wikibase:box {
     ?item wdt:P625 ?coord .
-    bd:serviceParam wikibase:cornerSouthWest "Point(-8.8 49.6)"^^geo:wktLiteral .
-    bd:serviceParam wikibase:cornerNorthEast "Point(2.9 61.2)"^^geo:wktLiteral .
+    bd:serviceParam wikibase:cornerSouthWest "Point(-8.8 %s)"^^geo:wktLiteral .
+    bd:serviceParam wikibase:cornerNorthEast "Point(2.9 %s)"^^geo:wktLiteral .
   }
-  ?item wdt:P31/wdt:P279* wd:Q159719 .
+  ?item wdt:P31 ?type .
+  VALUES ?type { %s }
   OPTIONAL { ?item wdt:P18 ?image }
   OPTIONAL { ?item wdt:P373 ?category }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}"""
-    items = {}
-    for row in sparql(query):
+}""" % (south, north, ' '.join('wd:' + c for c in sorted(classes)))
+        rows += sparql(query)
+        time.sleep(1)
+    for row in rows:
         qid = row['item']['value'].rsplit('/', 1)[-1]
         m = re.match(r'Point\(([-\d.eE]+) ([-\d.eE]+)\)', row['coord']['value'])
         if not m:
