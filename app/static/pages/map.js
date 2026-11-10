@@ -1,5 +1,6 @@
 import G from '/static/js/gb.js';
 import { createStationMap, isIdle, linkWords } from '/static/js/stationmap.js';
+import { placeCard } from '/static/js/stationcard.js';
 
 var byId = G.byId, clear = G.clear, add = G.add, h = G.h, s = G.s, num = G.num, clamp = G.clamp, hm = G.hm, niceStep = G.niceStep, fetchText = G.fetchText, plural = G.plural, makeTip = G.makeTip, textWidth = G.textWidth, ago = G.ago;
 
@@ -10,7 +11,7 @@ var NAMES = { wind: 'Wind', solar: 'Solar', nuclear: 'Nuclear', gas: 'Gas', biom
 
 var state = {
   data: null, text: '', failures: 0, lastOk: 0, timer: null, view: 'map',
-  hidden: {}, showIdle: true, selected: null, highlight: null, stationHistory: {},
+  hidden: {}, showIdle: true, selected: null, highlight: null, stationHistory: {}, cards: {},
   sort: { key: 'mw', dir: -1 }, query: '', nation: 'all', cats: {}, includeIdle: false,
   openRow: null, showAll: false, fuelOrder: null, fuelOrderTime: null
 };
@@ -84,6 +85,7 @@ function tick() {
         render();
       }
       openAt();
+      openStation();
     }
   }).catch(function () {
     state.failures += 1;
@@ -481,25 +483,39 @@ function renderDetail() {
     ]),
     h('button', { type: 'button', cls: 'close', 'aria-label': 'Close station details', text: '×', onclick: function () { select(null); } })
   ]));
+  var photoSlot = h('div', { cls: 'sc-slot' });
+  host.appendChild(photoSlot);
   var big = st.mw <= -1 ? [mw(-st.mw), h('small', { text: 'MW being stored' })] : [mw(Math.max(0, st.mw)), h('small', { text: 'MW now' })];
   host.appendChild(h('div', { cls: 'big' }, big));
   host.appendChild(h('p', { cls: 'cap', text: (st.cap ? (load === null ? '' : Math.round(load) + '% of its ' + mw(st.cap) + ' MW capacity. ') : '') +
     (st.replay ? 'Replaying ' + stamp(state.data.time) + '.' : st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '.') }));
   var box = h('div', { cls: 'chart-box' });
   host.appendChild(box);
-  loadStationChart(st, box);
+  var whereSlot = h('div', { cls: 'sc-slot' });
+  host.appendChild(whereSlot);
+  loadStationChart(st, box, function (data) { fillCard(st, data, 'map', photoSlot, whereSlot); });
 }
 
-function loadStationChart(st, box) {
+/* The station card's photo and location, built once per station and view so
+   the photo isn't reloaded each time the panel refreshes. */
+function fillCard(st, data, view, photoSlot, whereSlot) {
+  var key = view + ':' + st.id;
+  if (!state.cards[key]) state.cards[key] = placeCard(st, data && data.place) || { figure: null, where: null };
+  var card = state.cards[key];
+  if (card.figure && card.figure.parentNode !== photoSlot) add(clear(photoSlot), card.figure);
+  if (card.where && card.where.parentNode !== whereSlot) add(clear(whereSlot), card.where);
+}
+
+function loadStationChart(st, box, onData) {
   var cached = state.stationHistory[st.id];
   var fresh = cached && Date.now() - cached.fetched < 60000;
-  if (cached) drawStationChart(st, cached.data, box);
+  if (cached) { drawStationChart(st, cached.data, box); if (onData) onData(cached.data); }
   else box.appendChild(h('p', { cls: 'empty', text: 'Loading the last 24 hours…' }));
   if (fresh) return;
   fetchText('/api/station?id=' + st.id).then(function (text) {
     var data = JSON.parse(text);
     state.stationHistory[st.id] = { fetched: Date.now(), data: data };
-    if (box.isConnected) drawStationChart(st, data, box);
+    if (box.isConnected) { drawStationChart(st, data, box); if (onData) onData(data); }
   }).catch(function () {
     if (box.isConnected && !cached) { clear(box); box.appendChild(h('p', { cls: 'empty', text: 'Couldn’t load this station’s history.' })); }
   });
@@ -785,10 +801,18 @@ function renderStationsTable(data) {
     if (open) {
       var cell = h('td', { colspan: COLUMNS.length });
       var box = h('div', { cls: 'chart-box' });
-      cell.appendChild(h('p', { cls: 'cap', style: 'margin:8px 0 4px;font-size:13px;color:var(--ink-2)', text: NAMES[st.c] + ', ' + where(st) + '. ' + st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '. Last 24 hours:' }));
-      cell.appendChild(box);
+      var photoSlot = h('div', { cls: 'sc-slot' }), whereSlot = h('div', { cls: 'sc-slot' });
+      cell.appendChild(h('div', { cls: 'row-card' }, [
+        h('div', { cls: 'row-card-main' }, [
+          h('p', { cls: 'row-card-text', text: NAMES[st.c] + ', ' + where(st) + '. ' + st.on + ' of ' + plural(st.u, 'unit', 'units') + ' running' + (st.i ? ', ' + st.i + ' following grid instructions' : '') + '. Last 24 hours:' }),
+          box, whereSlot
+        ]),
+        h('div', { cls: 'row-card-side' }, photoSlot)
+      ]));
       body.appendChild(h('tr', { cls: 'detail-row' }, cell));
-      loadStationChart(st, box);
+      (function (st, photoSlot, whereSlot) {
+        loadStationChart(st, box, function (data) { fillCard(st, data, 'list', photoSlot, whereSlot); });
+      })(st, photoSlot, whereSlot);
     }
   });
   table.appendChild(body);
@@ -925,6 +949,21 @@ function openAt() {
     if (at < ts[0] - 900 || at > ts[ts.length - 1] + 900) return;
     showFrame(i);
   });
+}
+
+/* /map?station=<id> and /stations?station=<id>: open that station's card */
+var STATION = +(new URLSearchParams(location.search).get('station') || 0);
+function openStation() {
+  if (!STATION || !stationById(STATION)) return;
+  var id = STATION;
+  STATION = 0;
+  if (state.view === 'map') {
+    select(id);
+  } else {
+    state.openRow = id;
+    state.showAll = true;
+    renderStationsTable(state.data);
+  }
 }
 
 function showFrame(i) {

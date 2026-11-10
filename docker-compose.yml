@@ -37,6 +37,7 @@ services:
       POLL_OUTLOOK_SECONDS: ${POLL_OUTLOOK_SECONDS:-1800}
       LONG_HISTORY: ${LONG_HISTORY:-true}
       POLL_LONG_HISTORY_SECONDS: ${POLL_LONG_HISTORY_SECONDS:-600}
+      STATION_PHOTOS: ${STATION_PHOTOS:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ACCESS_LOG: ${ACCESS_LOG:-false}
     # Hardening: nothing in the container needs to write outside /data and

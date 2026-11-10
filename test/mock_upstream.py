@@ -12,8 +12,10 @@ import math
 import os
 import re
 import sys
+import struct
 import time as _clock
 import urllib.parse
+import zlib
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -321,6 +323,41 @@ def trip_offset(t):
     return (0.6 if k % 4 == 3 else -1.0) * depth * shape
 
 
+PHOTOS = {}
+
+
+def mock_photo(title, width=960, height=600):
+    """A stand-in station photo: sky, hills and a chimney, tinted per file."""
+    if title in PHOTOS:
+        return PHOTOS[title]
+    seed = int(hashlib.sha1(title.encode()).hexdigest()[:6], 16)
+    hill = 0.62 + (seed % 7) / 60
+    stack_x = 0.3 + (seed % 11) / 30
+    rows = []
+    for y in range(height):
+        v = y / height
+        row = bytearray(b'\x00')
+        for x in range(width):
+            u = x / width
+            ground = v > hill + 0.05 * math.sin(u * 6 + seed % 5)
+            if abs(u - stack_x) < 0.012 and v > 0.25 and not ground:
+                px = (120, 118, 112)
+            elif abs(u - stack_x - 0.06) < 0.07 and v > 0.5 and not ground:
+                px = (170, 168, 160)
+            elif ground:
+                px = (70 + int(40 * v), 110 + int(30 * v), 60)
+            else:
+                px = (150 + int(80 * v), 190 + int(40 * v), 235)
+            row += bytes(px)
+        rows.append(bytes(row))
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + \
+        chunk(b'IDAT', zlib.compress(b''.join(rows), 6)) + chunk(b'IEND', b'')
+    PHOTOS[title] = png
+    return png
+
+
 def mock_trips(now):
     out = []
     k = int((now - TRIP_OFFSET) // TRIP_PERIOD)
@@ -419,6 +456,11 @@ class Handler(BaseHTTPRequestHandler):
         for name in FAIL:
             if name in path:
                 return self.send(503, {'error': 'mock failure'})
+        if path == '/commons/w/index.php':
+            title = q.get('title', '')
+            if not title.startswith('Special:FilePath/') or 'Missing' in title:
+                return self.send(404, 'No such file', 'text/plain')
+            return self.send(200, mock_photo(title), 'image/png')
         if path == '/bmrs/api/v1/datasets/FUELINST/stream':
             start, end = parse(q['publishDateTimeFrom']), parse(q['publishDateTimeTo'])
             out = []

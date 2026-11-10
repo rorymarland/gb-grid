@@ -1,10 +1,11 @@
 """Start-up: create the models, start the jobs and serve."""
 
 import logging
+import os
 import signal
 import threading
 
-from .config import BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, log
+from .config import BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
 from .store import Store
 from .status import Status
 from .ingest import Ingest
@@ -16,6 +17,7 @@ from .longterm import LongHistory, Outlook
 from .grid import Grid
 from .frequency import FrequencyData
 from .events import Events
+from .photos import Photos
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -27,13 +29,14 @@ def main():
     store = Store(DATA_DIR)
     status = Status()
     ingest = Ingest(store, status)
-    fleet = Fleet(STATIONS_PATH)
+    fleet = Fleet(STATIONS_PATH, WIKIDATA_PATH)
     units = Units(store, fleet)
     balancing = Balancing(store)
     outages = Outages()
     longhistory, outlook = LongHistory(store), Outlook()
     App.store, App.grid, App.ui = store, Grid(store, status, fleet, units, balancing, outages), UI()
     App.grid.outlook = outlook
+    App.photos = Photos(os.path.join(DATA_DIR, 'photos')) if PHOTOS else None
     frequency = FrequencyData(store)
     events = Events(App.grid)
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')

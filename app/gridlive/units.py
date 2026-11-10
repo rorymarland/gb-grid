@@ -121,7 +121,7 @@ def short_unit_id(elexon_id):
 class Fleet:
     """Power station locations (stations.csv) and BM unit to station matching."""
 
-    def __init__(self, path):
+    def __init__(self, path, wikidata_path=None):
         self.stations = {}
         self.exact = {}
         self.prefixes = []
@@ -151,7 +151,7 @@ class Fleet:
                 'id': sid, 'name': (row.get('name') or '').strip() or str(sid), 'fuel': fuel,
                 'cat': UNIT_CATEGORY.get(fuel, 'other'), 'x': x, 'y': y,
                 'nation': (row.get('nation') or '').strip(), 'offshore': (row.get('offshore') or '').strip() == '1',
-                'capacity': capacity,
+                'capacity': capacity, 'lat': lat, 'lon': lon, 'wikidata': None, 'photo': None,
             }
             for unit in (row.get('units') or '').split():
                 self.exact[unit.strip().upper()] = sid
@@ -165,6 +165,39 @@ class Fleet:
                     log.warning('[units] ignoring the name pattern for %s: %s', self.stations[sid]['name'], error)
         self.prefixes.sort(key=lambda item: -len(item[0]))
         log.info('[units] %d power station locations loaded', len(self.stations))
+        if wikidata_path:
+            self.load_wikidata(wikidata_path)
+
+    def load_wikidata(self, path):
+        """Each station's Wikidata item and Commons photo (tools/build_photos.py)."""
+        try:
+            with open(path, encoding='utf-8', newline='') as handle:
+                rows = list(csv.DictReader(handle))
+        except OSError as error:
+            log.warning('[units] no station photos: %s', error)
+            return
+        photos = 0
+        for row in rows:
+            try:
+                station = self.stations.get(int(row['id']))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not station:
+                continue
+            qid = (row.get('wikidata') or '').strip()
+            station['wikidata'] = qid if re.fullmatch(r'Q\d+', qid) else None
+            name = (row.get('file') or '').strip()
+            if name and '/' not in name:
+                try:
+                    width, height = int(row.get('width') or 0), int(row.get('height') or 0)
+                except ValueError:
+                    width = height = 0
+                station['photo'] = {
+                    'file': name, 'w': width, 'h': height, 'author': (row.get('author') or '').strip() or 'Unknown',
+                    'licence': (row.get('licence') or '').strip(), 'licence_url': (row.get('licence_url') or '').strip(),
+                }
+                photos += 1
+        log.info('[units] %d station photos available', photos)
 
     def resolve(self, unit, elexon, ref):
         """Station id for a BM unit, by exact ID, then ID prefix, then name."""

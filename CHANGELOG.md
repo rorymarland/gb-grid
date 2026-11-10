@@ -60,6 +60,16 @@ releases that keep working with your existing settings and data.
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.
+- **Station cards.** Select a station on the map, or a row on the Stations
+  page, for its photo from Wikimedia Commons, credited to its photographer
+  with its licence (87 stations so far, covering 57% of capacity; every photo
+  was checked by eye), or a small locator map where there's no photo yet. The
+  card also gives the station's GPS coordinates (with a copy button), its
+  Ordnance Survey grid reference, and links to open it in Google Maps, Apple
+  Maps, OpenStreetMap or Wikidata. The server fetches each photo once and
+  keeps it in `/data/photos`, so browsers never contact Wikimedia;
+  `STATION_PHOTOS=false` turns photos off. `/map?station=<id>` and
+  `/stations?station=<id>` open a station's card directly.
 - **Fixed:** 120 stations sat in the wrong place on the map, 60 of them by
   more than 5 km (Baglan Bay was in Pembrokeshire, Torness out in the North
   Sea, Dinorwig outside its mountain). Locations now come from Wikidata

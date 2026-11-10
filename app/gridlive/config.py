@@ -39,6 +39,7 @@ UI_PATH = env_str('UI_PATH', os.path.join(APP_DIR, 'index.html'))
 MAP_UI_PATH = env_str('MAP_UI_PATH', os.path.join(APP_DIR, 'map.html'))
 GEO_PATH = env_str('GEO_PATH', os.path.join(APP_DIR, 'geo.json'))
 STATIONS_PATH = env_str('STATIONS_PATH', os.path.join(APP_DIR, 'stations.csv'))
+WIKIDATA_PATH = env_str('STATION_WIKIDATA_PATH', os.path.join(APP_DIR, 'station_wikidata.csv'))
 HISTORY_DAYS = env_int('HISTORY_DAYS', 7, 2, 60)
 BROWSER_REFRESH = env_int('BROWSER_REFRESH_SECONDS', 10, 3, 600)
 POLL = {
@@ -65,6 +66,8 @@ LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
 LOG_LEVEL = env_str('LOG_LEVEL', 'INFO').upper()
 ACCESS_LOG = env_str('ACCESS_LOG', 'false').lower() in ('1', 'true', 'yes', 'on')
+# Station photos from Wikimedia Commons, fetched by the server and kept in DATA_DIR/photos
+PHOTOS = env_str('STATION_PHOTOS', 'true').lower() not in ('0', 'false', 'no', 'off')
 UI_RELOAD = env_str('UI_RELOAD', 'false').lower() in ('1', 'true', 'yes', 'on')  # development: reread pages per request
 STATIC_DIR = os.path.join(APP_DIR, 'static')
 REGIONS_PATH = os.path.join(APP_DIR, 'regions.json')
@@ -73,6 +76,7 @@ ELEXON = env_str('ELEXON_BASE_URL', 'https://data.elexon.co.uk/bmrs/api/v1').rst
 CARBON = env_str('CARBON_BASE_URL', 'https://api.carbonintensity.org.uk').rstrip('/')
 PVLIVE = env_str('PVLIVE_BASE_URL', 'https://api.pvlive.uk/pvlive/api/v4').rstrip('/')
 NESO = env_str('NESO_BASE_URL', 'https://api.neso.energy').rstrip('/')
+COMMONS = env_str('COMMONS_BASE_URL', 'https://commons.wikimedia.org').rstrip('/')
 
 # NESO "Embedded Wind and Solar Forecasts" (live resource, updated hourly)
 EMBEDDED_RESOURCE_ID = 'db6c038f-98af-4570-ab60-24d71ebd0ae5'
@@ -80,4 +84,4 @@ EMBEDDED_RESOURCE_ID = 'db6c038f-98af-4570-ab60-24d71ebd0ae5'
 DDU_PATH = ('/dataset/7a12172a-939c-404c-b581-a6128b74f588/resource/'
             '177f6fa4-ae49-4182-81ea-0c6b35f26ca6/download/demanddataupdate.csv')
 
-USER_AGENT = 'gb-grid-live/' + VERSION + ' (self-hosted dashboard; python-urllib)'
+USER_AGENT = 'gb-grid-live/' + VERSION + ' (self-hosted dashboard; https://github.com/rorymarland/gb-grid) python-urllib'

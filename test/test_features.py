@@ -390,5 +390,70 @@ check('slots free up afterwards', reply.startswith(b'HTTP/1.1') and not reply.st
 again.close()
 srv.shutdown()
 
+# ---- station photos and places --------------------------------------------
+
+work = tempfile.mkdtemp()
+stations_csv = os.path.join(work, 'stations.csv')
+with open(stations_csv, 'w', encoding='utf-8') as handle:
+    handle.write('id,name,fuel,lat,lon,nation,offshore,capacity_mw,units,unit_prefixes,name_pattern\n'
+                 '1,Torness,NUCLEAR,55.968,-2.4091,Scotland,0,1190,TORN-1,,\n'
+                 '2,Finlarig,NPSHYD,56.4816,-4.2987,Scotland,0,17,FINL-1,,\n'
+                 '3,Sofia,WIND,54.98,2.23,England,1,1400,SOFIA-1,,\n')
+wikidata_csv = os.path.join(work, 'station_wikidata.csv')
+with open(wikidata_csv, 'w', encoding='utf-8') as handle:
+    handle.write('id,wikidata,lat,lon,file,width,height,author,licence,licence_url,source\n'
+                 '1,Q1466261,55.9680,-2.4091,Torness Nuclear Power Station - April 2016.jpg,3972,1999,Taras Young,CC BY-SA 4.0,https://creativecommons.org/licenses/by-sa/4.0,item\n'
+                 '2,Q111301500,56.4816,-4.2987,,,,,,,\n'
+                 '3,not-a-qid,,,../../etc/passwd,1,1,x,CC0,,item\n'
+                 '99,Q1,,,Elsewhere.jpg,1,1,x,CC0,,item\n')
+fleet = server.Fleet(stations_csv, wikidata_csv)
+check('photo loaded', fleet.stations[1]['photo'] and fleet.stations[1]['photo']['author'] == 'Taras Young', fleet.stations[1])
+check('wikidata item loaded', fleet.stations[1]['wikidata'] == 'Q1466261')
+check('no photo is none', fleet.stations[2]['photo'] is None and fleet.stations[2]['wikidata'] == 'Q111301500')
+check('bad item and path-like file ignored', fleet.stations[3]['wikidata'] is None and fleet.stations[3]['photo'] is None, fleet.stations[3])
+check('rows for unknown stations ignored', 99 not in fleet.stations)
+check('missing wikidata file is harmless', server.Fleet(stations_csv, os.path.join(work, 'nope.csv')).stations[1]['photo'] is None)
+
+place = server.MapViews.station_place(fleet.stations[1])
+check('place has location', place['lat'] == 55.968 and place['lon'] == -2.4091 and place['offshore'] is False, place)
+check('photo served from this server', place['photo']['src'].startswith('/api/photo?id=1&v='), place['photo'])
+check('commons page link', place['photo']['page'] == 'https://commons.wikimedia.org/wiki/File:Torness_Nuclear_Power_Station_-_April_2016.jpg', place['photo']['page'])
+check('place without photo', server.MapViews.station_place(fleet.stations[2])['photo'] is None)
+
+JPEG = b'\xff\xd8\xff\xe0' + b'0' * 200
+calls = []
+def fake_fetch(url):
+    calls.append(url)
+    if 'Html' in url:
+        return 200, b'<html>not an image</html>'
+    if 'Huge' in url:
+        return 200, b'\xff\xd8\xff' + b'0' * (server.MAX_BYTES + 1)
+    return 200, JPEG
+cache_dir = os.path.join(work, 'photos')
+store = server.Photos(cache_dir, fetch=fake_fetch)
+got = store.get('Torness Nuclear Power Station - April 2016.jpg')
+check('photo fetched', got == (JPEG, 'image/jpeg'), got and got[1])
+check('asks commons for a thumbnail', calls and 'Special%3AFilePath%2FTorness' in calls[0] and 'width=960' in calls[0], calls)
+check('photo kept on disk', any(name.endswith('.jpg') for name in os.listdir(cache_dir)), os.listdir(cache_dir))
+again = server.Photos(cache_dir, fetch=fake_fetch).get('Torness Nuclear Power Station - April 2016.jpg')
+check('served from the cache after a restart', again == (JPEG, 'image/jpeg') and len(calls) == 1, len(calls))
+check('non-images refused', store.get('Html page.jpg') is None)
+check('oversized refused', store.get('Huge.jpg') is None)
+before = len(calls)
+check('failure remembered', store.get('Html page.jpg') is None and len(calls) == before, len(calls) - before)
+check('no partial files left', not any(name.endswith('.part') for name in os.listdir(cache_dir)), os.listdir(cache_dir))
+
+redirect = server.WikimediaOnly()
+try:
+    redirect.redirect_request(None, None, 302, 'Found', {}, 'https://evil.example/x.jpg')
+    check('redirects off wikimedia refused', False)
+except server.PhotoError as error:
+    check('redirects off wikimedia refused', 'redirected to evil.example' in str(error), error)
+try:
+    redirect.redirect_request(None, None, 302, 'Found', {}, 'http://upload.wikimedia.org/x.jpg')
+    check('plain http redirects refused', False)
+except server.PhotoError as error:
+    check('plain http redirects refused', 'redirected' in str(error), error)
+
 print('feature tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

@@ -1,10 +1,12 @@
 """API views: /api/map, /api/station and /api/replay."""
 
 import time
+import urllib.parse
 
-from .config import BROWSER_REFRESH, VERSION
+from .config import BROWSER_REFRESH, PHOTOS, VERSION
 from .timeutil import floor_to
 from .store import STATION_HISTORY_DAYS
+from .photos import file_key
 from .units import CATEGORY_LABELS, CATEGORY_ORDER, LINK_ENDS, map_point
 
 
@@ -148,7 +150,22 @@ class MapViews:
                                 (sid, time.time() - 86400))
         return {'id': sid, 'name': station['name'], 'cat': station['cat'], 'step': 300,
                 'since': self.store.scalar('SELECT MIN(t) FROM st'),
-                'points': [[t, round(v, 1)] for t, v in rows]}
+                'points': [[t, round(v, 1)] for t, v in rows], 'place': self.station_place(station)}
+
+    @staticmethod
+    def station_place(station):
+        """Where a station is, and its photo and credit, for the station card."""
+        photo = station.get('photo') if PHOTOS else None
+        place = {'lat': station['lat'], 'lon': station['lon'], 'offshore': station['offshore'],
+                 'wikidata': station.get('wikidata'), 'photo': None}
+        if photo:
+            place['photo'] = {
+                'src': '/api/photo?id=%d&v=%s' % (station['id'], file_key(photo['file'])),
+                'w': photo['w'], 'h': photo['h'], 'author': photo['author'], 'licence': photo['licence'],
+                'licence_url': photo['licence_url'],
+                'page': 'https://commons.wikimedia.org/wiki/File:' + urllib.parse.quote(photo['file'].replace(' ', '_')),
+            }
+        return place
 
     def status_payload(self, now):
         snapshot = self.status.snapshot()

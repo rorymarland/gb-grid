@@ -25,6 +25,7 @@ class App:
     ui = None
     geo = (b'', '')
     regions = (b'', '')
+    photos = None
 
 
 def load_file(path, variable, fallback):
@@ -100,13 +101,14 @@ CREDITS_HTML = (
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
     'region boundaries, constraint costs, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
-    'from the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
-    'map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
+    'from '
+    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a> and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
+    'station photos from Wikimedia Commons, credited with each; map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
     '<p class="credit">Unfamiliar terms are underlined; the <a href="/glossary">glossary</a> explains them all. A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley’s '
     '<a href="https://grid.iamkate.com/" rel="noopener">National Grid: Live</a>. All times are UK time.</p>')
 CREDITS_SHORT_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Station locations: '
-    '<a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. '
+    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a> and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. '
     'Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>')
 
 
@@ -375,6 +377,18 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(404, b'Unknown station\n', 'text/plain; charset=utf-8', send_body)
                 else:
                     self.respond_json(data, send_body)
+            elif parts.path == '/api/photo':
+                raw = query.get('id', [''])[0]
+                station = App.grid.fleet.stations.get(int(raw)) if raw.isdigit() and App.grid.fleet else None
+                photo = station and station['photo']
+                found = App.photos.get(photo['file']) if photo and App.photos else None
+                if not found:
+                    self.respond(404, b'No photo\n', 'text/plain; charset=utf-8', send_body, cache='max-age=300')
+                else:
+                    body, content_type = found
+                    etag = '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
+                    cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'max-age=86400'
+                    self.respond(200, body, content_type, send_body, etag=etag, cache=cache)
             elif parts.path == '/api/live':
                 self.respond_json(App.grid.live(), send_body)
             elif parts.path == '/api/history':
@@ -423,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         encoding = None
-        compressed = content_type.startswith(('font/', 'image/png'))
+        compressed = content_type.startswith(('font/', 'image/png', 'image/jpeg', 'image/webp'))
         if len(body) > 1024 and not compressed and 'gzip' in (self.headers.get('Accept-Encoding') or ''):
             body = gzip.compress(body, compresslevel=5)
             encoding = 'gzip'

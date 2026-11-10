@@ -54,6 +54,14 @@ and coloured by fuel, plus the interconnectors to Europe and Ireland with their
 live flows. Zoom, pan, full screen, and a 24-hour history for any station. The
 time machine along the bottom replays the last seven days in 10-minute steps.
 
+Select a station for its card: a photo from Wikimedia Commons with its
+photographer and licence (87 stations so far, including every nuclear and
+pumped storage station and most of the big gas and hydro ones), or a small
+locator map where there isn't one; its GPS coordinates and Ordnance Survey grid
+reference; and links to open it in Google Maps, Apple Maps or OpenStreetMap.
+`/map?station=<id>` and `/stations?station=<id>` open a station's card
+directly.
+
 ![The map page](docs/map.png)
 
 Stations shows the same data as tables: output by nation and by fuel, every
@@ -214,6 +222,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `HISTORY_DAYS` | `7` | Days of history to download and keep (2 to 60) |
 | `BROWSER_REFRESH_SECONDS` | `10` | How often open pages check for new data |
 | `LONG_HISTORY` | `true` | Download NESO's record since 2009 for the History page (about 20 MB) |
+| `STATION_PHOTOS` | `true` | Show station photos from Wikimedia Commons (fetched by the server, kept in `/data`) |
 | `POLL_*_SECONDS` | varies | How often each upstream source is polled |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
@@ -246,6 +255,10 @@ the port. It only reads public data and holds no secrets.
   Python's own security releases arrive through the weekly rebuild.
 - The server closes connections that stay idle for 30 seconds and accepts at
   most 100 at once, so slow or stuck clients can't tie it up.
+- Browsers only ever talk to your server. Station photos are fetched from
+  Wikimedia Commons by the server, checked (JPEG, PNG or WebP, under 4 MB,
+  redirects only to Wikimedia over HTTPS) and kept in `/data/photos`, so the
+  pages' Content Security Policy still allows images from your server alone.
 - The example compose file runs it read-only as an unprivileged user with no
   Linux capabilities. GitHub Actions are pinned to commit SHAs and kept up to
   date by Dependabot.
@@ -274,8 +287,10 @@ Allowlist `api.neso.energy` to fix it.
   by any Bid-Offer Acceptances (the operator's instructions to change that).
   Each fuel's estimates are then scaled so they add up to Elexon's measured
   total for the same five minutes. Interconnector flows are measured.
-- **Locations** come from the Power Station Dictionary plus hand-added recent
-  stations. Units that can't be matched still count in the totals; they're
+- **Locations** come from Wikidata for the 140 stations matched there, and
+  otherwise from the Power Station Dictionary or added by hand for recent
+  stations. (The dictionary's own locations are sometimes tens of kilometres
+  out: it had Torness in the North Sea.) Units that can't be matched still count in the totals; they're
   listed on the Stations page and logged once a day.
 - **Frequency events** are found in Elexon's 15-second readings: a change of
   0.08 Hz or more within 30 seconds, or a crossing of 49.8 or 50.2 Hz. A trip
@@ -303,7 +318,8 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/live` | The current snapshot behind the overview |
 | `/api/history?range=24h` | History series (`24h`, `7d` or `30d`) |
 | `/api/map` | Stations, interconnectors and totals for the map |
-| `/api/station?id=N` | One station's last 24 hours |
+| `/api/station?id=N` | One station's last 24 hours, and its location, Wikidata item and photo credit |
+| `/api/photo?id=N` | The station's photo (from Wikimedia Commons, cached by the server) |
 | `/api/replay` | The last seven days of the map in 10-minute frames |
 | `/api/regions` | Every region's carbon intensity, mix and solar, 24 hours back to 48 ahead |
 | `/api/balancing` | Live instructions, half-hourly costs, top payments and constraint costs |
@@ -347,7 +363,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | `app/server.py` | Starts the dashboard |
 | `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`, `frequency`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
-| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `regionmap.js`, `outlook.js` |
+| `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
 | `app/static/vendor/` | uPlot, served from the image |
 | `app/static/fonts/` | Hanken Grotesk and Instrument Sans, with their licences |
@@ -377,6 +393,15 @@ To add a missing station, add it to `MANUAL` in `tools/build_stations.py` with
 its BM unit IDs, ID prefixes or a pattern matching its registered name, then
 rebuild.
 
+`app/station_wikidata.csv` links stations to Wikidata, which supplies better
+locations and the photos. It's built by `tools/build_photos.py`, run by the
+**Build station photos** workflow in GitHub Actions (Wikimedia isn't
+reachable from everywhere). The workflow prints a coverage report and contact
+sheets of every photo to its log for review; decisions from that review
+(wrong matches, photos that show the wrong thing) are recorded in the tables
+at the top of the script. Copy the CSV into `app/`, then rebuild
+`stations.csv` so it picks up the locations.
+
 ## Credits and licences
 
 - Contains BMRS data © Elexon Limited copyright and database right 2026
@@ -388,8 +413,11 @@ rebuild.
   generation mix, system inertia and frequency response auction results from
   the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).
-- Station locations derived from the
+- Station locations from [Wikidata](https://www.wikidata.org/) (CC0) and the
   [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT).
+- Station photos from [Wikimedia Commons](https://commons.wikimedia.org/),
+  each under its own free licence (CC BY, CC BY-SA, CC0 or public domain) and
+  credited with its photographer on the station card.
 - Map outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
 - Type is [Hanken Grotesk](https://github.com/marcologous/hanken-grotesk) and
   [Instrument Sans](https://github.com/Instrument/instrument-sans), both under
