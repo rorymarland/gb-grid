@@ -37,10 +37,32 @@ STATIONS = os.path.join(ROOT, 'app', 'stations.csv')
 OUT = os.path.join(ROOT, 'app', 'station_photos.csv')
 UA = 'gb-grid-photo-builder/1.0 (https://github.com/rorymarland/gb-grid)'
 
-# station id -> Wikidata item, or None to have no photo (wrong or unsuitable matches)
-OVERRIDES = {}
-# station id -> a specific Commons file to use instead of the item's photo
-FILE_OVERRIDES = {}
+# Decisions from reviewing the contact sheets (tools/photo_sheet.py), by station name.
+# Station -> Wikidata item, where the automatic match is wrong or missed
+OVERRIDES = {
+    'Lynemouth': 'Q11987128',          # converted from coal to biomass in 2018; Wikidata still says coal
+}
+# Station -> a specific Commons file instead of the item's own photo
+FILE_OVERRIDES = {
+    'Hornsea Two': 'Hornsea 2 wind farm from the air.jpg',
+}
+# Matched correctly, but the item's photo shows something else
+NO_PHOTO = {
+    'Didcot B',           # shows the demolished coal station, Didcot A
+    'Fawley Cogen',       # shows the demolished oil station
+    'Grain',              # shows the demolished oil station
+    'Cowes',              # shows the old chimneys, not today's plant
+    'Barry',              # shows the old coal station
+    'Hornsea One',        # the zone's photo is of Hornsea Two
+    'Dudgeon',            # taken in 2013, before Dudgeon was built; shows Sheringham Shoal
+    'Greater Gabbard',    # cloud from an aircraft
+    'Westermost Rough',   # haze, nothing visible
+    'Humber Gateway',     # too dark to make anything out
+    'Beatrice',           # a turbine at Nigg harbour
+    'Triton Knoll',       # onshore cable trench
+    'Seagreen',           # foundations on a barge in port
+    'North Kyle Wind Farm',  # the entrance road sign
+}
 
 GOOD_LICENCE = re.compile(r'^(cc[ -]by(-sa)?[ -]?[\d.]*|cc0|public domain|pd)', re.I)
 BAD_FILE = re.compile(r'(map|diagram|logo|plan|locator|location|chart|schematic|\.svg$|\.gif$|\.tiff?$|\.pdf$)', re.I)
@@ -139,7 +161,8 @@ def candidates():
         query = """
 SELECT ?item ?label ?coord ?image ?category ?typeLabel WHERE {
   VALUES ?type { %s }
-  ?item wdt:P31 ?type ; wdt:P17 wd:Q145 ; wdt:P625 ?coord .
+  VALUES ?country { wd:Q145 wd:Q22 wd:Q21 wd:Q25 }
+  ?item wdt:P31 ?type ; wdt:P17 ?country ; wdt:P625 ?coord .
   OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
   OPTIONAL { ?type rdfs:label ?typeLabel FILTER(LANG(?typeLabel) = "en") }
   OPTIONAL { ?item wdt:P18 ?image }
@@ -231,6 +254,13 @@ def main():
     dictionary = sys.argv[1] if len(sys.argv) > 1 else None
     report_path = sys.argv[2] if len(sys.argv) > 2 else None
     stations = list(csv.DictReader(open(STATIONS, encoding='utf-8')))
+    names = {st['name']: st['id'] for st in stations}
+    for table in (OVERRIDES, FILE_OVERRIDES, NO_PHOTO):
+        unknown = [n for n in table if n not in names]
+        assert not unknown, 'not in stations.csv: %s' % unknown
+    overrides = {names[n]: q for n, q in OVERRIDES.items()}
+    file_overrides = {names[n]: f for n, f in FILE_OVERRIDES.items()}
+    no_photo = {names[n] for n in NO_PHOTO}
     linked = {}
     if dictionary:
         for row in csv.DictReader(open(os.path.join(dictionary, 'dictionary', 'ids.csv'), encoding='utf-8')):
@@ -240,7 +270,7 @@ def main():
     print('Querying Wikidata for power stations around GB…', file=sys.stderr)
     items = candidates()
     print('  %d items' % len(items), file=sys.stderr)
-    wanted = set(linked.values()) | {q for q in OVERRIDES.values() if q}
+    wanted = set(linked.values()) | {q for q in overrides.values() if q}
     missing = [q for q in wanted if q not in items]
     if missing:
         items.update(item_details(missing))
@@ -250,9 +280,11 @@ def main():
         sid, name = st['id'], st['name']
         lat, lon = float(st['lat']), float(st['lon'])
         offshore = st.get('offshore') == '1'
-        if sid in OVERRIDES:
-            if OVERRIDES[sid]:
-                matches[sid] = (items.get(OVERRIDES[sid]), 'override', None)
+        if sid in overrides:
+            it = items.get(overrides[sid])
+            if it:
+                d = distance_km(lat, lon, it['lat'], it['lon']) if it.get('lat') is not None else None
+                matches[sid] = (it, 'override', d)
             continue
         if sid in linked and linked[sid] in items:
             it = items[linked[sid]]
@@ -269,14 +301,16 @@ def main():
             sim = similarity(name, it['label'])
             if sim >= 0.5 and (near is None or (sim, -d) > (near[0], -near[2])):
                 near = (sim, it, d)
-            ok = (sim >= 0.5 and d <= (25 if offshore else 6)) or (sim >= 0.99 and d <= (40 if offshore else 15))
+            # A close name may be further away: some of our coordinates are well out
+            ok = ((sim >= 0.99 and d <= (60 if offshore else 100)) or (sim >= 0.6 and d <= (40 if offshore else 30))
+                  or (sim >= 0.5 and d <= (25 if offshore else 6)))
             if not ok:
                 continue
             why = fuel_problem(st, it)
             if why:
                 rejected.append((name, st['fuel'], it, d, why))
                 continue
-            score = sim - d / 100.0
+            score = sim - d / 1000.0
             if best is None or score > best[0]:
                 best = (score, it, d)
         if best:
@@ -289,8 +323,10 @@ def main():
     for sid, (it, method, d) in matches.items():
         if not it:
             continue
-        if sid in FILE_OVERRIDES:
-            chosen[sid] = (FILE_OVERRIDES[sid], it, method, d, 'override')
+        if sid in file_overrides:
+            chosen[sid] = (file_overrides[sid], it, method, d, 'override')
+            continue
+        if sid in no_photo:
             continue
         good = [f for f in it.get('images', []) if not BAD_FILE.search(f)]
         if good:
@@ -366,6 +402,13 @@ def main():
             n, f, it['label'], it['qid'], '%.1f km' % d if d is not None else '?', why) for n, f, it, d, why in rejected]
     if skipped:
         lines += ['', '## Skipped photos', ''] + ['- %s: %s (%s)' % s for s in skipped]
+    lines += ['', '## Locations', '', 'Our coordinates against Wikidata\'s, where they differ by more than 2 km.', '',
+              '| Station | Offshore | Ours | Wikidata | Apart |', '|---|---|---|---|---|']
+    for st in stations:
+        m = matches.get(st['id'])
+        if m and m[0] and m[2] is not None and m[2] > 2:
+            lines.append('| %s | %s | %s, %s | %.4f, %.4f | %.1f km |' % (
+                st['name'], st.get('offshore') == '1' and 'yes' or '', st['lat'], st['lon'], m[0]['lat'], m[0]['lon'], m[2]))
     report = '\n'.join(lines) + '\n'
     if report_path:
         open(report_path, 'w', encoding='utf-8').write(report)
