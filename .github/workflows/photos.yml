@@ -1,0 +1,32 @@
+name: Build station photos
+
+# Run by hand. Matches stations to Wikidata and Wikimedia Commons photos and
+# uploads app/station_photos.csv and a coverage report for review; the CSV is
+# committed separately once the matches have been checked.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.14'
+      - name: Fetch the Power Station Dictionary
+        run: git clone --depth 1 https://github.com/OSUKED/Power-Station-Dictionary.git "$RUNNER_TEMP/psd"
+      - name: Match stations to photos
+        run: python3 -I tools/build_photos.py "$RUNNER_TEMP/psd/data" photo-report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: station-photos
+          path: |
+            app/station_photos.csv
+            photo-report.md
