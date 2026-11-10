@@ -6,6 +6,15 @@ releases that keep working with your existing settings and data.
 
 ## 1.5.0 (unreleased)
 
+- **Station pages** (`/station?id=<id>`): each station's output now against
+  its capacity, the last 24 hours or 7 days with energy generated, capacity
+  factor, highest output and time running, its generating units one by one,
+  its outages and the frequency events they set off, and what's known about
+  it (year opened, owner and operator from Wikidata, turbines from the
+  Renewable Energy Planning Database, a Wikipedia link, the nearest other
+  stations). Reached from a station's card, from outages on the Timeline,
+  and from search, which now finds power stations by name.
+- New API: `/api/station?id=N&full=1` and `/api/stations`.
 - **Notifications.** New timeline events can be pushed to your phone through
   [ntfy](https://ntfy.sh/) (`NOTIFY_NTFY_URL`) or to a webhook such as Home
   Assistant (`NOTIFY_WEBHOOK_URL`). Major events only by default;

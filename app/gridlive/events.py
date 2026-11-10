@@ -442,7 +442,7 @@ def article_lower(title):
     return ('an ' if text[:1].lower() in 'aeiou' else 'a ') + text
 
 
-def event_links(e, now=None, replay_from=None, history_to=None):
+def event_links(e, now=None, replay_from=None, history_to=None, station_link=True):
     """Where to see an event: the map's time machine while it has frames for
     that moment (up to a week), else History."""
     now = time.time() if now is None else now
@@ -455,4 +455,6 @@ def event_links(e, now=None, replay_from=None, history_to=None):
         links.append({'t': 'See it on the map', 'href': '/map?at=%d' % t})
     elif e['kind'] != 'notice' and history_to and t <= history_to + 1800:
         links.append({'t': 'See it in History', 'href': '/history?at=%d' % t})
+    if station_link and e.get('sid'):
+        links.append({'t': 'About this station', 'href': '/station?id=%d' % e['sid']})
     return links

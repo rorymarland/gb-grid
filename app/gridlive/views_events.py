@@ -28,6 +28,8 @@ class EventViews:
                 continue
             e = {'id': eid, 't': t, 'kind': kind, 'level': lvl, 'title': json.loads(title), 'detail': json.loads(detail or '[]')}
             d = json.loads(data or '{}')
+            if kind == 'outage' and isinstance(d.get('sid'), int):
+                e['sid'] = d['sid']
             if kind == 'frequency':
                 e['freq'] = {k: d.get(k) for k in ('pre', 'peak', 'peak_t', 'change', 'recovery', 'direction', 'series')}
             e['links'] = event_links(e, now, replay_from, history_to)

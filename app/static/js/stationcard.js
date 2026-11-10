@@ -68,7 +68,7 @@ function locator(station, cat) {
    with its credit, and where the station is with links to maps apps.
    station: { id, n (name), c (category), x, y } from /api/map.
    place: the "place" object from /api/station. */
-export function placeCard(station, place) {
+export function placeCard(station, place, options) {
   if (!place || typeof place.lat !== 'number') return null;
   var name = station.n;
   var figure = h('figure', { cls: 'sc-figure' });
@@ -120,5 +120,8 @@ export function placeCard(station, place) {
   }));
   if (place.wikidata) links.appendChild(h('a', { cls: 'sc-quiet', href: 'https://www.wikidata.org/wiki/' + place.wikidata, target: '_blank', rel: 'noopener', text: 'Wikidata' }));
   where.appendChild(links);
+  if (options && options.page) {
+    where.appendChild(h('p', { cls: 'sc-more' }, h('a', { href: '/station?id=' + station.id, text: 'More about ' + name })));
+  }
   return { figure: figure, where: where };
 }

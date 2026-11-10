@@ -537,7 +537,7 @@ function renderDetail() {
    the photo isn't reloaded each time the panel refreshes. */
 function fillCard(st, data, view, photoSlot, whereSlot) {
   var key = view + ':' + st.id;
-  if (!state.cards[key]) state.cards[key] = placeCard(st, data && data.place) || { figure: null, where: null };
+  if (!state.cards[key]) state.cards[key] = placeCard(st, data && data.place, { page: true }) || { figure: null, where: null };
   var card = state.cards[key];
   if (card.figure && card.figure.parentNode !== photoSlot) add(clear(photoSlot), card.figure);
   if (card.where && card.where.parentNode !== whereSlot) add(clear(whereSlot), card.where);

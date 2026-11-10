@@ -455,6 +455,65 @@ try:
 except server.PhotoError as error:
     check('plain http redirects refused', 'redirected' in str(error), error)
 
+# ---- the station page --------------------------------------------------------
+
+samples = [(1000 + i * 300, 100.0) for i in range(13)]            # an hour at 100 MW
+st = server.output_stats(samples, 200)
+check('an hour at half capacity', st['mwh'] == 100 and st['factor'] == 0.5 and st['running'] == 1.0 and st['hours'] == 1.0 and st['peak'] == 100, st)
+gappy = samples + [(1000 + 12 * 300 + 86400 + i * 300, 0.0) for i in range(13)]   # a day's gap, then an hour idle
+st = server.output_stats(gappy, 200)
+check('a gap in the record counts for 15 minutes at most', st['hours'] == 2.2 and st['mwh'] == 125 and 0.5 < st['running'] < 0.6, st)
+battery = [(i * 300, -50.0 if i < 12 else 80.0) for i in range(25)]
+st = server.output_stats(battery, 100)
+check('storage counts charging separately', st['mwh'] == 80 and st['stored_mwh'] == 50 and st['peak'] == 80 and st['running'] == 0.5, st)
+check('too little data gives no stats', server.output_stats(samples[:3], 200) is None and server.output_stats([], 200) is None)
+check('no capacity, no factor', server.output_stats(samples, None)['factor'] is None)
+check('half-hour averages', server.week_series([(0, 10.0), (300, 20.0), (1800, 40.0)]) == [[0, 15.0], [1800, 40.0]], server.week_series([(0, 10.0), (300, 20.0), (1800, 40.0)]))
+check('edinburgh to london is about 534 km', abs(server.great_circle_km(55.95, -3.19, 51.51, -0.13) - 534) < 6, server.great_circle_km(55.95, -3.19, 51.51, -0.13))
+
+with open(wikidata_csv, 'w', encoding='utf-8') as handle:
+    handle.write('id,wikidata,lat,lon,located,file,width,height,author,licence,licence_url,source,owner,operator,opened,wikipedia,repd,applicant,turbines,turbine_mw,turbine_height\n'
+                 '1,Q1466261,55.9680,-2.4091,wikidata,,,,,,,,,EDF Energy,1988,Torness nuclear power station,,,,,\n'
+                 '3,,,,repd 77,,,,,,,,,,,,77,RWE,100,14,252\n')
+fleet = server.Fleet(stations_csv, wikidata_csv)
+check('facts loaded', fleet.stations[1]['facts'] == {'operator': 'EDF Energy', 'opened': '1988', 'wikipedia': 'Torness nuclear power station', 'located': 'wikidata'}, fleet.stations[1]['facts'])
+check('repd facts loaded', fleet.stations[3]['facts'] == {'applicant': 'RWE', 'turbines': '100', 'turbine_mw': '14', 'turbine_height': '252', 'located': 'repd'}, fleet.stations[3]['facts'])
+check('no facts is an empty dict', fleet.stations[2]['facts'] == {})
+
+class FakeUnits:
+    version = 1
+    snapshot = {'time': 1794000000, 'at': 1794000000, 'basis': 'measured', 'stations': {
+        1: {'mw': 933.6, 'units': 2, 'running': 2, 'ref_cap': 1190.0, 'instructed': 0,
+            'list': [{'unit': 'T_TORN-2', 'mw': 466.8, 'cap': 595, 'instructed': False}, {'unit': 'T_TORN-1', 'mw': 466.8, 'cap': 595, 'instructed': False}]},
+        2: {'mw': 0.0, 'units': 1, 'running': 0, 'ref_cap': 17.0, 'instructed': 0, 'list': []}}}
+page_store = server.Store(tempfile.mkdtemp())
+t0 = int(server.time.time()) - 3600
+page_store.write(server.UPSERT_ST, [(t0 + i * 300, 1, 900.0 + i) for i in range(12)], history=False)
+import json as _j
+page_store.write(server.UPSERT_EV, [
+    ('out-a', t0, 'outage', 3, _j.dumps(['Torness went offline unexpectedly, losing 600 MW']), _j.dumps(['Reason given: trip. ']), _j.dumps({'sid': 1, 'name': 'Torness', 'lost': 600}), t0),
+    ('out-b', t0, 'outage', 2, _j.dumps(['Finlarig went offline']), '[]', _j.dumps({'sid': 2, 'name': 'Finlarig'}), t0),
+    ('freq-a', t0 + 60, 'frequency', 3, _j.dumps(['Frequency dipped to 49.6 Hz']), '[]', _j.dumps({'causes': [{'how': 'outage', 'name': 'Torness', 'mw': 600}]}), t0),
+    ('freq-b', t0 + 90, 'frequency', 2, _j.dumps(['Frequency dipped to 49.8 Hz']), '[]', _j.dumps({'causes': [{'how': 'interconnector', 'name': 'Torness'}]}), t0),
+], history=False)
+grid = server.Grid(page_store, server.Status(), fleet, FakeUnits())
+page = grid.station_page(1)
+check('station page basics', page['name'] == 'Torness' and page['kind'] == 'Nuclear' and page['capacity'] == 1190 and page['now']['mw'] == 933.6, {k: page[k] for k in ('name', 'kind', 'capacity', 'now')})
+check('units sorted by name', [u['unit'] for u in page['units']] == ['T_TORN-1', 'T_TORN-2'], page['units'])
+check('history and stats', len(page['points']) == 12 and page['stats']['day']['peak'] == 911.0 and page['stats']['week']['factor'] is not None, page['stats'])
+check('its own events only', [e['id'] for e in page['events']] == ['freq-a', 'out-a'], [e['id'] for e in page['events']])
+check('facts and wikipedia link', page['facts']['wikipedia_url'] == 'https://en.wikipedia.org/wiki/Torness_nuclear_power_station' and page['facts']['opened'] == '1988', page['facts'])
+check('nearest stations by distance', [n['name'] for n in page['nearby']] == ['Finlarig', 'Sofia'] and 100 < page['nearby'][0]['km'] < 140 and page['nearby'][0]['mw'] == 0, page['nearby'])
+check('rank among its kind', page['rank'] == {'place': 1, 'of': 1, 'label': 'nuclear'}, page['rank'])
+check('unknown station', grid.station_page(99) is None)
+idle = grid.station_page(3)
+check('a station with no data yet', idle['now'] is None and idle['units'] == [] and idle['stats']['day'] is None and idle['points'] == [] and idle['facts']['turbines'] == '100', idle['now'])
+check('station index for search', [s['n'] for s in grid.station_index()['stations']] == ['Finlarig', 'Sofia', 'Torness'] and grid.station_index()['stations'][2]['k'] == 'Nuclear', grid.station_index())
+listing = grid.events_payload(days=2)
+by_id = {e['id']: e for e in listing['events']}
+check('outage events link to the station page', {'t': 'About this station', 'href': '/station?id=1'} in by_id['out-a']['links'], by_id['out-a']['links'])
+check('other events do not', not any('/station' in l['href'] for l in by_id['freq-a']['links']), by_id['freq-a']['links'])
+
 # ---- notifications ----------------------------------------------------------
 
 import json as _json

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>GB grid station</title>
+<link rel="stylesheet" href="{{static:stationmap.css}}">
+<link rel="stylesheet" href="{{static:stationcard.css}}">
+<link rel="stylesheet" href="{{static:pages/station.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head st-head">
+    <p class="st-back"><a href="/stations">All stations</a></p>
+    <h1 id="name">Power station</h1>
+    <p class="st-kind" id="kind"></p>
+  </section>
+
+  <div class="st-missing" id="missing" hidden>
+    <p>There’s no station with that number. <a href="/stations">See every station</a>, or search for one by name with the Search button above.</p>
+  </div>
+
+  <div class="st-cols" id="cols" hidden>
+    <div class="st-main">
+      <section class="st-now" aria-labelledby="now-title">
+        <h2 class="visually-hidden" id="now-title">Output now</h2>
+        <p class="st-figure" id="now-figure"></p>
+        <div class="st-meter" id="now-meter" aria-hidden="true"><i></i></div>
+        <p class="st-now-text" id="now-text"></p>
+      </section>
+
+      <section class="panel st-panel" aria-labelledby="out-title">
+        <div class="panel-head">
+          <h2 id="out-title">Output</h2>
+          <div class="controls">
+            <div class="toggle" role="group" aria-label="Period" id="range">
+              <button type="button" data-range="day" aria-pressed="true">24 hours</button>
+              <button type="button" data-range="week" aria-pressed="false">7 days</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart st-chart" id="chart"></div>
+        <dl class="st-stats" id="stats"></dl>
+        <p class="st-note" id="stats-note"></p>
+      </section>
+
+      <section class="panel st-panel" aria-labelledby="units-title" id="units-panel" hidden>
+        <div class="panel-head"><h2 id="units-title">Its generating units</h2></div>
+        <p class="sub" id="units-sub"></p>
+        <div class="st-table-wrap">
+          <table class="st-units">
+            <thead><tr><th scope="col">Unit</th><th scope="col" class="n">Now</th><th scope="col" class="n">Capacity</th><th scope="col"><span class="visually-hidden">Share of capacity</span></th></tr></thead>
+            <tbody id="units"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel st-panel" aria-labelledby="ev-title" id="events-panel" hidden>
+        <div class="panel-head"><h2 id="ev-title">In the timeline</h2></div>
+        <p class="sub">Unplanned outages here, and frequency events they set off, from the last year.</p>
+        <ol class="st-events" id="events"></ol>
+      </section>
+
+      <section class="panel st-panel" aria-labelledby="how-title">
+        <div class="panel-head"><h2 id="how-title">How these figures are made</h2></div>
+        <div class="explain">
+          <p>Nobody publishes each power station’s output live. The figures here start from what each generating unit told the grid operator it would do (its Physical Notification), adjusted by any instruction the operator has since given it, then every unit of the same fuel is scaled so that together they match Elexon’s measured total for that fuel. They are good estimates, not meter readings.</p>
+          <p>History is kept for seven days. The capacity factor is the energy generated as a share of what the station would make running flat out for the same time.</p>
+        </div>
+      </section>
+    </div>
+
+    <aside class="st-side" aria-label="About this station">
+      <div id="photo"></div>
+      <section class="st-facts" aria-labelledby="facts-title">
+        <h2 id="facts-title">About</h2>
+        <dl id="facts"></dl>
+        <p class="st-source" id="facts-source"></p>
+      </section>
+      <div id="where"></div>
+      <section class="st-near" aria-labelledby="near-title">
+        <h2 id="near-title">Nearest stations</h2>
+        <ul id="nearby"></ul>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/station.js}}"></script>
+</body>
+</html>

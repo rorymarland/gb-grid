@@ -51,6 +51,7 @@ PAGES = [
     ('history', '/history', 'History', 'history.html'),
     ('sandbox', '/sandbox', 'What if?', 'sandbox.html'),
     ('glossary', '/glossary', 'Glossary', 'glossary.html'),
+    ('station', '/station', 'Station', 'station.html'),  # one station: reached from the map, Stations and search
     ('display', '/display', 'Display', 'display.html'),  # kiosk view: a header button, not in the menus
 ]
 # The pages in the menus: groups in order, each page's group and a one-line description
@@ -153,7 +154,7 @@ def header_html(current):
         '    <p class="live" title=""><span class="dot" id="live-dot"></span>'
         '<span id="live-text">Connecting to the dashboard server…</span></p>\n'
         '    <div class="tools">'
-        '<button class="tool-btn search-btn" id="search-btn" type="button" aria-label="Search pages and terms" aria-keyshortcuts="/ Control+K Meta+K">'
+        '<button class="tool-btn search-btn" id="search-btn" type="button" aria-label="Search pages, power stations and terms" aria-keyshortcuts="/ Control+K Meta+K">'
         + ICONS['search'] + '<span class="tool-word">Search</span><kbd>/</kbd></button>'
         '<a class="tool-btn" href="/display" title="A full-screen view for a spare screen or tablet">' + ICONS['display']
         + '<span class="tool-word">Display</span></a>'
@@ -180,7 +181,7 @@ def header_html(current):
         + '</div></div></dialog>\n'
         '<dialog class="palette" id="palette" aria-label="Search">'
         '<div class="palette-box"><label class="palette-input">' + ICONS['search']
-        + '<input id="palette-q" type="search" placeholder="Search pages and terms" autocomplete="off" spellcheck="false" '
+        + '<input id="palette-q" type="search" placeholder="Search pages, power stations and terms" autocomplete="off" spellcheck="false" '
         'role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"></label>'
         '<ul class="palette-list" id="palette-list" role="listbox" aria-label="Results"></ul>'
         '<p class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to open</span><span><kbd>Esc</kbd> to close</span></p></div></dialog>\n'
@@ -231,7 +232,7 @@ class UI:
                           else os.path.join(APP_DIR, filename))
                 sources[filename] = load_file(source, 'the app folder', MISSING_PAGE)[0].decode('utf-8', 'replace')
             html = sources[filename].replace('<!--#head-->', HEAD_HTML.replace('<!--#importmap-->', importmap))
-            html = html.replace('<!--#header-->', header_html(key))
+            html = html.replace('<!--#header-->', header_html('stations' if key == 'station' else key))
             html = html.replace('<!--#credits-->', sitemap_html() + CREDITS_HTML).replace('<!--#credits-short-->', CREDITS_SHORT_HTML)
             html = re.sub(r'\{\{static:([\w./-]+)\}\}', lambda m: self._static_url(m.group(1), static), html)
             body = html.encode('utf-8')
@@ -372,11 +373,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(App.grid.map_data(), send_body)
             elif parts.path == '/api/station':
                 raw = query.get('id', [''])[0]
-                data = App.grid.station_history(int(raw)) if raw.isdigit() else None
-                if data is None:
+                full = query.get('full', [''])[0] == '1'
+                data = (App.grid.station_page(int(raw)) if full else App.grid.station_history(int(raw))) if raw.isdigit() else None
+                if data is None and full:
+                    self.respond_json({'unknown': True}, send_body)
+                elif data is None:
                     self.respond(404, b'Unknown station\n', 'text/plain; charset=utf-8', send_body)
                 else:
                     self.respond_json(data, send_body)
+            elif parts.path == '/api/stations':
+                self.respond_json(App.grid.station_index(), send_body)
             elif parts.path == '/api/photo':
                 raw = query.get('id', [''])[0]
                 station = App.grid.fleet.stations.get(int(raw)) if raw.isdigit() and App.grid.fleet else None

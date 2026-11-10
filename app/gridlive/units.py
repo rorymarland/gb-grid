@@ -51,6 +51,12 @@ def unit_category(fuel, station, ref):
     return category
 STORAGE_FUELS = ('PS', 'BATTERY', 'BESS')
 CATEGORY_ORDER = ['wind', 'solar', 'nuclear', 'gas', 'biomass', 'hydro', 'storage', 'other']
+# Columns of station_wikidata.csv shown on the station page
+FACT_KEYS = ('owner', 'operator', 'opened', 'wikipedia', 'applicant', 'turbines', 'turbine_mw', 'turbine_height')
+FUEL_NAMES = {
+    'CCGT': 'Gas, combined cycle', 'OCGT': 'Gas, open cycle', 'NUCLEAR': 'Nuclear', 'BIOMASS': 'Biomass', 'NPSHYD': 'Hydro',
+    'PS': 'Pumped storage', 'BATTERY': 'Battery storage', 'SOLAR': 'Solar farm', 'WIND': 'Wind farm', 'COAL': 'Coal', 'OIL': 'Oil',
+}
 CATEGORY_LABELS = {
     'wind': 'Wind', 'solar': 'Solar', 'nuclear': 'Nuclear', 'gas': 'Gas', 'biomass': 'Biomass',
     'hydro': 'Hydro', 'storage': 'Storage', 'other': 'Other',
@@ -151,7 +157,7 @@ class Fleet:
                 'id': sid, 'name': (row.get('name') or '').strip() or str(sid), 'fuel': fuel,
                 'cat': UNIT_CATEGORY.get(fuel, 'other'), 'x': x, 'y': y,
                 'nation': (row.get('nation') or '').strip(), 'offshore': (row.get('offshore') or '').strip() == '1',
-                'capacity': capacity, 'lat': lat, 'lon': lon, 'wikidata': None, 'photo': None,
+                'capacity': capacity, 'lat': lat, 'lon': lon, 'wikidata': None, 'photo': None, 'facts': {},
             }
             for unit in (row.get('units') or '').split():
                 self.exact[unit.strip().upper()] = sid
@@ -186,6 +192,9 @@ class Fleet:
                 continue
             qid = (row.get('wikidata') or '').strip()
             station['wikidata'] = qid if re.fullmatch(r'Q\d+', qid) else None
+            facts = {key: (row.get(key) or '').strip() for key in FACT_KEYS}
+            facts['located'] = (row.get('located') or '').strip().split(' ')[0]
+            station['facts'] = {key: value for key, value in facts.items() if value}
             name = (row.get('file') or '').strip()
             if name and '/' not in name:
                 try:
@@ -468,7 +477,9 @@ class Units:
             if level > 0:
                 categories[cat]['estimated'] += level
             if sid is not None:
-                st = stations.setdefault(sid, {'mw': 0.0, 'units': 0, 'running': 0, 'ref_cap': 0.0, 'instructed': 0})
+                st = stations.setdefault(sid, {'mw': 0.0, 'units': 0, 'running': 0, 'ref_cap': 0.0, 'instructed': 0, 'list': []})
+                st['list'].append({'unit': elexon or unit, 'mw': round(mw, 1), 'cap': round((ref or {}).get('c') or 0) or None,
+                                   'instructed': source == 'boa'})
                 st['mw'] += mw
                 st['units'] += 1
                 st['running'] += 1 if abs(mw) >= 1 else 0

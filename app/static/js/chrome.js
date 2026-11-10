@@ -127,7 +127,7 @@ function setupSkip() {
   });
 }
 
-/* ---------- search: pages and glossary terms ---------- */
+/* ---------- search: pages, glossary terms and power stations ---------- */
 
 var palette = { items: null, results: [], active: 0 };
 
@@ -146,16 +146,37 @@ function paletteItems() {
   return items;
 }
 
+/* Power stations join the list the first time search is opened */
+function loadStations() {
+  if (palette.stations) return;
+  palette.stations = true;
+  fetch('/api/stations').then(function (r) { return r.json(); }).then(function (data) {
+    var items = paletteItems();
+    (data.stations || []).forEach(function (st) {
+      var text = [st.k, st.na, st.cap ? st.cap.toLocaleString('en-GB') + ' MW' : null].filter(Boolean).join(', ');
+      items.push({ kind: 'Station', title: st.n, text: text, href: '/station?id=' + st.id, titleOnly: true });
+    });
+    var dialog = byId('palette');
+    if (dialog && dialog.open) renderPalette();
+  }).catch(function () { palette.stations = false; });
+}
+
+var COMMON = /^(w|wi|win|wind|f|fa|far|farm|power|station|energy|storage|solar|hydro|the|of|and|hill)$/;
 function score(item, words) {
-  var title = item.title.toLowerCase(), all = (item.title + ' ' + item.text + ' ' + (item.extra || '')).toLowerCase(), total = 0;
+  // Stations match on their names only: "wind" shouldn't list every wind farm
+  var title = item.title.toLowerCase(), all = (item.titleOnly ? item.title : item.title + ' ' + item.text + ' ' + (item.extra || '')).toLowerCase(), total = 0;
+  var distinctive = 0;
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
+    if (item.titleOnly && COMMON.test(w)) { if (all.indexOf(w) < 0) return 0; total += 1; continue; }
+    distinctive++;
     if (title.indexOf(w) === 0) total += 30;
     else if (new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(title)) total += 20;
     else if (title.indexOf(w) >= 0) total += 12;
     else if (all.indexOf(w) >= 0) total += 4;
     else return 0;
   }
+  if (item.titleOnly && !distinctive) return 0;
   return total + (item.kind === 'Page' ? 3 : 0);
 }
 
@@ -197,6 +218,7 @@ function setupPalette() {
   if (!dialog || !q || !dialog.showModal) { if (button) button.hidden = true; return; }
   function open() {
     if (dialog.open) return;
+    loadStations();
     var sheet = byId('menu-sheet');
     if (sheet && sheet.open) sheet.close();
     q.value = ''; palette.active = 0;

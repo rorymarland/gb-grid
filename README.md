@@ -28,7 +28,8 @@ standard library inside.
 grouped as Now, Running the grid, Over time and Explore; the bar stays
 pinned as you scroll. On a phone they're in the Menu, with a line on what
 each page shows. Press `/` or `⌘K` (`Ctrl+K` on Windows) anywhere to search
-the pages and glossary terms. The site is light by default; the theme
+the pages, power stations by name, and glossary terms. The site is light by
+default; the theme
 button switches to dark or to match your device, and remembers the choice.
 
 ### Overview
@@ -61,6 +62,16 @@ locator map where there isn't one; its GPS coordinates and Ordnance Survey grid
 reference; and links to open it in Google Maps, Apple Maps or OpenStreetMap.
 `/map?station=<id>` and `/stations?station=<id>` open a station's card
 directly.
+
+Every station also has its own page (`/station?id=<id>`), reached from its
+card, from search, or from an outage on the Timeline. It shows what the
+station is generating now against its capacity; its output over the last 24
+hours or 7 days with the energy generated, capacity factor, highest output
+and share of time running; each of its generating units; its unplanned
+outages and any frequency events they set off; and what's known about it:
+year opened, owner and operator (from Wikidata, so sometimes behind a sale),
+turbine numbers and sizes for wind farms (from the Renewable Energy Planning
+Database), a Wikipedia link and the nearest other stations.
 
 ![The map page](docs/map.png)
 
@@ -375,7 +386,8 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/live` | The current snapshot behind the overview |
 | `/api/history?range=24h` | History series (`24h`, `7d` or `30d`) |
 | `/api/map` | Stations, interconnectors and totals for the map |
-| `/api/station?id=N` | One station's last 24 hours, and its location, Wikidata item and photo credit |
+| `/api/station?id=N` | One station's last 24 hours, and its location, Wikidata item and photo credit. Add `&full=1` for everything on the station page: the week, statistics, units, facts, events and neighbours |
+| `/api/stations` | Every station's id, name and kind (used by search) |
 | `/api/photo?id=N` | The station's photo (from Wikimedia Commons, cached by the server) |
 | `/api/replay` | The last seven days of the map in 10-minute frames |
 | `/api/regions` | Every region's carbon intensity, mix and solar, 24 hours back to 48 ahead |
