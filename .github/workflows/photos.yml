@@ -24,6 +24,10 @@ jobs:
         run: git clone --depth 1 https://github.com/OSUKED/Power-Station-Dictionary.git "$RUNNER_TEMP/psd"
       - name: Match stations to photos
         run: python3 -I tools/build_photos.py "$RUNNER_TEMP/psd/data" photo-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Print the results
+        run: |
+          echo '=====REPORT====='; cat photo-report.md
+          echo '=====CSV====='; cat app/station_photos.csv; echo '=====END====='
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: station-photos
