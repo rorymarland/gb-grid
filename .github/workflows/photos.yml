@@ -1,7 +1,7 @@
 name: Build station photos
 
 # Run by hand. Matches stations to Wikidata and Wikimedia Commons photos and
-# uploads app/station_photos.csv and a coverage report for review; the CSV is
+# uploads app/station_wikidata.csv and a coverage report for review; the CSV is
 # committed separately once the matches have been checked.
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
       - name: Print the results
         run: |
           echo '=====REPORT====='; cat photo-report.md
-          echo '=====CSV====='; cat app/station_photos.csv; echo '=====END====='
+          echo '=====CSV====='; cat app/station_wikidata.csv; echo '=====END====='
       - name: Contact sheets for review
         run: |
           python3 -m pip install --quiet pillow
@@ -37,5 +37,5 @@ jobs:
         with:
           name: station-photos
           path: |
-            app/station_photos.csv
+            app/station_wikidata.csv
             photo-report.md

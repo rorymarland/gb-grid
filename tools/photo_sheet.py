@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contact sheets of the photos in app/station_photos.csv, for reviewing matches.
+"""Contact sheets of the photos in app/station_wikidata.csv, for reviewing matches.
 
 Usage: python3 tools/photo_sheet.py OUT_DIR   (needs Pillow and access to Wikimedia)
 
@@ -33,7 +33,7 @@ def main():
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
     stations = {r['id']: r['name'] for r in csv.DictReader(open(os.path.join(ROOT, 'app', 'stations.csv'), encoding='utf-8'))}
-    rows = list(csv.DictReader(open(os.path.join(ROOT, 'app', 'station_photos.csv'), encoding='utf-8')))
+    rows = [r for r in csv.DictReader(open(os.path.join(ROOT, 'app', 'station_wikidata.csv'), encoding='utf-8')) if r['file']]
     font = ImageFont.load_default()
     for n in range(0, len(rows), PER_SHEET):
         chunk = rows[n:n + PER_SHEET]

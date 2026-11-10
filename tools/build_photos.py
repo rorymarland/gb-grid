@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-"""Build app/station_photos.csv: a freely licensed photo for each power station.
+"""Build app/station_wikidata.csv: each power station's Wikidata item, location and photo.
 
 Usage: python3 -I tools/build_photos.py [DICTIONARY_DATA_DIR] [REPORT.md]
 
 Photos come from Wikimedia Commons, found through Wikidata:
 
-1. Every Wikidata item that is a kind of power station and has coordinates
-   in a box around Great Britain and its seas, with its photo (P18) and
-   Commons category (P373).
-2. Each station in app/stations.csv is matched to an item: first through the
-   Power Station Dictionary's Wikidata IDs, then by name and distance (closer
-   for onshore sites, further for offshore wind farms, whose coordinates are
-   rough), then by hand (OVERRIDES below).
+1. Every UK Wikidata item that is a kind of power station and has
+   coordinates, with its classes, photo (P18) and Commons category (P373).
+2. Each station in app/stations.csv is matched to an item: through the Power
+   Station Dictionary's Wikidata IDs, or by name and distance (a distinctive
+   name may be further away, as some of our coordinates are well out), or by
+   hand (OVERRIDES below). Items whose classes or name say a different fuel
+   (a coal station on the same site as a gas one, a battery beside a wind
+   farm) are rejected.
 3. A station whose item has no P18 photo can take the first suitable photo
    in its Commons category; those are marked "category" for review.
 4. Commons supplies each photo's author and licence. Only licences that
    allow reuse with credit (CC BY, CC BY-SA, CC0, public domain) are kept.
+5. Where Wikidata's location differs from ours by more than a kilometre, it
+   is written out too; tools/build_stations.py uses it in place of ours.
+
+Every photo has been looked at on the contact sheets (tools/photo_sheet.py);
+NO_PHOTO and the other tables below record what that review decided.
 
 Run it in CI (the "Build station photos" workflow), which can reach
 Wikimedia. The report lists every match with its distance and method, and
@@ -34,7 +40,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIONS = os.path.join(ROOT, 'app', 'stations.csv')
-OUT = os.path.join(ROOT, 'app', 'station_photos.csv')
+OUT = os.path.join(ROOT, 'app', 'station_wikidata.csv')
 UA = 'gb-grid-photo-builder/1.0 (https://github.com/rorymarland/gb-grid)'
 
 # Decisions from reviewing the contact sheets (tools/photo_sheet.py), by station name.
@@ -46,6 +52,8 @@ OVERRIDES = {
 FILE_OVERRIDES = {
     'Hornsea Two': 'Hornsea 2 wind farm from the air.jpg',
 }
+# Matched, but the item covers a wider area than the station, so keep our location
+KEEP_LOCATION = {'East Anglia One', 'East Anglia Three', 'Hornsea One'}
 # Matched correctly, but the item's photo shows something else
 NO_PHOTO = {
     'Didcot B',           # shows the demolished coal station, Didcot A
@@ -62,6 +70,8 @@ NO_PHOTO = {
     'Triton Knoll',       # onshore cable trench
     'Seagreen',           # foundations on a barge in port
     'North Kyle Wind Farm',  # the entrance road sign
+    'Beinn An Tuirc 2 Wind Farm',  # bare hillside, no turbines in view
+    'East Anglia Three',  # the zone's photo is of East Anglia One
 }
 
 GOOD_LICENCE = re.compile(r'^(cc[ -]by(-sa)?[ -]?[\d.]*|cc0|public domain|pd)', re.I)
@@ -255,7 +265,7 @@ def main():
     report_path = sys.argv[2] if len(sys.argv) > 2 else None
     stations = list(csv.DictReader(open(STATIONS, encoding='utf-8')))
     names = {st['name']: st['id'] for st in stations}
-    for table in (OVERRIDES, FILE_OVERRIDES, NO_PHOTO):
+    for table in (OVERRIDES, FILE_OVERRIDES, NO_PHOTO, KEEP_LOCATION):
         unknown = [n for n in table if n not in names]
         assert not unknown, 'not in stations.csv: %s' % unknown
     overrides = {names[n]: q for n, q in OVERRIDES.items()}
@@ -340,27 +350,32 @@ def main():
 
     rows, skipped = [], []
     for st in stations:
+        m = matches.get(st['id'])
+        if not m or not m[0]:
+            continue
+        it, method, d = m
+        row = {'id': st['id'], 'wikidata': it['qid'], 'lat': '', 'lon': ''}
+        # Wikidata's location where ours is more than a kilometre out
+        if d is not None and d > 1 and st['name'] not in KEEP_LOCATION:
+            row['lat'], row['lon'] = '%.4f' % it['lat'], '%.4f' % it['lon']
         c = chosen.get(st['id'])
-        if not c:
-            continue
-        f, it, method, d, source = c
-        meta = info.get(f)
-        if not meta:
-            skipped.append((st['name'], f, 'not found on Commons'))
-            continue
-        if not GOOD_LICENCE.match(meta['licence'] or ''):
-            skipped.append((st['name'], f, 'licence ' + (meta['licence'] or 'unknown')))
-            continue
-        rows.append({'id': st['id'], 'wikidata': it['qid'], 'file': f, 'width': meta['width'], 'height': meta['height'],
-                     'author': meta['author'], 'licence': meta['licence'], 'licence_url': meta['licence_url'],
-                     'source': source})
+        meta = info.get(c[0]) if c else None
+        if c and not meta:
+            skipped.append((st['name'], c[0], 'not found on Commons'))
+        elif c and not GOOD_LICENCE.match(meta['licence'] or ''):
+            skipped.append((st['name'], c[0], 'licence ' + (meta['licence'] or 'unknown')))
+        elif c:
+            row.update({'file': c[0], 'width': meta['width'], 'height': meta['height'], 'author': meta['author'],
+                        'licence': meta['licence'], 'licence_url': meta['licence_url'], 'source': c[4]})
+        rows.append(row)
     with open(OUT, 'w', newline='', encoding='utf-8') as fh:
-        w = csv.DictWriter(fh, fieldnames=['id', 'wikidata', 'file', 'width', 'height', 'author', 'licence', 'licence_url', 'source'])
+        w = csv.DictWriter(fh, fieldnames=['id', 'wikidata', 'lat', 'lon', 'file', 'width', 'height', 'author', 'licence',
+                                           'licence_url', 'source'], restval='')
         w.writeheader()
         w.writerows(rows)
 
     # Report: coverage and every match, for review
-    have = {r['id'] for r in rows}
+    have = {r['id'] for r in rows if r.get('file')}
     lines = ['# Station photos', '', '%d of %d stations have a photo.' % (len(have), len(stations)), '']
     by_fuel = {}
     for st in stations:
@@ -387,7 +402,7 @@ def main():
         r = byid.get(st['id'])
         lines.append('| %s | %s | %s (%s) | %s | %s | %s | %s | %s |' % (
             st['name'], st['fuel'], it['label'], it['qid'], '%.1f km' % d if d is not None else '?', method,
-            r['file'] if r else '(none)', r['source'] if r else '', r['licence'] if r else ''))
+            r.get('file') or '(none)' if r else '(none)', r.get('source', '') if r else '', r.get('licence', '') if r else ''))
     lines += ['', '## Unmatched', '']
     for st in stations:
         if st['id'] in matches:
