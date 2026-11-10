@@ -39,8 +39,11 @@ def fetch(url):
 
 
 def repd_rows():
-    page = json.loads(fetch(REPD_PAGE).decode('utf-8'))
-    urls = [a.get('url') for a in page.get('details', {}).get('attachments', []) if (a.get('url') or '').lower().endswith('.csv')]
+    text = fetch(REPD_PAGE).decode('utf-8')
+    page = json.loads(text)
+    print('REPD page details:', list(page.get('details', {}).keys()), file=sys.stderr)
+    urls = sorted(set(re.findall(r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.csv', text, re.I)))
+    print('REPD links:', sorted(set(re.findall(r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.(?:csv|xlsx|ods)', text, re.I))), file=sys.stderr)
     print('REPD file:', urls[:1], file=sys.stderr)
     raw = fetch(urls[0])
     for encoding in ('utf-8-sig', 'cp1252'):
