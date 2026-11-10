@@ -164,7 +164,8 @@ allows.
 
 | | |
 |---|---|
-| ![Display: Today on the grid](docs/display-story.png) | ![Display: the last 24 hours](docs/display-day.png) |
+| ![Display: right now](docs/display-now.png) | ![Display: power stations](docs/display-map.png) |
+| ![Display: Today on the grid](docs/display-story.png) | ![Display: the next 48 hours](docs/display-outlook.png) |
 
 Options go in the address:
 `/display?views=now,story,day,map,regions,balancing,outlook,outages,records`
