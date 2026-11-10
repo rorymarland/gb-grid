@@ -18,7 +18,7 @@ WIDTH = 960                 # one of Wikimedia's standard thumbnail widths
 MAX_BYTES = 4 * 1024 * 1024
 RETRY_AFTER = 3600          # after a failed fetch, try again an hour later
 TYPES = {b'\xff\xd8\xff': ('image/jpeg', '.jpg'), b'\x89PNG': ('image/png', '.png')}
-HOSTS = ('commons.wikimedia.org', 'upload.wikimedia.org')
+HOSTS = ('commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org')
 
 
 def kind_of(body):
