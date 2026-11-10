@@ -62,6 +62,10 @@ ANCHORS = {
     'Saltend': 'Q116913766',                     # Saltend Chemicals Park
     'Grangemouth CHP': 'Q5595715',               # Grangemouth Refinery
 }
+# Stations whose REPD location is wrong
+REPD_SKIP = {
+    'Dalquhandy Wind Farm',     # REPD's point is in South Ayrshire, 79 km from Coalburn, where it stands
+}
 # Station -> its site's name in the Renewable Energy Planning Database, where
 # the names differ too much to match by themselves
 REPD_NAMES = {
@@ -90,6 +94,11 @@ PHOTOS = {
     'Dalswinton Wind Farm': 'Dalswinton Wind Farm - geograph.org.uk - 3512151.jpg',
     'Dersalloch Wind Farm': 'Dersalloch Hill Wind Farm - geograph.org.uk - 5246342.jpg',
     'Edinbane Wind Farm': 'Edinbane wind farm - geograph.org.uk - 1730366.jpg',
+    'Dorenell': 'Dorenell Wind Farm - geograph.org.uk - 6571426.jpg',
+    'Kype Muir': 'Wind farm, Kype Muir - geograph.org.uk - 6623321.jpg',
+    'Middle Muir': 'Middle Muir Wind Farm - geograph.org.uk - 8098836.jpg',
+    'Pogbie': 'Pogbie Wind Farm - geograph.org.uk - 7676801.jpg',
+    'Tralorg': 'In Tralorg Wind Farm - geograph.org.uk - 6812491.jpg',
     'Fallago Rig Wind Farm': 'Fallago Rig Wind Farm - geograph.org.uk - 6531554.jpg',
     'Galloper': 'Galloper windfarm.jpg',
     'Goole Fields 1 Wind Farm': 'Goole Fields 1 Wind Turbine Farm - geograph.org.uk - 5918981.jpg',
@@ -354,6 +363,8 @@ def repd_sites():
 
 def repd_match(st, sites):
     """The REPD site for an onshore station: the same name and technology, the largest phase."""
+    if st['name'] in REPD_SKIP:
+        return None
     wanted = REPD_NAMES.get(st['name'])
     techs = REPD_TECH.get(st['fuel'], ())
     found = [s for s in sites if (s['name'] == wanted if wanted else s['tech'] in techs and similarity(st['name'], s['name']) >= 0.99)]
@@ -383,14 +394,22 @@ def clean_author(text):
     return text[:120] or 'Unknown'
 
 
+def meta_coords(meta, into):
+    try:
+        into['lat'], into['lon'] = float(meta['GPSLatitude']['value']), float(meta['GPSLongitude']['value'])
+        return True
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def commons_info(files):
     """Author, licence and size of each Commons file."""
     out = {}
     files = sorted(set(files))
     for i in range(0, len(files), 40):
         data = get('https://commons.wikimedia.org/w/api.php?' + urllib.parse.urlencode({
-            'action': 'query', 'titles': '|'.join('File:' + f for f in files[i:i + 40]), 'prop': 'imageinfo',
-            'iiprop': 'url|size|mime|extmetadata', 'format': 'json'}))
+            'action': 'query', 'titles': '|'.join('File:' + f for f in files[i:i + 40]), 'prop': 'imageinfo|coordinates',
+            'iiprop': 'url|size|mime|extmetadata', 'colimit': 'max', 'format': 'json'}))
         q = data.get('query') or {}
         renames = {n['to']: n['from'] for n in q.get('normalized', [])}
         for page in (q.get('pages') or {}).values():
@@ -406,6 +425,11 @@ def commons_info(files):
             out[title] = {'author': clean_author(text('Artist')), 'licence': text('LicenseShortName'),
                           'licence_url': text('LicenseUrl'), 'width': info.get('width'), 'height': info.get('height'),
                           'mime': info.get('mime'), 'page': info.get('descriptionurl')}
+            # Where the photo was taken, if Commons knows: a check on the station's location
+            if not meta_coords(meta, out[title]):
+                for c in page.get('coordinates') or []:
+                    out[title]['lat'], out[title]['lon'] = c.get('lat'), c.get('lon')
+                    break
         time.sleep(0.5)
     return out
 
@@ -415,7 +439,7 @@ def main():
     report_path = sys.argv[2] if len(sys.argv) > 2 else None
     stations = list(csv.DictReader(open(STATIONS, encoding='utf-8')))
     names = {st['name']: st['id'] for st in stations}
-    for table in (OVERRIDES, ANCHORS, REPD_NAMES, PHOTOS, NO_PHOTO, KEEP_LOCATION):
+    for table in (OVERRIDES, ANCHORS, REPD_NAMES, REPD_SKIP, PHOTOS, NO_PHOTO, KEEP_LOCATION):
         unknown = [n for n in table if n not in names]
         assert not unknown, 'not in stations.csv: %s' % unknown
     overrides = {names[n]: q for n, q in OVERRIDES.items()}
@@ -599,6 +623,23 @@ def main():
             lat, lon, _, detail = located[st['id']]
             lines.append('| %s | %s | %s | %s, %s | %.4f, %.4f | %.1f km |' % (
                 st['name'], st['fuel'], detail, st['lat'], st['lon'], lat, lon, distance_km(float(st['lat']), float(st['lon']), lat, lon)))
+    lines += ['', '## Photos taken far from the station', '', 'Onshore stations whose photo was taken more than 8 km from where we put them '
+              '(photos of a wind farm are often taken from a few kilometres off).', '',
+              '| Station | Located by | Our location | Photo taken at | Apart | Dictionary to photo |', '|---|---|---|---|---|---|']
+    checked = 0
+    for st in stations:
+        r, c = byid.get(st['id']), chosen.get(st['id'])
+        meta = info.get(c[0]) if c else None
+        if not r or not meta or meta.get('lat') is None or st.get('offshore') == '1':
+            continue
+        checked += 1
+        lat, lon = (float(r['lat']), float(r['lon'])) if r['lat'] else (float(st['lat']), float(st['lon']))
+        d = distance_km(lat, lon, meta['lat'], meta['lon'])
+        if d > 8:
+            lines.append('| %s | %s | %.4f, %.4f | %.4f, %.4f | %.1f km | %.1f km |' % (
+                st['name'], r['located'] or 'dictionary', lat, lon, meta['lat'], meta['lon'], d,
+                distance_km(float(st['lat']), float(st['lon']), meta['lat'], meta['lon'])))
+    lines += ['', '%d onshore stations have a photo with a known position.' % checked]
     lines += ['', '## Still on the dictionary\'s or a hand-entered location', '']
     lines += ['- %s (%s%s) %s, %s' % (st['name'], st['fuel'], ', offshore' if st.get('offshore') == '1' else '', st['lat'], st['lon'])
               for st in stations if not byid.get(st['id'], {}).get('lat')]
