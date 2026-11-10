@@ -430,7 +430,7 @@ def wikidata_facts(qids):
                 best = [c for c in ranked if c.get('rank') == 'preferred'] or [c for c in ranked if 'P582' not in (c.get('qualifiers') or {})]
                 return [c['mainsnak']['datavalue']['value'] for c in best]
             years = []
-            for prop in ('P729', 'P1619', 'P571'):      # service entry, official opening, inception
+            for prop in ('P729', 'P1619'):      # service entry, official opening (not inception: that's often the project's start)
                 for v in values(prop):
                     m = re.match(r'\+(\d{4})-', v.get('time', '')) if isinstance(v, dict) else None
                     if m:
@@ -547,7 +547,7 @@ def main():
     if missing:
         items.update(item_details(missing))
 
-    matches, rejected, nearest = {}, [], {}
+    matches, rejected, nearest, scores, shared = {}, [], {}, {}, []
     for st in stations:
         sid, name = st['id'], st['name']
         lat, lon = float(st['lat']), float(st['lon'])
@@ -588,8 +588,20 @@ def main():
                 best = (score, it, d)
         if best:
             matches[sid] = (best[1], 'name and distance', best[2])
+            scores[sid] = best[0]
         elif near:
             nearest[sid] = near
+
+    # One item, one station: where a name match lands on an item another station
+    # has (a wind farm and its extension, say), the weaker name match gives way
+    claimed = {}
+    for sid, (it, method, d) in matches.items():
+        claimed.setdefault(it['qid'], []).append((method != 'name and distance', scores.get(sid, 0), sid))
+    for qid, claims in claimed.items():
+        claims.sort(reverse=True)
+        for _, _, sid in claims[1:]:
+            if matches[sid][1] == 'name and distance':
+                shared.append((sid, matches.pop(sid)[0]))
 
     # Stations without an item of their own: the site they stand on, else REPD
     located = {}
@@ -712,6 +724,10 @@ def main():
     if rejected:
         lines += ['', '## Rejected on fuel', ''] + ['- %s (%s): %s (%s) %s, %s' % (
             n, f, it['label'], it['qid'], '%.1f km' % d if d is not None else '?', why) for n, f, it, d, why in rejected]
+    if shared:
+        byname = {st['id']: st['name'] for st in stations}
+        lines += ['', '## Left unmatched because another station has the item', ''] + [
+            '- %s: %s (%s)' % (byname[sid], it['label'], it['qid']) for sid, it in shared]
     if skipped:
         lines += ['', '## Skipped photos', ''] + ['- %s: %s (%s)' % s for s in skipped]
     lines += ['', '## Facts', '', '| Station | Owner | Operator | Opened | Wikipedia | REPD applicant | Turbines |', '|---|---|---|---|---|---|---|']
