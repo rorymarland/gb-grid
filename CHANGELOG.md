@@ -4,15 +4,18 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.3.0 (unreleased)
+## 1.4.0 (2026-11-10)
 
-- **Plain English layer:** grid terms in the explanations are underlined and
-  open a short definition; a new Glossary page (`/glossary`) lists all 48.
-- **Today on the grid:** the Overview opens with a written summary of the day
-  so far or yesterday, led by the most notable event (negative prices, a
-  notice, the cleanest day of the week, heavy curtailment). The Display view
-  has it as a slide too, so the default slide list is now
-  `now,story,day,map,regions,balancing,outlook,outages,records`.
+- **Station cards.** Select a station on the map, or a row on the Stations
+  page, for its photo from Wikimedia Commons, credited to its photographer
+  with its licence (87 stations so far, covering 57% of capacity; every photo
+  was checked by eye), or a small locator map where there's no photo yet. The
+  card also gives the station's GPS coordinates (with a copy button), its
+  Ordnance Survey grid reference, and links to open it in Google Maps, Apple
+  Maps, OpenStreetMap or Wikidata. The server fetches each photo once and
+  keeps it in `/data/photos`, so browsers never contact Wikimedia;
+  `STATION_PHOTOS=false` turns photos off. `/map?station=<id>` and
+  `/stations?station=<id>` open a station's card directly.
 - **Frequency page** (`/frequency`): live frequency against its limits, an hour
   to a week of 15-second readings, how steady it's been, NESO's inertia
   estimates and the frequency response held now. Sudden falls and rises are
@@ -29,8 +32,9 @@ releases that keep working with your existing settings and data.
   protection and demand disconnection), then a simplified merit order for the
   next hour with gas, carbon and European prices to play with. Starts from
   the grid now, a moment in the last week or a preset.
-- New API endpoints: `/api/frequency`, `/api/events` and `/api/sandbox`. New settings:
-  `POLL_RESPONSE_SECONDS` (default 3600) and `POLL_EVENTS_SECONDS` (120).
+- New API endpoints: `/api/frequency`, `/api/events`, `/api/sandbox` and
+  `/api/photo`. New settings: `POLL_RESPONSE_SECONDS` (default 3600),
+  `POLL_EVENTS_SECONDS` (120) and `STATION_PHOTOS` (true).
 - **A new look and easier navigation.** Pages are grouped (Now, Running the
   grid, Over time, Explore) in a bar that stays pinned as you scroll; on
   phones they're in a Menu with a line on what each page shows, instead of a
@@ -41,25 +45,11 @@ releases that keep working with your existing settings and data.
 - **Light by default.** The theme button now offers Light, Dark or Match my
   device (it used to follow the device unless changed). Choices made before
   this version aren't carried over.
-- **Fixed:** at some desktop widths the page tabs overlapped the live status.
-- **Fixed:** on phones, dragging the map with one finger could zoom and jump
-  instead of moving it. If a finger's lift went unreported (as Safari can when
-  the map redraws under it), the next single touch was treated as a pinch
-  against the missing finger; and lifting one finger out of a pinch made the
-  map leap. One finger now always pans; pinch, double-tap, or double-tap and
-  slide down or up zoom, as in Google and Apple Maps. The map's hint shows the
-  touch gestures on touch screens.
-- The image now runs Python 3.14 (was 3.13, which only gets security fixes
-  now).
-- **Security:** images are rebuilt weekly on a fresh base image (for `latest`
-  and the latest release's tags) and scanned with Trivy before publishing;
-  Alpine packages are upgraded at build time and pip is removed from the
-  image. The server closes connections idle for 30 seconds and accepts at
-  most 100 at once. GitHub Actions are pinned to commit SHAs, updated to their
-  current major versions, and kept current by Dependabot.
-- **Fixed:** the Display's 24-hour chart cut off its time labels when the
-  slide settled after the first draw; it now redraws when its box changes size.
-- README screenshots and feature notes brought up to date.
+- **Fixed:** 120 stations sat in the wrong place on the map, 60 of them by
+  more than 5 km (Baglan Bay was in Pembrokeshire, Torness out in the North
+  Sea, Dinorwig outside its mountain). Locations now come from Wikidata
+  wherever a station is matched there, which is 140 of 246 stations; the
+  rest still use the Power Station Dictionary's.
 - **Fixed:** the map's fuel list could blank the map. Tapping a fuel on an
   iPad left it highlighted, and clicking to hide one on a Mac kept
   highlighting the fuel just hidden, so every other station faded out. Now a
@@ -69,21 +59,36 @@ releases that keep working with your existing settings and data.
 - **Fixed:** on an iPad, the map's full screen closed as soon as you dragged
   the map downwards, because iPad Safari's full screen claims that swipe for
   itself. iPads now fill the browser window instead, as iPhones always have.
-- **Station cards.** Select a station on the map, or a row on the Stations
-  page, for its photo from Wikimedia Commons, credited to its photographer
-  with its licence (87 stations so far, covering 57% of capacity; every photo
-  was checked by eye), or a small locator map where there's no photo yet. The
-  card also gives the station's GPS coordinates (with a copy button), its
-  Ordnance Survey grid reference, and links to open it in Google Maps, Apple
-  Maps, OpenStreetMap or Wikidata. The server fetches each photo once and
-  keeps it in `/data/photos`, so browsers never contact Wikimedia;
-  `STATION_PHOTOS=false` turns photos off. `/map?station=<id>` and
-  `/stations?station=<id>` open a station's card directly.
-- **Fixed:** 120 stations sat in the wrong place on the map, 60 of them by
-  more than 5 km (Baglan Bay was in Pembrokeshire, Torness out in the North
-  Sea, Dinorwig outside its mountain). Locations now come from Wikidata
-  wherever a station is matched there, which is 140 of 246 stations; the
-  rest still use the Power Station Dictionary's.
+- **Fixed:** on phones, dragging the map with one finger could zoom and jump
+  instead of moving it. If a finger's lift went unreported (as Safari can when
+  the map redraws under it), the next single touch was treated as a pinch
+  against the missing finger; and lifting one finger out of a pinch made the
+  map leap. One finger now always pans; pinch, double-tap, or double-tap and
+  slide down or up zoom, as in Google and Apple Maps. The map's hint shows the
+  touch gestures on touch screens.
+- **Fixed:** at some desktop widths the page tabs overlapped the live status.
+- **Fixed:** the Display's 24-hour chart cut off its time labels when the
+  slide settled after the first draw; it now redraws when its box changes size.
+- The image now runs Python 3.14 (was 3.13, which only gets security fixes
+  now).
+- **Security:** images are rebuilt weekly on a fresh base image (for `latest`
+  and the latest release's tags) and scanned with Trivy before publishing;
+  Alpine packages are upgraded at build time and pip is removed from the
+  image. The server closes connections idle for 30 seconds and accepts at
+  most 100 at once. GitHub Actions are pinned to commit SHAs, updated to their
+  current major versions, and kept current by Dependabot.
+- README screenshots and feature notes brought up to date.
+- The glossary has grown from 41 terms to 48.
+
+## 1.3.0 (2026-11-07)
+
+- **Plain English layer:** grid terms in the explanations are underlined and
+  open a short definition; a new Glossary page (`/glossary`) lists all 41.
+- **Today on the grid:** the Overview opens with a written summary of the day
+  so far or yesterday, led by the most notable event (negative prices, a
+  notice, the cleanest day of the week, heavy curtailment). The Display view
+  has it as a slide too, so the default slide list is now
+  `now,story,day,map,regions,balancing,outlook,outages,records`.
 
 ## 1.2.0 (2026-11-07)
 

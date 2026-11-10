@@ -204,7 +204,7 @@ Images are published for `linux/amd64` and `linux/arm64` to
 | Tag | What it follows |
 |---|---|
 | `1` | The latest 1.x release (recommended) |
-| `1.2.0` | That exact release |
+| `1.4.0` | That exact release |
 | `latest` | The main branch |
 
 To update: `docker compose pull && docker compose up -d`.
