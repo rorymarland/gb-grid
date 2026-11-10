@@ -189,7 +189,8 @@ function initMap() {
   map = createStationMap({
     stage: stage, svg: byId('map'), interactive: true, sizeKey: byId('size-key'),
     active: function () { return state.view === 'map'; },
-    visible: function (st) { return !state.hidden[st.c] && (state.showIdle || !isIdle(st)); },
+    // A fuel being previewed (mouse over its row) shows even if it's hidden
+    visible: function (st) { return (!state.hidden[st.c] || state.highlight === st.c) && (state.showIdle || !isIdle(st)); },
     selected: function () { return state.selected; },
     dimmed: function (st) { return Boolean(state.highlight && state.highlight !== st.c); },
     onHover: function (hit, p) {
@@ -352,7 +353,7 @@ function renderSide() {
     when.textContent = 'Waiting for the first station data…';
   }
   if (changed('stats', [data.time, data.links, data.categories, data.demand_gw])) renderStats(data);
-  if (changed('fuels', [data.time, data.categories, state.hidden, state.highlight])) renderFuels(data);
+  if (changed('fuels', [data.time, data.categories, state.hidden])) renderFuels(data);
   if (changed('ic', [data.time, data.links])) renderInterconnectors(data);
   if (changed('unmapped', [data.time, data.categories, data.model && data.model.unplaced_count])) renderUnmapped(data);
   if (changed('fskey', [data.time, data.categories, data.links, state.fuelOrder])) renderFsKey(data);
@@ -400,15 +401,16 @@ function renderFuels(data) {
     var button = h('button', {
       type: 'button', cls: 'fuel-btn', 'aria-pressed': String(shown),
       'aria-label': NAMES[key] + ', ' + gw(total) + ' gigawatts. ' + (shown ? 'Shown on the map; select to hide.' : 'Hidden; select to show.'),
-      onclick: function () {
-        if (state.hidden[key]) delete state.hidden[key]; else state.hidden[key] = true;
-        savePrefs();
-        signatures.fuels = null;
-        renderFuels(state.data);
-        map.restyle();
-      },
-      onmouseenter: function () { state.highlight = key; map.restyle(); },
-      onmouseleave: function () { if (state.highlight) { state.highlight = null; map.restyle(); } }
+      title: (shown ? 'Hide ' : 'Show ') + NAMES[key].toLowerCase() + ' (Option-click to show only this)',
+      onclick: function (e) {
+        clicked = key;    // no preview until the pointer leaves this row, so the click's effect shows
+        if (e.altKey) {
+          setHidden(function (k) { return k !== key; });
+        } else {
+          if (state.hidden[key]) delete state.hidden[key]; else state.hidden[key] = true;
+          setHidden(null);
+        }
+      }
     }, [
       h('span', { cls: 'sw b-' + key }),
       h('span', { cls: 'name', text: NAMES[key] }),
@@ -419,8 +421,39 @@ function renderFuels(data) {
       ]),
       h('span', { cls: 'note', text: note })
     ]);
+    // Previewing on hover is for a mouse only: a tap on a touch screen
+    // reports "entered" but never "left", which left the preview stuck
+    button.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse' && clicked !== key) preview(key); });
+    button.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { clicked = null; preview(null); } });
     host.appendChild(h('li', null, button));
   });
+  var any = FUEL_KEYS(data).some(function (k) { return state.hidden[k]; });
+  var all = FUEL_KEYS(data).every(function (k) { return state.hidden[k]; });
+  byId('fuels-all').disabled = !any;
+  byId('fuels-none').disabled = all;
+}
+
+function FUEL_KEYS() { return CATS; }
+
+/* Hover preview: that fuel alone at full strength, the rest faded */
+var clicked = null;
+function preview(key) {
+  if (state.highlight === key) return;
+  state.highlight = key;
+  map.restyle();
+}
+
+/* Change which fuels are hidden; hide(k) says whether to hide each one */
+function setHidden(hide) {
+  if (hide) {
+    state.hidden = {};
+    FUEL_KEYS(state.data).forEach(function (k) { if (hide(k)) state.hidden[k] = true; });
+  }
+  state.highlight = null;
+  savePrefs();
+  signatures.fuels = null;
+  renderFuels(state.data);
+  map.restyle();
 }
 
 function countryGroups(links) {
@@ -850,6 +883,10 @@ function renderUnplaced(data) {
 byId('search').addEventListener('input', function (e) { state.query = e.target.value; state.showAll = false; renderStationsTable(state.data); });
 byId('idle-filter').addEventListener('change', function (e) { state.includeIdle = e.target.checked; renderStationsTable(state.data); });
 byId('more-btn').addEventListener('click', function () { state.showAll = !state.showAll; renderStationsTable(state.data); });
+byId('fuels-all').addEventListener('click', function () { setHidden(function () { return false; }); });
+byId('fuels-none').addEventListener('click', function () { setHidden(function () { return true; }); });
+// Belt and braces: leaving the list always ends a preview
+byId('fuels').addEventListener('pointerleave', function () { clicked = null; preview(null); });
 byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); map.restyle(); });
 byId('how-btn').addEventListener('click', function (e) {
   var open = e.currentTarget.getAttribute('aria-expanded') !== 'true';

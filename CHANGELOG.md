@@ -60,6 +60,12 @@ releases that keep working with your existing settings and data.
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.
+- **Fixed:** the map's fuel list could blank the map. Tapping a fuel on an
+  iPad left it highlighted, and clicking to hide one on a Mac kept
+  highlighting the fuel just hidden, so every other station faded out. Now a
+  click or tap only shows or hides; hovering with a mouse previews that fuel
+  on its own, showing it even while it's hidden; and **Show all** and **Hide
+  all** sit above the list (Option-click shows one fuel alone).
 - **Fixed:** on an iPad, the map's full screen closed as soon as you dragged
   the map downwards, because iPad Safari's full screen claims that swipe for
   itself. iPads now fill the browser window instead, as iPhones always have.
