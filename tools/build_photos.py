@@ -68,6 +68,44 @@ def sparql(query):
     return get('https://query.wikidata.org/sparql', data=body)['results']['bindings']
 
 
+# What each kind of Wikidata class says about fuel; a class with none of these
+# words ("power station") says nothing
+TYPE_FUELS = [
+    (('wind',), {'WIND'}),
+    (('solar', 'photovoltaic'), {'SOLAR'}),
+    (('battery', 'energy storage'), {'BATTERY'}),
+    (('pumped',), {'PS'}),
+    (('hydro',), {'NPSHYD', 'PS'}),
+    (('nuclear',), {'NUCLEAR'}),
+    (('coal', 'oil', 'diesel', 'tidal', 'geothermal'), {'OTHER'}),
+    (('gas', 'combined cycle', 'combined-cycle', 'turbine'), {'CCGT', 'OCGT'}),
+    (('biomass', 'waste', 'incinerat', 'biofuel', 'wood', 'straw'), {'BIOMASS'}),
+    (('cogeneration', 'combined heat'), {'CCGT', 'OCGT', 'BIOMASS'}),
+]
+
+
+def fuel_problem(st, it):
+    """Why an item can't be this station, judging by its classes and name, or None."""
+    fuel, label = st['fuel'], it['label'].lower()
+    implied = set()
+    for t in it.get('types', ()):
+        for words, fuels in TYPE_FUELS:
+            if any(w in t for w in words):
+                implied |= fuels
+    if implied and fuel not in implied:
+        return 'is a ' + ' / '.join(sorted(it['types']))
+    storage = re.search(r'battery|bess|storage', label) and 'pumped' not in label
+    if storage and fuel not in ('BATTERY', 'PS'):
+        return 'is a battery'
+    if fuel == 'BATTERY' and not storage:
+        return 'is not a battery'
+    if ('solar' in label) != (fuel == 'SOLAR') and fuel != 'BATTERY':
+        return 'solar mismatch'
+    if fuel == 'WIND' and 'wind' not in label and re.search(r'power station|hydro', label):
+        return 'is not a wind farm'
+    return None
+
+
 def tokens(name):
     words = re.findall(r'[a-z0-9]+', name.lower().replace('&', ' and '))
     return {w for w in words if w not in STOP}
@@ -99,10 +137,11 @@ def candidates():
     ordered = sorted(classes)
     for i in range(0, len(ordered), 40):
         query = """
-SELECT ?item ?label ?coord ?image ?category WHERE {
+SELECT ?item ?label ?coord ?image ?category ?typeLabel WHERE {
   VALUES ?type { %s }
   ?item wdt:P31 ?type ; wdt:P17 wd:Q145 ; wdt:P625 ?coord .
   OPTIONAL { ?item rdfs:label ?label FILTER(LANG(?label) = "en") }
+  OPTIONAL { ?type rdfs:label ?typeLabel FILTER(LANG(?typeLabel) = "en") }
   OPTIONAL { ?item wdt:P18 ?image }
   OPTIONAL { ?item wdt:P373 ?category }
 }""" % ' '.join('wd:' + c for c in ordered[i:i + 40])
@@ -114,7 +153,9 @@ SELECT ?item ?label ?coord ?image ?category WHERE {
         if not m:
             continue
         it = items.setdefault(qid, {'qid': qid, 'label': row.get('label', {}).get('value', qid),
-                                    'lon': float(m.group(1)), 'lat': float(m.group(2)), 'images': [], 'category': None})
+                                    'lon': float(m.group(1)), 'lat': float(m.group(2)), 'images': [], 'category': None, 'types': set()})
+        if 'typeLabel' in row:
+            it['types'].add(row['typeLabel']['value'].lower())
         if 'image' in row:
             name = urllib.parse.unquote(row['image']['value'].rsplit('/', 1)[-1])
             if name not in it['images']:
@@ -144,7 +185,7 @@ def item_details(qids):
             out[qid] = {'qid': qid, 'label': ent.get('labels', {}).get('en', {}).get('value', qid),
                         'lat': coord.get('latitude'), 'lon': coord.get('longitude'),
                         'images': [c['mainsnak']['datavalue']['value'] for c in claims.get('P18', []) if c.get('mainsnak', {}).get('datavalue')],
-                        'category': first('P373')}
+                        'category': first('P373'), 'types': set()}
         time.sleep(0.5)
     return out
 
@@ -204,7 +245,7 @@ def main():
     if missing:
         items.update(item_details(missing))
 
-    matches = {}
+    matches, rejected, nearest = {}, [], {}
     for st in stations:
         sid, name = st['id'], st['name']
         lat, lon = float(st['lat']), float(st['lon'])
@@ -216,21 +257,32 @@ def main():
         if sid in linked and linked[sid] in items:
             it = items[linked[sid]]
             d = distance_km(lat, lon, it['lat'], it['lon']) if it.get('lat') is not None else None
-            matches[sid] = (it, 'dictionary', d)
-            continue
-        best = None
+            why = fuel_problem(st, it)
+            if why:
+                rejected.append((name, st['fuel'], it, d, why))
+            else:
+                matches[sid] = (it, 'dictionary', d)
+                continue
+        best, near = None, None
         for it in items.values():
             d = distance_km(lat, lon, it['lat'], it['lon'])
-            if d > (40 if offshore else 8):
-                continue
             sim = similarity(name, it['label'])
-            ok = (sim >= 0.5 and d <= (25 if offshore else 4)) or (sim >= 0.99 and d <= (40 if offshore else 8))
-            if ok:
-                score = sim - d / 100.0
-                if best is None or score > best[0]:
-                    best = (score, it, d)
+            if sim >= 0.5 and (near is None or (sim, -d) > (near[0], -near[2])):
+                near = (sim, it, d)
+            ok = (sim >= 0.5 and d <= (25 if offshore else 6)) or (sim >= 0.99 and d <= (40 if offshore else 15))
+            if not ok:
+                continue
+            why = fuel_problem(st, it)
+            if why:
+                rejected.append((name, st['fuel'], it, d, why))
+                continue
+            score = sim - d / 100.0
+            if best is None or score > best[0]:
+                best = (score, it, d)
         if best:
             matches[sid] = (best[1], 'name and distance', best[2])
+        elif near:
+            nearest[sid] = near
 
     # Photos: the item's own, else one from its Commons category
     chosen = {}
@@ -301,8 +353,17 @@ def main():
             st['name'], st['fuel'], it['label'], it['qid'], '%.1f km' % d if d is not None else '?', method,
             r['file'] if r else '(none)', r['source'] if r else '', r['licence'] if r else ''))
     lines += ['', '## Unmatched', '']
-    lines += ['- %s (%s, %s)' % (st['name'], st['fuel'], 'offshore' if st.get('offshore') == '1' else 'onshore')
-              for st in stations if st['id'] not in matches]
+    for st in stations:
+        if st['id'] in matches:
+            continue
+        line = '- %s (%s, %s)' % (st['name'], st['fuel'], 'offshore' if st.get('offshore') == '1' else 'onshore')
+        if st['id'] in nearest:
+            sim, it, d = nearest[st['id']]
+            line += ': closest name %s (%s), %.1f km away, %s' % (it['label'], it['qid'], d, ' / '.join(sorted(it.get('types', ()))))
+        lines.append(line)
+    if rejected:
+        lines += ['', '## Rejected on fuel', ''] + ['- %s (%s): %s (%s) %s, %s' % (
+            n, f, it['label'], it['qid'], '%.1f km' % d if d is not None else '?', why) for n, f, it, d, why in rejected]
     if skipped:
         lines += ['', '## Skipped photos', ''] + ['- %s: %s (%s)' % s for s in skipped]
     report = '\n'.join(lines) + '\n'
