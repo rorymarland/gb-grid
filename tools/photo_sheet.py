@@ -37,7 +37,7 @@ def candidate_sheets(path, out, font):
     for r in csv.DictReader(open(path, encoding='utf-8')):
         groups.setdefault((r['id'], r['name']), []).append(r)
     keys = list(groups)
-    per = 8
+    per = 6
     for n in range(0, len(keys), per):
         chunk = keys[n:n + per]
         sheet = Image.new('RGB', (COLS * TILE_W, len(chunk) * (TILE_H + LABEL)), 'white')

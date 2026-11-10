@@ -10,91 +10,17 @@ Prints, for review:
   PH    Commons files found by searching for each station without a photo
 """
 import csv
-import io
-import json
 import os
 import re
 import sys
 import time
 import urllib.parse
-import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_photos as bp   # noqa: E402
-import osgb                 # noqa: E402
 
 ROOT = bp.ROOT
-REPD_PAGE = 'https://www.gov.uk/api/content/government/publications/renewable-energy-planning-database-monthly-extract'
-REPD_TECH = {
-    'WIND': ('wind onshore', 'wind offshore'), 'SOLAR': ('solar photovoltaics',), 'BATTERY': ('battery',),
-    'BIOMASS': ('biomass (dedicated)', 'biomass (co-firing)', 'efw incineration', 'advanced conversion technologies'),
-    'NPSHYD': ('large hydro', 'small hydro'), 'PS': ('pumped storage hydroelectricity',),
-}
-
-
-def fetch(url):
-    req = urllib.request.Request(url, headers={'User-Agent': bp.UA})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return r.read()
-
-
-def repd_rows():
-    pattern = r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.csv'
-    urls = []
-    pages = [REPD_PAGE, REPD_PAGE.replace('monthly', 'quarterly'),
-             'https://www.gov.uk/api/search.json?q=renewable+energy+planning+database&count=5&fields=link,title']
-    for page in pages:
-        try:
-            text = fetch(page).decode('utf-8')
-        except Exception as error:
-            print('REPD page', page, 'failed:', type(error).__name__, error, file=sys.stderr)
-            continue
-        print('REPD page', page, len(text), text[:300].replace('\n', ' '), file=sys.stderr)
-        if 'search.json' in page:
-            for hit in json.loads(text).get('results', []):
-                print('REPD search hit:', hit.get('title'), hit.get('link'), file=sys.stderr)
-                if 'renewable-energy-planning-database' in (hit.get('link') or ''):
-                    try:
-                        urls += re.findall(pattern, fetch('https://www.gov.uk/api/content' + hit['link']).decode('utf-8'), re.I)
-                    except Exception as error:
-                        print('REPD', hit['link'], 'failed:', error, file=sys.stderr)
-        else:
-            urls += re.findall(pattern, text, re.I)
-        if urls:
-            break
-    urls = sorted(set(urls), key=lambda u: ('repd' not in u.lower(), u))
-    print('REPD links:', urls, file=sys.stderr)
-    raw = fetch(urls[0])
-    for encoding in ('utf-8-sig', 'cp1252'):
-        try:
-            text = raw.decode(encoding)
-            break
-        except UnicodeDecodeError:
-            continue
-    rows = list(csv.DictReader(io.StringIO(text)))
-    print('REPD: %d rows; columns: %s' % (len(rows), list(rows[0].keys())[:60]), file=sys.stderr)
-    return rows
-
-
-def col(row, *names):
-    for key, value in row.items():
-        k = (key or '').strip().lower()
-        if any(k.startswith(n) for n in names):
-            return (value or '').strip()
-    return ''
-
-
-def number(text):
-    try:
-        return float(text.replace(',', ''))
-    except ValueError:
-        return None
-
-
-def main():
-    stations = list(csv.DictReader(open(bp.STATIONS, encoding='utf-8')))
-    wd = {r['id']: r for r in csv.DictReader(open(bp.OUT, encoding='utf-8'))}
-
+def wikidata_and_repd(stations, wd):
     # ---- Wikidata by name ----
     print('=====WD=====')
     for st in stations:
@@ -125,24 +51,13 @@ def main():
     # ---- REPD ----
     print('=====REPD=====')
     try:
-        repd = repd_rows()
+        sites, _ = bp.repd_sites()
     except Exception as error:
         print('REPD failed:', type(error).__name__, error)
-        repd = []
-    sites = []
-    for r in repd:
-        status = col(r, 'development status (short)', 'development status').lower()
-        if status not in ('operational', 'under construction'):
-            continue
-        x, y = number(col(r, 'x-coordinate')), number(col(r, 'y-coordinate'))
-        if not x or not y:
-            continue
-        lat, lon = osgb.grid_to_wgs84(x, y)
-        sites.append({'name': col(r, 'site name'), 'tech': col(r, 'technology type').lower(), 'mw': number(col(r, 'installed capacity')),
-                      'lat': lat, 'lon': lon, 'ref': col(r, 'ref id'), 'status': status, 'operator': col(r, 'operator')})
+        sites = []
     print('REPD usable sites: %d' % len(sites), file=sys.stderr)
     for st in stations:
-        techs = REPD_TECH.get(st['fuel'])
+        techs = bp.REPD_TECH.get(st['fuel'])
         if not techs:
             continue
         lat, lon = float(st['lat']), float(st['lon'])
@@ -162,13 +77,22 @@ def main():
                 st['id'], st['name'], st['fuel'], located, s['ref'], s['name'], s['mw'], s['tech'], sim,
                 bp.distance_km(lat, lon, s['lat'], s['lon']), s['lat'], s['lon']))
 
+
+def main():
+    stations = list(csv.DictReader(open(bp.STATIONS, encoding='utf-8')))
+    wd = {r['id']: r for r in csv.DictReader(open(bp.OUT, encoding='utf-8'))}
+
+    only = set(filter(None, os.environ.get('ONLY', '').split(',')))
+    if not only:
+        wikidata_and_repd(stations, wd)
+
     # ---- Commons photos by name ----
     print('=====PH=====')
     dull = re.compile(r'entrance|access|track|road|sign|substation|sub-station|construction|cable|office|\bbase\b|\bpit\b|foundation|plaque|'
                       r'gate|depot|pipeline|laying|lodge|compound|towards|nacelle|blades|\bport\b|pier|parking|\bsite\b|control building', re.I)
     candidates = []
     for st in stations:
-        if st['id'] in wd and wd[st['id']]['file']:
+        if (st['id'] in wd and wd[st['id']]['file']) or (only and st['id'] not in only):
             continue
         name = st['name']
         query = name if re.search(r'wind farm|solar|storage', name, re.I) else name + (

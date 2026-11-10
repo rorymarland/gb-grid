@@ -4,6 +4,10 @@ name: Explore station sources
 # Planning Database and Wikimedia Commons, and prints what it finds for review.
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: Station IDs to find candidate photos for (comma-separated); empty for the full run
+        default: ''
 
 permissions:
   contents: read
@@ -20,9 +24,11 @@ jobs:
         with:
           python-version: '3.14'
       - name: Look up stations
+        env:
+          ONLY: ${{ inputs.only }}
         run: python3 -I tools/explore_stations.py "$RUNNER_TEMP/candidates.csv"
       - name: Contact sheets of candidate photos
         run: |
           python3 -m pip install --quiet pillow
           python3 tools/photo_sheet.py "$RUNNER_TEMP/sheets" "$RUNNER_TEMP/candidates.csv"
-          for f in "$RUNNER_TEMP"/sheets/*.jpg; do echo "=====SHEET $(basename "$f")====="; base64 -w 100 "$f"; echo '=====END====='; done
+          for f in "$RUNNER_TEMP"/sheets/*.jpg; do echo "=====SHEET $(basename "$f") $(sha256sum "$f" | cut -c1-16)====="; base64 -w 100 "$f"; echo '=====END====='; done

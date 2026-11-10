@@ -32,7 +32,7 @@ jobs:
         run: |
           python3 -m pip install --quiet pillow
           python3 tools/photo_sheet.py "$RUNNER_TEMP/sheets"
-          for f in "$RUNNER_TEMP"/sheets/*.jpg; do echo "=====SHEET $(basename "$f")====="; base64 -w 100 "$f"; echo '=====END====='; done
+          for f in "$RUNNER_TEMP"/sheets/*.jpg; do echo "=====SHEET $(basename "$f") $(sha256sum "$f" | cut -c1-16)====="; base64 -w 100 "$f"; echo '=====END====='; done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: station-photos

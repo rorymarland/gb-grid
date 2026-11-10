@@ -48,10 +48,70 @@ UA = 'gb-grid-photo-builder/1.0 (https://github.com/rorymarland/gb-grid)'
 # Station -> Wikidata item, where the automatic match is wrong or missed
 OVERRIDES = {
     'Lynemouth': 'Q11987128',          # converted from coal to biomass in 2018; Wikidata still says coal
+    'Brigg': 'Q5566630',               # "Glanford Brigg Power Station"
+    'Hornsea Three': 'Q138197905',     # has no country on Wikidata, so the main query misses it
+    'Inch Cape': 'Q133305885',         # likewise
+    'Dogger Bank C': 'Q134731299',     # its offshore substation, which stands inside the farm
 }
-# Station -> a specific Commons file instead of the item's own photo
-FILE_OVERRIDES = {
+# Station -> the Wikidata item (an ID, or a label to search for) of the site it
+# stands on, for stations with no item of their own. Used for location only.
+ANCHORS = {
+    'West Burton B': 'West Burton power stations',
+    'Fellside': 'Sellafield',                    # the CHP plant that supplies the Sellafield site
+    'Fort Dunlop': 'Fort Dunlop',
+    'Saltend': 'Q116913766',                     # Saltend Chemicals Park
+    'Grangemouth CHP': 'Q5595715',               # Grangemouth Refinery
+}
+# Station -> its site's name in the Renewable Energy Planning Database, where
+# the names differ too much to match by themselves
+REPD_NAMES = {
+    'Ewe Hill II Wind Farm': 'Ewe Hill (extension)',
+    'Hill of Towie Wind Farm': 'Hill of Towie (Drummuir)',
+    'Minety': 'Minety South - Battery Storage',
+}
+# Station -> a Commons file chosen by eye, from the candidates that
+# tools/explore_stations.py finds, or instead of the item's own photo
+PHOTOS = {
+    'Achlachan': 'Achlachan Wind Farm - geograph.org.uk - 7945361.jpg',
+    'An Suidhe Wind Farm': 'An Suidhe wind farm - geograph.org.uk - 6719684.jpg',
+    'Andershaw Wind Farm': 'Andershaw Wind Farm - geograph.org.uk - 7880782.jpg',
+    'Auchrobert Wind Farm': 'Turbines in the Auchrobert Wind Farm - geograph.org.uk - 6709991.jpg',
+    'Baillie Wind Farm': 'Baillie wind farm from the west - geograph.org.uk - 6919746.jpg',
+    'Beinn Tharsuinn': 'Windfarm from NE slope of Beinn Tharsuinn - geograph.org.uk - 972149.jpg',
+    'Berry Burn Wind Farm': 'Berry Burn Wind Farm - geograph.org.uk - 5884795.jpg',
+    'Bhlaraidh Wind Farm': 'View of Bhlaraidh Wind Farm - geograph.org.uk - 7551541.jpg',
+    'Brigg': 'Brigg Power Station (aerial) - geograph.org.uk - 3116976.jpg',
+    'Carraig Gheal Wind Farm': 'Carraig Gheal wind farm - geograph.org.uk - 4038136.jpg',
+    'Corriegarth Wind Farm': 'Corriegarth windfarm - geograph.org.uk - 5599698.jpg',
+    'Cottam Development Centre': 'Cottam Development Centre Power Station - geograph.org.uk - 4949743.jpg',
+    'Cowes': 'Kingston Power Station, East Cowes, Isle of Wight, England (3).jpg',
+    'Creag Riabhach Wind Farm': 'Creag Riabhach Windfarm, Sutherland - geograph.org.uk - 7410699.jpg',
+    'Crossdykes': 'Crossdykes wind farm - geograph.org.uk - 8014302.jpg',
+    'Dalswinton Wind Farm': 'Dalswinton Wind Farm - geograph.org.uk - 3512151.jpg',
+    'Dersalloch Wind Farm': 'Dersalloch Hill Wind Farm - geograph.org.uk - 5246342.jpg',
+    'Edinbane Wind Farm': 'Edinbane wind farm - geograph.org.uk - 1730366.jpg',
+    'Fallago Rig Wind Farm': 'Fallago Rig Wind Farm - geograph.org.uk - 6531554.jpg',
+    'Galloper': 'Galloper windfarm.jpg',
+    'Goole Fields 1 Wind Farm': 'Goole Fields 1 Wind Turbine Farm - geograph.org.uk - 5918981.jpg',
+    'Gordonbush Wind Farm': 'View of Turbines at Gordonbush Wind Farm - geograph.org.uk - 3848723.jpg',
+    'Greater Gabbard': 'Greater-gabbard-20140813-stenaline.jpg',
+    'Harburnhead Wind Farm': 'Harburnhead Wind Farm from the air - geograph.org.uk - 8261703.jpg',
+    'Hill of Towie Wind Farm': 'Hill of Towie Wind Farm - geograph.org.uk - 7119217.jpg',
     'Hornsea Two': 'Hornsea 2 wind farm from the air.jpg',
+    'Keith Hill Wind Farm': 'Keith Hill wind farm - geograph.org.uk - 6304693.jpg',
+    'Kilbraur Wind Farm': 'Kilbraur Wind Farm - geograph.org.uk - 6106652.jpg',
+    'Mid Hill Wind Farm': 'Mid Hill windfarm - geograph.org.uk - 7092201.jpg',
+    'Minsca Wind Farm': 'Minsca Wind Farm - geograph.org.uk - 1228044.jpg',
+    'Moy Wind Farm': 'Moy Wind Farm - geograph.org.uk - 6299867.jpg',
+    "Paul's Hill Wind Farm": "Wind Farm on Paul's Hill - geograph.org.uk - 1397264.jpg",
+    'Rosehall': "Rosehall Windfarm from Cnoc a' Choire, Sutherland - geograph.org.uk - 7700796.jpg",
+    'Rothes II Wind Farm': 'Rothes II Wind Farm - geograph.org.uk - 5209892.jpg',
+    'Saltend': 'Saltend Power Station and Chemical Works - geograph.org.uk - 986127.jpg',
+    'Strathy North Wind Farm': 'Strathy North wind farm - geograph.org.uk - 4623447.jpg',
+    'Toddleburn Wind Farm': 'Toddleburn wind farm from the air - geograph.org.uk - 2725230.jpg',
+    'Tullo': 'Tullo Wind Farm - geograph.org.uk - 5370939.jpg',
+    'West Burton B': 'West Burton B Power Station.jpg',
+    'Westermost Rough': 'Westermost Rough wind farm from Barmston beach.jpg',
 }
 # Matched, but the item covers a wider area than the station, so keep our location
 KEEP_LOCATION = {'East Anglia One', 'East Anglia Three', 'Hornsea One'}
@@ -60,7 +120,6 @@ NO_PHOTO = {
     'Didcot B',           # shows the demolished coal station, Didcot A
     'Fawley Cogen',       # shows the demolished oil station
     'Grain',              # shows the demolished oil station
-    'Cowes',              # shows the old chimneys, not today's plant
     'Barry',              # shows the old coal station
     'Hornsea One',        # the zone's photo is of Hornsea Two
     'Dudgeon',            # taken in 2013, before Dudgeon was built; shows Sheringham Shoal
@@ -73,6 +132,8 @@ NO_PHOTO = {
     'North Kyle Wind Farm',  # the entrance road sign
     'Beinn An Tuirc 2 Wind Farm',  # bare hillside, no turbines in view
     'East Anglia Three',  # the zone's photo is of East Anglia One
+    'Inch Cape',          # foundations on a ship in Leith
+    'Dogger Bank C',      # the item is its substation
 }
 
 GOOD_LICENCE = re.compile(r'^(cc[ -]by(-sa)?[ -]?[\d.]*|cc0|public domain|pd)', re.I)
@@ -234,6 +295,85 @@ def category_photo(category):
     return None
 
 
+REPD_PAGES = ('https://www.gov.uk/api/content/government/publications/renewable-energy-planning-database-quarterly-extract',
+              'https://www.gov.uk/api/content/government/publications/renewable-energy-planning-database-monthly-extract')
+REPD_TECH = {
+    'WIND': ('wind onshore',), 'SOLAR': ('solar photovoltaics',), 'BATTERY': ('battery',),
+    'BIOMASS': ('biomass (dedicated)', 'biomass (co-firing)', 'efw incineration', 'advanced conversion technologies'),
+    'NPSHYD': ('large hydro', 'small hydro'), 'PS': ('pumped storage hydroelectricity',),
+}
+
+
+def repd_sites():
+    """Operational and under-construction sites in the government's Renewable
+    Energy Planning Database, with their surveyed locations as GPS coordinates."""
+    import io
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # for -I, which leaves the script's folder off the path
+    import osgb
+    link = None
+    for page in REPD_PAGES:
+        req = urllib.request.Request(page, headers={'User-Agent': UA})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            text = r.read().decode('utf-8')
+        links = sorted(set(re.findall(r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.csv', text, re.I)))
+        if links:
+            link = links[-1]
+            break
+    if not link:
+        raise RuntimeError('no REPD file found on gov.uk')
+    print('  REPD: %s' % link, file=sys.stderr)
+    with urllib.request.urlopen(urllib.request.Request(link, headers={'User-Agent': UA}), timeout=180) as r:
+        raw = r.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = raw.decode('cp1252')
+
+    def col(row, name):
+        for key, value in row.items():
+            if (key or '').strip().lower().startswith(name):
+                return (value or '').strip()
+        return ''
+
+    def number(value):
+        try:
+            return float(value.replace(',', ''))
+        except ValueError:
+            return None
+    sites = []
+    for row in csv.DictReader(io.StringIO(text)):
+        status = col(row, 'development status (short)').lower()
+        x, y = number(col(row, 'x-coordinate')), number(col(row, 'y-coordinate'))
+        if status not in ('operational', 'under construction') or not x or not y:
+            continue
+        lat, lon = osgb.grid_to_wgs84(x, y)
+        sites.append({'name': col(row, 'site name'), 'tech': col(row, 'technology type').lower(), 'ref': col(row, 'ref id'),
+                      'mw': number(col(row, 'installed capacity')) or 0, 'lat': lat, 'lon': lon})
+    return sites, os.path.basename(link)
+
+
+def repd_match(st, sites):
+    """The REPD site for an onshore station: the same name and technology, the largest phase."""
+    wanted = REPD_NAMES.get(st['name'])
+    techs = REPD_TECH.get(st['fuel'], ())
+    found = [s for s in sites if (s['name'] == wanted if wanted else s['tech'] in techs and similarity(st['name'], s['name']) >= 0.99)]
+    return max(found, key=lambda s: s['mw']) if found else None
+
+
+def anchor_item(value):
+    """The item for an ANCHORS entry: an ID, or the first search result with that exact label and coordinates."""
+    if re.fullmatch(r'Q\d+', value):
+        return item_details([value]).get(value)
+    found = get('https://www.wikidata.org/w/api.php?' + urllib.parse.urlencode({
+        'action': 'wbsearchentities', 'search': value, 'language': 'en', 'type': 'item', 'limit': 8, 'format': 'json'})).get('search', [])
+    details = item_details([f['id'] for f in found]) if found else {}
+    for f in found:
+        it = details.get(f['id'])
+        if it and it['label'].lower() == value.lower() and it.get('lat') is not None and 49 < it['lat'] < 61 and -9 < it['lon'] < 3:
+            return it
+    return None
+
+
 def clean_author(text):
     """A name to credit, from Commons' Artist field."""
     m = re.match(r'No machine-readable author provided\. (.+?) assumed', text)
@@ -275,11 +415,11 @@ def main():
     report_path = sys.argv[2] if len(sys.argv) > 2 else None
     stations = list(csv.DictReader(open(STATIONS, encoding='utf-8')))
     names = {st['name']: st['id'] for st in stations}
-    for table in (OVERRIDES, FILE_OVERRIDES, NO_PHOTO, KEEP_LOCATION):
+    for table in (OVERRIDES, ANCHORS, REPD_NAMES, PHOTOS, NO_PHOTO, KEEP_LOCATION):
         unknown = [n for n in table if n not in names]
         assert not unknown, 'not in stations.csv: %s' % unknown
     overrides = {names[n]: q for n, q in OVERRIDES.items()}
-    file_overrides = {names[n]: f for n, f in FILE_OVERRIDES.items()}
+    file_overrides = {names[n]: f for n, f in PHOTOS.items()}
     no_photo = {names[n] for n in NO_PHOTO}
     linked = {}
     if dictionary:
@@ -338,13 +478,36 @@ def main():
         elif near:
             nearest[sid] = near
 
-    # Photos: the item's own, else one from its Commons category
-    chosen = {}
-    for sid, (it, method, d) in matches.items():
-        if not it:
+    # Stations without an item of their own: the site they stand on, else REPD
+    located = {}
+    for st in stations:
+        if st['id'] in matches or st['name'] not in ANCHORS:
             continue
-        if sid in file_overrides:
-            chosen[sid] = (file_overrides[sid], it, method, d, 'override')
+        it = anchor_item(ANCHORS[st['name']])
+        time.sleep(0.3)
+        if it and it.get('lat') is not None:
+            located[st['id']] = (it['lat'], it['lon'], 'site ' + it['qid'], '%s (%s)' % (it['label'], it['qid']))
+        else:
+            print('  no anchor found for', st['name'], file=sys.stderr)
+    try:
+        sites, repd_file = repd_sites()
+    except Exception as error:      # the photos and Wikidata locations are still worth having
+        print('  REPD unavailable: %s %s' % (type(error).__name__, error), file=sys.stderr)
+        sites, repd_file = [], 'unavailable'
+    for st in stations:
+        if st['id'] in matches or st['id'] in located or st.get('offshore') == '1':
+            continue
+        site = repd_match(st, sites)
+        if site:
+            located[st['id']] = (site['lat'], site['lon'], 'repd ' + site['ref'], '%s (REPD %s, %.0f MW)' % (site['name'], site['ref'], site['mw']))
+
+    # Photos: one chosen by eye, else the item's own, else one from its Commons category
+    chosen = {}
+    for sid, f in file_overrides.items():
+        it, method, d = matches.get(sid) or (None, 'none', None)
+        chosen[sid] = (f, it, method, d, 'chosen')
+    for sid, (it, method, d) in matches.items():
+        if not it or sid in chosen:
             continue
         if sid in no_photo:
             continue
@@ -361,14 +524,16 @@ def main():
     rows, skipped = [], []
     for st in stations:
         m = matches.get(st['id'])
-        if not m or not m[0]:
-            continue
-        it, method, d = m
-        row = {'id': st['id'], 'wikidata': it['qid'], 'lat': '', 'lon': ''}
-        # Wikidata's location, which tools/build_stations.py prefers to the dictionary's
-        if it.get('lat') is not None and st['name'] not in KEEP_LOCATION:
-            row['lat'], row['lon'] = '%.4f' % it['lat'], '%.4f' % it['lon']
+        it = m[0] if m else None
         c = chosen.get(st['id'])
+        if not it and st['id'] not in located and not c:
+            continue
+        row = {'id': st['id'], 'wikidata': it['qid'] if it else '', 'lat': '', 'lon': '', 'located': ''}
+        # A better location, which tools/build_stations.py prefers to the dictionary's
+        if it and it.get('lat') is not None and st['name'] not in KEEP_LOCATION:
+            row['lat'], row['lon'], row['located'] = '%.4f' % it['lat'], '%.4f' % it['lon'], 'wikidata'
+        elif st['id'] in located:
+            row['lat'], row['lon'], row['located'] = '%.4f' % located[st['id']][0], '%.4f' % located[st['id']][1], located[st['id']][2]
         meta = info.get(c[0]) if c else None
         if c and not meta:
             skipped.append((st['name'], c[0], 'not found on Commons'))
@@ -379,7 +544,7 @@ def main():
                         'licence': meta['licence'], 'licence_url': meta['licence_url'], 'source': c[4]})
         rows.append(row)
     with open(OUT, 'w', newline='', encoding='utf-8') as fh:
-        w = csv.DictWriter(fh, fieldnames=['id', 'wikidata', 'lat', 'lon', 'file', 'width', 'height', 'author', 'licence',
+        w = csv.DictWriter(fh, fieldnames=['id', 'wikidata', 'lat', 'lon', 'located', 'file', 'width', 'height', 'author', 'licence',
                                            'licence_url', 'source'], restval='')
         w.writeheader()
         w.writerows(rows)
@@ -427,6 +592,16 @@ def main():
             n, f, it['label'], it['qid'], '%.1f km' % d if d is not None else '?', why) for n, f, it, d, why in rejected]
     if skipped:
         lines += ['', '## Skipped photos', ''] + ['- %s: %s (%s)' % s for s in skipped]
+    lines += ['', '## Located by REPD or by the site they stand on', '', 'REPD file: %s' % repd_file, '',
+              '| Station | Fuel | Source | Ours | Theirs | Apart |', '|---|---|---|---|---|---|']
+    for st in stations:
+        if st['id'] in located and st['id'] not in matches:
+            lat, lon, _, detail = located[st['id']]
+            lines.append('| %s | %s | %s | %s, %s | %.4f, %.4f | %.1f km |' % (
+                st['name'], st['fuel'], detail, st['lat'], st['lon'], lat, lon, distance_km(float(st['lat']), float(st['lon']), lat, lon)))
+    lines += ['', '## Still on the dictionary\'s or a hand-entered location', '']
+    lines += ['- %s (%s%s) %s, %s' % (st['name'], st['fuel'], ', offshore' if st.get('offshore') == '1' else '', st['lat'], st['lon'])
+              for st in stations if not byid.get(st['id'], {}).get('lat')]
     lines += ['', '## Locations', '', 'Our coordinates against Wikidata\'s, where they differ by more than 2 km.', '',
               '| Station | Offshore | Ours | Wikidata | Apart |', '|---|---|---|---|---|']
     for st in stations:
