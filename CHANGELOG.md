@@ -60,6 +60,11 @@ releases that keep working with your existing settings and data.
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.
+- **Fixed:** 120 stations sat in the wrong place on the map, 60 of them by
+  more than 5 km (Baglan Bay was in Pembrokeshire, Torness out in the North
+  Sea, Dinorwig outside its mountain). Locations now come from Wikidata
+  wherever a station is matched there, which is 140 of 246 stations; the
+  rest still use the Power Station Dictionary's.
 
 ## 1.2.0 (2026-11-07)
 
