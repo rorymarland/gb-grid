@@ -39,12 +39,31 @@ def fetch(url):
 
 
 def repd_rows():
-    text = fetch(REPD_PAGE).decode('utf-8')
-    page = json.loads(text)
-    print('REPD page details:', list(page.get('details', {}).keys()), file=sys.stderr)
-    urls = sorted(set(re.findall(r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.csv', text, re.I)))
-    print('REPD links:', sorted(set(re.findall(r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.(?:csv|xlsx|ods)', text, re.I))), file=sys.stderr)
-    print('REPD file:', urls[:1], file=sys.stderr)
+    pattern = r'https://assets\.publishing\.service\.gov\.uk/[^"\\ <>]+?\.csv'
+    urls = []
+    pages = [REPD_PAGE, REPD_PAGE.replace('monthly', 'quarterly'),
+             'https://www.gov.uk/api/search.json?q=renewable+energy+planning+database&count=5&fields=link,title']
+    for page in pages:
+        try:
+            text = fetch(page).decode('utf-8')
+        except Exception as error:
+            print('REPD page', page, 'failed:', type(error).__name__, error, file=sys.stderr)
+            continue
+        print('REPD page', page, len(text), text[:300].replace('\n', ' '), file=sys.stderr)
+        if 'search.json' in page:
+            for hit in json.loads(text).get('results', []):
+                print('REPD search hit:', hit.get('title'), hit.get('link'), file=sys.stderr)
+                if 'renewable-energy-planning-database' in (hit.get('link') or ''):
+                    try:
+                        urls += re.findall(pattern, fetch('https://www.gov.uk/api/content' + hit['link']).decode('utf-8'), re.I)
+                    except Exception as error:
+                        print('REPD', hit['link'], 'failed:', error, file=sys.stderr)
+        else:
+            urls += re.findall(pattern, text, re.I)
+        if urls:
+            break
+    urls = sorted(set(urls), key=lambda u: ('repd' not in u.lower(), u))
+    print('REPD links:', urls, file=sys.stderr)
     raw = fetch(urls[0])
     for encoding in ('utf-8-sig', 'cp1252'):
         try:
@@ -145,6 +164,9 @@ def main():
 
     # ---- Commons photos by name ----
     print('=====PH=====')
+    dull = re.compile(r'entrance|access|track|road|sign|substation|sub-station|construction|cable|office|\bbase\b|\bpit\b|foundation|plaque|'
+                      r'gate|depot|pipeline|laying|lodge|compound|towards|nacelle|blades|\bport\b|pier|parking|\bsite\b|control building', re.I)
+    candidates = []
     for st in stations:
         if st['id'] in wd and wd[st['id']]['file']:
             continue
@@ -153,15 +175,23 @@ def main():
             ' wind farm' if st['fuel'] == 'WIND' else ' battery' if st['fuel'] == 'BATTERY' else ' power station')
         try:
             found = bp.get('https://commons.wikimedia.org/w/api.php?' + urllib.parse.urlencode({
-                'action': 'query', 'list': 'search', 'srsearch': query + ' filetype:bitmap', 'srnamespace': 6, 'srlimit': 8, 'format': 'json'}))
+                'action': 'query', 'list': 'search', 'srsearch': query + ' filetype:bitmap', 'srnamespace': 6, 'srlimit': 25, 'format': 'json'}))
         except Exception as error:
             print('PH|%s|%s|error %s' % (st['id'], name, error))
             continue
         titles = [h['title'].split(':', 1)[1] for h in (found.get('query') or {}).get('search', [])]
         want = bp.tokens(name)
-        keep = [t for t in titles if want and want <= bp.tokens(t) | set(re.findall(r'[a-z0-9]+', t.lower())) and not bp.BAD_FILE.search(t)]
-        print('PH|%s|%s|%s|%s' % (st['id'], name, st['fuel'], ' ;; '.join(keep[:6]) or 'none'))
+        keep = [t for t in titles if want and want <= set(re.findall(r'[a-z0-9]+', t.lower())) and not bp.BAD_FILE.search(t) and not dull.search(t)]
+        keep.sort(key=lambda t: 0 if re.search(r'from the air|aerial', t, re.I) else 1)
+        for n, t in enumerate(keep[:5], 1):
+            candidates.append((st['id'], name, n, t))
+            print('CAND|%s|%s|%d|%s' % (st['id'], name, n, t))
+        if not keep:
+            print('PH|%s|%s|%s|none of %d' % (st['id'], name, st['fuel'], len(titles)))
         time.sleep(0.3)
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], 'w', newline='', encoding='utf-8') as fh:
+            csv.writer(fh).writerows([('id', 'name', 'n', 'file')] + candidates)
 
 
 if __name__ == '__main__':

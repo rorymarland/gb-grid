@@ -11,7 +11,7 @@ permissions:
 jobs:
   explore:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -20,4 +20,9 @@ jobs:
         with:
           python-version: '3.14'
       - name: Look up stations
-        run: python3 -I tools/explore_stations.py
+        run: python3 -I tools/explore_stations.py "$RUNNER_TEMP/candidates.csv"
+      - name: Contact sheets of candidate photos
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 tools/photo_sheet.py "$RUNNER_TEMP/sheets" "$RUNNER_TEMP/candidates.csv"
+          for f in "$RUNNER_TEMP"/sheets/*.jpg; do echo "=====SHEET $(basename "$f")====="; base64 -w 100 "$f"; echo '=====END====='; done
