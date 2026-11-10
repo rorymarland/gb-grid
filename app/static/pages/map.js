@@ -236,18 +236,22 @@ function showMapMessage(text) {
 var FS = { pseudo: false };
 function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
 function isFullscreen() { return Boolean(fsElement()) || FS.pseudo; }
+/* iPad Safari's full screen claims a downward swipe anywhere to exit it, so
+   dragging the map down would leave full screen. iPads (which present as a
+   Mac with a touch screen) fill the window instead, as iPhones do. */
+var IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 0);
 function enterFullscreen() {
   var view = byId('view-map');
   var request = view.requestFullscreen || view.webkitRequestFullscreen;
   var allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-  if (request && allowed) {
+  if (request && allowed && !IOS) {
     try {
       var result = request.call(view, { navigationUI: 'hide' });
       if (result && result.catch) result.catch(function () { setPseudo(true); });
       return;
     } catch (error) { /* fall back below */ }
   }
-  /* iPhone Safari can't make a page full screen, so fill the window instead */
+  /* iPhone Safari can't make a page full screen, and iPad's can't be panned in: fill the window */
   setPseudo(true);
 }
 function exitFullscreen() {

@@ -60,6 +60,9 @@ releases that keep working with your existing settings and data.
 - **Fixed:** the Display's 24-hour chart cut off its time labels when the
   slide settled after the first draw; it now redraws when its box changes size.
 - README screenshots and feature notes brought up to date.
+- **Fixed:** on an iPad, the map's full screen closed as soon as you dragged
+  the map downwards, because iPad Safari's full screen claims that swipe for
+  itself. iPads now fill the browser window instead, as iPhones always have.
 - **Station cards.** Select a station on the map, or a row on the Stations
   page, for its photo from Wikimedia Commons, credited to its photographer
   with its licence (87 stations so far, covering 57% of capacity; every photo
