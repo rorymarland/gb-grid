@@ -33,6 +33,8 @@ jobs:
           python test/test_features.py
           node test/test_sim.mjs
           node test/test_osgrid.mjs
+          python tools/osgb.py
+          python tools/check_locations.py
 
   image:
     needs: test

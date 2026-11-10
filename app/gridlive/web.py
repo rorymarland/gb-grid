@@ -102,13 +102,13 @@ CREDITS_HTML = (
     'region boundaries, constraint costs, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from '
-    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a> and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
+    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>, the government’s <a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract" rel="noopener">Renewable Energy Planning Database</a> (Open Government Licence v3.0) and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'station photos from Wikimedia Commons, credited with each; map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
     '<p class="credit">Unfamiliar terms are underlined; the <a href="/glossary">glossary</a> explains them all. A self-hosted dashboard, not an official Elexon or NESO service. Inspired by Kate Morley’s '
     '<a href="https://grid.iamkate.com/" rel="noopener">National Grid: Live</a>. All times are UK time.</p>')
 CREDITS_SHORT_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Station locations: '
-    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a> and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. '
+    '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>, the <a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract" rel="noopener">Renewable Energy Planning Database</a> (OGL v3.0) and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>. '
     'Map: <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>')
 
 

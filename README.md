@@ -55,7 +55,7 @@ live flows. Zoom, pan, full screen, and a 24-hour history for any station. The
 time machine along the bottom replays the last seven days in 10-minute steps.
 
 Select a station for its card: a photo from Wikimedia Commons with its
-photographer and licence (87 stations so far, including every nuclear and
+photographer and licence (131 stations so far, including every nuclear and
 pumped storage station and most of the big gas and hydro ones), or a small
 locator map where there isn't one; its GPS coordinates and Ordnance Survey grid
 reference; and links to open it in Google Maps, Apple Maps or OpenStreetMap.
@@ -287,10 +287,15 @@ Allowlist `api.neso.energy` to fix it.
   by any Bid-Offer Acceptances (the operator's instructions to change that).
   Each fuel's estimates are then scaled so they add up to Elexon's measured
   total for the same five minutes. Interconnector flows are measured.
-- **Locations** come from Wikidata for the 140 stations matched there, and
-  otherwise from the Power Station Dictionary or added by hand for recent
-  stations. (The dictionary's own locations are sometimes tens of kilometres
-  out: it had Torness in the North Sea.) Units that can't be matched still count in the totals; they're
+- **Locations** come from Wikidata for the 143 stations matched there; from
+  the government's Renewable Energy Planning Database (REPD), which has
+  surveyed coordinates, for 64 onshore wind, biomass and battery sites
+  Wikidata doesn't list; from the site a plant stands on for five gas
+  plants; and from where their photo was taken for two wind farms. The
+  remaining 32 use the Power Station Dictionary's location or one
+  added by hand. (The dictionary's own locations are sometimes tens of
+  kilometres out: it had Torness in the North Sea. REPD's can be too, so each
+  onshore station is also checked against where its photo was taken.) Units that can't be matched still count in the totals; they're
   listed on the Stations page and logged once a day.
 - **Frequency events** are found in Elexon's 15-second readings: a change of
   0.08 Hz or more within 30 seconds, or a crossing of 49.8 or 50.2 Hz. A trip
@@ -393,14 +398,24 @@ To add a missing station, add it to `MANUAL` in `tools/build_stations.py` with
 its BM unit IDs, ID prefixes or a pattern matching its registered name, then
 rebuild.
 
-`app/station_wikidata.csv` links stations to Wikidata, which supplies better
-locations and the photos. It's built by `tools/build_photos.py`, run by the
-**Build station photos** workflow in GitHub Actions (Wikimedia isn't
-reachable from everywhere). The workflow prints a coverage report and contact
-sheets of every photo to its log for review; decisions from that review
-(wrong matches, photos that show the wrong thing) are recorded in the tables
-at the top of the script. Copy the CSV into `app/`, then rebuild
-`stations.csv` so it picks up the locations.
+`app/station_wikidata.csv` holds each station's better location and its
+photo. It's built by `tools/build_photos.py`, run by the **Build station
+photos** workflow in GitHub Actions (Wikimedia and gov.uk aren't reachable
+from everywhere). Locations come from Wikidata, then REPD, then the site a
+plant stands on; photos from the Wikidata item or chosen by eye from Commons.
+The workflow prints a report and contact sheets of every photo to its log for
+review. The report lists every match, each location change, and any onshore
+station more than 8 km from where its own photo was taken. Decisions from
+that review (wrong matches, photos that show the wrong thing, REPD points
+that are wrong) are recorded in the tables at the top of the script. Copy the
+CSV into `app/`, then rebuild `stations.csv` so it picks up the locations.
+
+Two more tools help: the **Explore station sources** workflow
+(`tools/explore_stations.py`) searches Wikidata, REPD and Commons for
+stations without a match and prints contact sheets of candidate photos to
+choose from; and `tools/check_locations.py` checks `stations.csv` against the
+map's coastline (onshore stations in the sea, offshore wind farms on land,
+stations sharing coordinates). The tests run it.
 
 ## Credits and licences
 
@@ -414,7 +429,11 @@ at the top of the script. Copy the CSV into `app/`, then rebuild
   the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).
 - Station locations from [Wikidata](https://www.wikidata.org/) (CC0) and the
-  [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT).
+  [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT),
+  and the Department for Energy Security and Net Zero's
+  [Renewable Energy Planning Database](https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract)
+  (contains public sector information licensed under the Open Government
+  Licence v3.0).
 - Station photos from [Wikimedia Commons](https://commons.wikimedia.org/),
   each under its own free licence (CC BY, CC BY-SA, CC0 or public domain) and
   credited with its photographer on the station card.

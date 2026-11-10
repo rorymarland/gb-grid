@@ -54,7 +54,7 @@
         <div id="how" hidden data-glossary>
           <p>There’s no public live meter reading for each power station, so each one is modelled. Every unit tells the grid operator in advance what it plans to generate (its Physical Notification), and the operator’s instructions to turn up or down (Bid-Offer Acceptances) override that plan. Both come from Elexon.</p>
           <p>Those estimates are then scaled, fuel by fuel, so they add up to Elexon’s measured total for the same five minutes. The totals here therefore match the overview, while each station’s figure is a close estimate rather than a meter reading.</p>
-          <p>Locations come from Wikidata where a station is listed there, otherwise from the open Power Station Dictionary or added by hand for recent stations. Interconnector flows are measured, not modelled.</p>
+          <p>Locations come from Wikidata where a station is listed there, then the government’s Renewable Energy Planning Database, and otherwise from the open Power Station Dictionary or added by hand for recent stations. Interconnector flows are measured, not modelled.</p>
         </div>
       </div>
       <!--#credits-short-->
@@ -109,7 +109,7 @@
     <p>Elexon publishes measured output for each fuel type nationally every five minutes, but not for individual power stations in real time. So each station is modelled from two Elexon datasets: the Physical Notification each unit submits an hour ahead saying what it plans to generate, and the Bid-Offer Acceptances where the grid operator (NESO) tells a unit to change that plan.</p>
     <p>The modelled figures for each fuel are scaled to Elexon’s measured total for the same five minutes, so the map and this page agree with the overview. The scale factor for each fuel is shown in the type table; values near 1 mean the plans matched reality closely.</p>
     <p id="method-model"></p>
-    <p>Station locations come from Wikidata (CC0) and the Power Station Dictionary (Open Climate Fix and others, MIT licence), with recent stations added by hand. Station photos are from Wikimedia Commons, each credited with its photographer and licence; this server fetches and keeps them, so your browser never contacts Wikimedia. Map outlines are from Natural Earth. Northern Ireland is part of the all-island grid with Ireland, so it appears here only through the Moyle interconnector.</p>
+    <p>Station locations come from Wikidata (CC0), the Renewable Energy Planning Database (contains public sector information licensed under the Open Government Licence v3.0) and the Power Station Dictionary (Open Climate Fix and others, MIT licence), with recent stations added by hand. Station photos are from Wikimedia Commons, each credited with its photographer and licence; this server fetches and keeps them, so your browser never contacts Wikimedia. Map outlines are from Natural Earth. Northern Ireland is part of the all-island grid with Ireland, so it appears here only through the Moyle interconnector.</p>
   </section>
   <footer class="foot">
     <!--#credits-->

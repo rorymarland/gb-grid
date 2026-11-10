@@ -209,8 +209,9 @@ def main():
         offshore = 1 if fuel == 'WIND' and distance > 1.5 else 0
         return names[best[1]], offshore
 
-    # Locations from Wikidata (tools/build_photos.py), which beat the
-    # dictionary's: some of those are tens of kilometres out
+    # Locations from Wikidata, the Renewable Energy Planning Database and
+    # so on (tools/build_photos.py), which beat the dictionary's: some of
+    # those are tens of kilometres out
     wikidata = {}
     if os.path.exists(WIKIDATA):
         for r in read_csv(WIKIDATA):

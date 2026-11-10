@@ -127,8 +127,11 @@ PHOTOS = {
     'West Burton B': 'West Burton B Power Station.jpg',
     'Westermost Rough': 'Westermost Rough wind farm from Barmston beach.jpg',
 }
-# Matched, but the item covers a wider area than the station, so keep our location
-KEEP_LOCATION = {'East Anglia One', 'East Anglia Three', 'Hornsea One'}
+# Matched, but the item's location isn't the station's (it covers a wider area, say), so keep ours
+KEEP_LOCATION = {
+    'East Anglia One', 'East Anglia Three', 'Hornsea One',
+    'Hornsea Three',      # its item's coordinates have pointed at the onshore substation near Norwich
+}
 # Matched correctly, but the item's photo shows something else
 NO_PHOTO = {
     'Didcot B',           # shows the demolished coal station, Didcot A

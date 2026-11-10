@@ -4,6 +4,22 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.5.0 (unreleased)
+
+- **More station photos:** 131 stations now have one (was 87), covering 65%
+  of capacity, including 75 wind farms (was 36). The new ones were chosen by
+  eye from Wikimedia Commons, mostly Geograph photographs.
+- **Fixed:** another 67 stations moved to better locations, 29 of them by
+  more than 5 km. Fellside was on the Solent rather than at Sellafield, Fort
+  Dunlop shared its coordinates, and Baillie, Carraig Gheal, Beinn Tharsuinn
+  and Berry Burn wind farms were 30 km or more out. Onshore stations Wikidata
+  doesn't list are now placed by the government's Renewable Energy Planning
+  Database, or by the site they stand on; 214 of 246 stations no longer rely
+  on the Power Station Dictionary's coordinates.
+- Station locations are checked two new ways: against the map's coastline
+  (in the tests), and against where each station's photo was taken (when the
+  photo list is rebuilt).
+
 ## 1.4.0 (2026-11-10)
 
 - **Station cards.** Select a station on the map, or a row on the Stations
