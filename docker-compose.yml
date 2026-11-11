@@ -45,6 +45,10 @@ services:
       NOTIFY_KINDS: ${NOTIFY_KINDS:-}
       NOTIFY_QUIET_HOURS: ${NOTIFY_QUIET_HOURS:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      # Your home: set these in .env, never here (the key is a secret). See the README.
+      OCTOPUS_API_KEY: ${OCTOPUS_API_KEY:-}
+      OCTOPUS_ACCOUNT: ${OCTOPUS_ACCOUNT:-}
+      OCTOPUS_LIVE_SECONDS: ${OCTOPUS_LIVE_SECONDS:-60}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ACCESS_LOG: ${ACCESS_LOG:-false}
     # Hardening: nothing in the container needs to write outside /data and

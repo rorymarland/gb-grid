@@ -29,6 +29,7 @@ SOURCE_LABELS = {
     'outlook': 'Outlook (Elexon demand and wind forecasts)',
     'response': 'Inertia and frequency response (NESO)',
     'events': 'Timeline (built from the other feeds)',
+    'home': 'Your home (Octopus Energy)',
 }
 
 

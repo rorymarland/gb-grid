@@ -15,6 +15,7 @@ standard library inside.
 | Overview | `/` | What Britain is using now, where it comes from, today in plain English and the next 48 hours |
 | Map and Stations | `/map`, `/stations` | Every power station and interconnector, live, with a seven-day time machine |
 | Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead |
+| Your home | `/home` | Your own electricity and gas from an Octopus smart meter, with carbon and cost (optional) |
 | Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
 | Balancing | `/balancing` | Who NESO is paying to turn up or down, and what it costs |
 | Outages | `/outages` | Spare capacity, offline units and grid notices |
@@ -85,6 +86,26 @@ NESO's 14 regions coloured by carbon intensity, from 24 hours ago to 48 hours
 ahead, with each region's generation mix and solar output.
 
 ![The regions page](docs/regions.png)
+
+### Your home (optional)
+
+If you're with Octopus Energy and have a smart meter, the dashboard can show
+your own use alongside the grid's. Off unless set up; see
+[Your home settings](#your-home-octopus-energy).
+
+- **Now:** what your home is drawing, from an Octopus Home Mini, and what that
+  means in CO₂ an hour at the grid's current carbon intensity.
+- **Today:** each half hour's use coloured by how clean the grid was, with
+  the forecast for the rest of the day, and today's carbon and cost so far.
+- **The last 30 days:** carbon, energy or cost each day, electricity and gas.
+- **When you use electricity:** the carbon intensity of the electricity you
+  actually used, against steady use around the clock, which shows whether
+  your timing helps.
+- **Month by month** for the last year.
+
+Electricity's carbon uses GB's carbon intensity for each half hour; gas uses
+the UK government's conversion factor. Costs use your tariff's published unit
+rates and standing charges, so they're close to your bill rather than exact.
 
 ### Frequency
 
@@ -243,6 +264,12 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `NOTIFY_KINDS` | every kind | Any of `frequency,outage,price,notice,record,clean,demand,balancing` |
 | `NOTIFY_QUIET_HOURS` | (none) | UK-time hours to send nothing in, such as `23:00-07:00` |
 | `NOTIFY_NTFY_TOKEN` | (none) | Access token, if your ntfy topic needs one |
+| `OCTOPUS_API_KEY` | (off) | Your Octopus Energy API key, for [Your home](#your-home-octopus-energy). A secret: keep it in `.env` or a Docker secret |
+| `OCTOPUS_API_KEY_FILE` | (none) | Read the key from this file instead, such as a Docker secret at `/run/secrets/octopus_api_key` |
+| `OCTOPUS_ACCOUNT` | (none) | Your Octopus account number, such as `A-1234ABCD` |
+| `OCTOPUS_LIVE_SECONDS` | `60` | How often live readings are fetched while the Your home page is open (30 to 600) |
+| `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
+| `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
 | `POLL_*_SECONDS` | varies | How often each upstream source is polled |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
@@ -292,6 +319,69 @@ docker compose exec gb-grid python /app/server.py --test-notification
 one and the last error. With ntfy.sh, the topic name is the only secret and
 the messages pass through their servers; use your own ntfy server or a
 webhook to keep everything on your network.
+
+### Your home (Octopus Energy)
+
+1. Find your API key and account number on your Octopus account page, under
+   **Personal details** and then **API access**.
+2. Add them to the `.env` file next to `docker-compose.yml`:
+
+   ```sh
+   OCTOPUS_API_KEY=sk_live_...
+   OCTOPUS_ACCOUNT=A-1234ABCD
+   ```
+
+3. Restart (`docker compose up -d`) and check it works:
+
+   ```sh
+   docker compose exec gb-grid python /app/server.py --test-octopus
+   ```
+
+   This confirms the key, lists your meters and tariffs (identifiers cut to
+   their last four characters) and shows the latest Home Mini reading.
+
+**Your home** then appears under Now in the menu, and fills in within a few
+minutes: a year of half-hourly readings is downloaded on the first start.
+
+**Keeping the key safe.** The key can read your account, including your
+address and bills, so it never goes in the compose file, the repository or a
+screenshot. `.env` is listed in `.gitignore`. A variable set from `.env` is
+still visible to anyone who can run `docker inspect`; if that matters, keep
+the key in a [Docker secret](https://docs.docker.com/compose/how-tos/use-secrets/)
+instead:
+
+```yaml
+services:
+  gb-grid:
+    environment:
+      OCTOPUS_API_KEY_FILE: /run/secrets/octopus_api_key
+      OCTOPUS_ACCOUNT: ${OCTOPUS_ACCOUNT:-}
+    secrets: [octopus_api_key]
+secrets:
+  octopus_api_key:
+    file: ./octopus_api_key.txt   # one line: the key
+```
+
+Outside Swarm, Compose mounts the file as it is on the host, with its owner
+and permissions, and the container runs as UID 10001. So let only that user
+read it: `sudo chown 10001 octopus_api_key.txt && sudo chmod 400
+octopus_api_key.txt`. If it can't be read, the log says so at start-up.
+
+The server only sends the key to Octopus, never logs it or passes it to the
+browser, and `/api/home` returns totals only (no account number, MPAN or
+meter serials). Readings are kept in the `/data` volume.
+
+**How often it asks Octopus.** Octopus allows about 100 requests an hour per
+account, shared with its app and anything else using your key (Home
+Assistant's Octopus integration, for one). This server makes about 14 an hour
+in the background and about 60 while the Your home page is open, when live
+readings come every minute. With other integrations polling too, raise
+`OCTOPUS_LIVE_SECONDS`.
+
+**Without a Home Mini**, there are no live readings: everything else works,
+about a day behind. Gas meters only report through the meter's daily upload,
+so gas is always a day or two behind. Tariffs with more than one rate (such
+as Economy 7) show use and carbon but not cost.
 
 ### Behind a reverse proxy
 
@@ -402,6 +492,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
 | `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
 | `/api/sandbox?at=` | Starting figures for the sandbox: response held at that moment and the inertia fit |
+| `/api/home` | Your home: live reading, today's half hours, the last 30 days, months and timing (`{"enabled": false}` when Octopus isn't set up) |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
 

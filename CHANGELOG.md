@@ -4,6 +4,23 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.6.0 (unreleased)
+
+- **Your home** (`/home`, optional): your own electricity and gas from an
+  Octopus Energy smart meter. What your home is drawing now from an Octopus
+  Home Mini, and its CO₂ an hour at the grid's current carbon intensity;
+  today's half hours coloured by how clean the grid was, with the forecast
+  for the rest of the day; carbon, energy or cost for the last 30 days; how
+  your timing compares with steady use; and month by month for a year. A year
+  of half-hourly readings is downloaded on the first start. Off unless
+  `OCTOPUS_API_KEY` (or `OCTOPUS_API_KEY_FILE`, for a Docker secret) and
+  `OCTOPUS_ACCOUNT` are set; `python /app/server.py --test-octopus` checks
+  them. The key is only ever sent to Octopus, and the server keeps well
+  inside Octopus's limit of about 100 requests an hour.
+- New API: `/api/home`. New settings: `OCTOPUS_API_KEY`, `OCTOPUS_API_KEY_FILE`,
+  `OCTOPUS_ACCOUNT`, `OCTOPUS_LIVE_SECONDS`, `GAS_CALORIFIC_VALUE` and
+  `GAS_KG_CO2_PER_KWH`.
+
 ## 1.5.0 (2026-11-10)
 
 - **Station pages** (`/station?id=<id>`): each station's output now against

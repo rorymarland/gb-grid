@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .config import ACCESS_LOG, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
+from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
 
 # --------------------------------------------------------------------------
@@ -26,6 +26,7 @@ class App:
     geo = (b'', '')
     regions = (b'', '')
     photos = None
+    home = None
 
 
 def load_file(path, variable, fallback):
@@ -44,6 +45,7 @@ PAGES = [
     ('map', '/map', 'Map', 'map.html'),
     ('stations', '/stations', 'Stations', 'map.html'),
     ('regions', '/regions', 'Regions', 'regions.html'),
+    ('home', '/home', 'Your home', 'home.html'),
     ('frequency', '/frequency', 'Frequency', 'frequency.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
@@ -61,6 +63,7 @@ PAGE_META = {
     'map': ('now', 'Every power station and interconnector, live'),
     'stations': ('now', 'Output by fuel, nation and station, in tables'),
     'regions': ('now', 'Carbon intensity across the 14 regions'),
+    'home': ('now', 'Your electricity and gas: use, carbon and cost'),
     'frequency': ('system', 'Live frequency, inertia and the response held'),
     'balancing': ('system', 'Who NESO is paying to turn up or down'),
     'outages': ('system', 'Spare capacity, offline units and grid notices'),
@@ -129,7 +132,7 @@ def nav_groups():
     groups = []
     for gkey, gname in NAV_GROUPS:
         items = [(key, path, label, PAGE_META[key][1]) for key, path, label, _ in PAGES
-                 if key in PAGE_META and PAGE_META[key][0] == gkey]
+                 if key in PAGE_META and PAGE_META[key][0] == gkey and (key != 'home' or HOME_ENABLED)]
         groups.append((gkey, gname, items))
     return groups
 
@@ -397,6 +400,8 @@ class Handler(BaseHTTPRequestHandler):
                     etag = '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'max-age=86400'
                     self.respond(200, body, content_type, send_body, etag=etag, cache=cache)
+            elif parts.path == '/api/home':
+                self.respond_json(App.home.view(time.time()) if App.home else {'enabled': False}, send_body)
             elif parts.path == '/api/live':
                 self.respond_json(App.grid.live(), send_body)
             elif parts.path == '/api/history':

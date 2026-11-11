@@ -20,13 +20,16 @@ class FetchError(Exception):
     pass
 
 
-def http_get(url, accept='application/json', timeout=30, extra_headers=None):
-    """GET a URL. Returns (status, body_bytes, headers). 304 is returned, not raised."""
+def http_get(url, accept='application/json', timeout=30, extra_headers=None, data=None):
+    """GET a URL (or POST `data`). Returns (status, body_bytes, headers). 304 is returned, not raised.
+
+    Error messages name the host and quote the start of the response, never
+    the request's headers or body, so credentials can't end up in the logs."""
     headers = {'User-Agent': USER_AGENT, 'Accept': accept, 'Accept-Encoding': 'gzip'}
     if extra_headers:
         headers.update(extra_headers)
-    host = urllib.parse.urlsplit(url).netloc
-    request = urllib.request.Request(url, headers=headers)
+    host = urllib.parse.urlsplit(url).netloc.rsplit('@', 1)[-1]
+    request = urllib.request.Request(url, headers=headers, data=data, method='POST' if data is not None else 'GET')
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read()

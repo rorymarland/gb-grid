@@ -48,6 +48,16 @@ UPSERT_EV = ('INSERT INTO ev (id, t, kind, level, title, detail, data, updated) 
              'OR ev.level IS NOT excluded.level OR ev.t IS NOT excluded.t')
 UPSERT_WARN = ('INSERT INTO warn (t, kind, body) VALUES (?, ?, ?) '
                'ON CONFLICT (t, kind) DO UPDATE SET body = excluded.body WHERE warn.body IS NOT excluded.body')
+# Your home: half hours of electricity ('elec') and gas use. Meter readings
+# ('meter', from Octopus's consumption API) replace live estimates ('live', from
+# the Home Mini) and are never replaced by them. ci is the grid's carbon
+# intensity for that half hour, kept here because the ci table is pruned.
+UPSERT_HOME = ('INSERT INTO home (fuel, t, kwh, src, ci) VALUES (?, ?, ?, ?, ?) '
+               'ON CONFLICT (fuel, t) DO UPDATE SET kwh = excluded.kwh, src = excluded.src, '
+               'ci = COALESCE(excluded.ci, home.ci) '
+               "WHERE (home.src = 'live' OR excluded.src = 'meter') "
+               'AND (home.kwh IS NOT excluded.kwh OR home.src IS NOT excluded.src '
+               'OR home.ci IS NOT COALESCE(excluded.ci, home.ci))')
 STATION_HISTORY_DAYS = 7
 FREQUENCY_DAYS = 8        # 15-second frequency readings (about 46,000 rows)
 EVENT_DAYS = 400          # the timeline
@@ -99,6 +109,10 @@ class Store:
             CREATE TABLE IF NOT EXISTS ev (id TEXT PRIMARY KEY, t INTEGER NOT NULL, kind TEXT NOT NULL, level INTEGER NOT NULL,
                 title TEXT NOT NULL, detail TEXT, data TEXT, updated INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS ev_t ON ev (t);
+            CREATE TABLE IF NOT EXISTS home (fuel TEXT NOT NULL, t INTEGER NOT NULL, kwh REAL NOT NULL,
+                src TEXT NOT NULL, ci REAL, PRIMARY KEY (fuel, t)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS home_rate (fuel TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
+                end INTEGER, p REAL NOT NULL, PRIMARY KEY (fuel, kind, start)) WITHOUT ROWID;
         ''')
 
     def write(self, sql, rows, history=True):
@@ -110,6 +124,25 @@ class Store:
             self.db.execute('BEGIN')
             try:
                 self.db.executemany(sql, rows)
+                self.db.execute('COMMIT')
+            except Exception:
+                self.db.execute('ROLLBACK')
+                raise
+            changed = self.db.total_changes - before
+            if changed:
+                self.version += 1
+                if history:
+                    self.history_version += 1
+            return changed
+
+    def replace(self, delete_sql, delete_params, insert_sql, rows, history=False):
+        """Delete and insert in one transaction, so readers never see a gap."""
+        with self.lock:
+            before = self.db.total_changes
+            self.db.execute('BEGIN')
+            try:
+                self.db.execute(delete_sql, delete_params)
+                self.db.executemany(insert_sql, rows)
                 self.db.execute('COMMIT')
             except Exception:
                 self.db.execute('ROLLBACK')

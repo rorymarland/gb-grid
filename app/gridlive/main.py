@@ -5,7 +5,7 @@ import os
 import signal
 import threading
 
-from .config import BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
+from .config import HOME_ENABLED, BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
 from .store import Store
 from .status import Status
 from .ingest import Ingest
@@ -19,6 +19,7 @@ from .frequency import FrequencyData
 from .events import Events
 from .notify import Notifier
 from .photos import Photos
+from .home import Home, run_home
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -42,6 +43,7 @@ def main():
     events = Events(App.grid)
     notifier = Notifier(store)
     App.grid.notifier = notifier
+    App.home = App.grid.home = Home(store, status)
 
     def poll_events():
         changed = events.poll()
@@ -78,6 +80,9 @@ def main():
             run_job(name, function, POLL[name], status, stop)
         threading.Thread(target=start, name=name, daemon=True).start()
     threading.Thread(target=run_backfill, args=(ingest, stop, frequency), name='backfill', daemon=True).start()
+    if HOME_ENABLED:
+        log.info('Your home: on, for Octopus account %s', App.home.account)
+        threading.Thread(target=run_home, args=(App.home, stop), name='home', daemon=True).start()
     threading.Thread(target=run_maintenance, args=(store, stop), name='maintenance', daemon=True).start()
 
     server = Server(('0.0.0.0', PORT), Handler)

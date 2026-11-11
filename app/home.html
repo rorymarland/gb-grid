@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Your home – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/home.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>Your home</h1>
+    <p class="lede">The electricity and gas your home uses, from your Octopus smart meter, with the carbon and cost of each.</p>
+  </section>
+
+  <section class="hm-setup" id="setup" hidden aria-labelledby="setup-title">
+    <h2 id="setup-title">Connect your Octopus account</h2>
+    <p>This page shows your own electricity and gas use, if you’re with Octopus Energy and have a smart meter. Add two settings to the dashboard’s <code>.env</code> file and restart it:</p>
+    <pre><code>OCTOPUS_API_KEY=sk_live_…
+OCTOPUS_ACCOUNT=A-1234ABCD</code></pre>
+    <p>Both are on your Octopus account page, under Personal details and API access. Keep the key out of the compose file and anything you share: it reads your account. An Octopus Home Mini adds live readings; without one, use appears about a day behind. The README has the details, including keeping the key in a Docker secret.</p>
+  </section>
+
+  <p class="hm-waiting" id="waiting" hidden></p>
+
+  <div id="content" hidden>
+    <section class="hm-now" aria-labelledby="now-title">
+      <h2 class="visually-hidden" id="now-title">Using now</h2>
+      <div class="hm-now-figure">
+        <p class="hm-figure" id="now-figure"></p>
+        <p class="hm-now-text" id="now-text"></p>
+        <p class="hm-now-meta" id="now-meta"></p>
+      </div>
+      <div class="hm-spark" id="spark"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="today-title">
+      <div class="panel-head"><h2 id="today-title">Today</h2></div>
+      <p class="sub" id="today-sub"></p>
+      <dl class="hm-figures" id="today-figures"></dl>
+      <div class="chart hm-chart" id="today-chart"></div>
+      <ul class="hm-legend" id="today-legend" aria-label="Carbon intensity of the grid"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="days-title">
+      <div class="panel-head">
+        <h2 id="days-title">The last 30 days</h2>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Show" id="days-measure">
+            <button type="button" data-measure="kg" aria-pressed="true">Carbon</button>
+            <button type="button" data-measure="kwh" aria-pressed="false">Energy</button>
+            <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
+          </div>
+        </div>
+      </div>
+      <dl class="hm-figures" id="days-figures"></dl>
+      <div class="chart hm-chart" id="days-chart"></div>
+      <ul class="hm-legend" id="days-legend"></ul>
+      <p class="hm-note" id="days-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="timing-title" id="timing-panel" hidden>
+      <div class="panel-head"><h2 id="timing-title">When you use electricity</h2></div>
+      <p class="sub" id="timing-sub"></p>
+      <div class="hm-compare" id="timing"></div>
+      <p class="hm-note" id="timing-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="months-title" id="months-panel" hidden>
+      <div class="panel-head"><h2 id="months-title">Month by month</h2></div>
+      <div class="hm-table-wrap">
+        <table class="data hm-months">
+          <thead><tr><th scope="col">Month</th><th scope="col" class="num">Electricity <span class="u">kWh</span></th><th scope="col" class="num">Gas <span class="u">kWh</span></th><th scope="col" class="num">Carbon <span class="u">kg CO₂</span></th><th scope="col" class="num">Cost</th></tr></thead>
+          <tbody id="months"></tbody>
+          <tfoot id="months-total"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How these figures are made</h2></div>
+      <div class="explain" id="how">
+        <p>Your use comes from Octopus Energy. Live readings and today’s half hours are from your Octopus Home Mini; each day’s meter readings arrive a day or so later and replace them. Gas meters only report through the meter readings, so gas is always a day or two behind.</p>
+        <p>The carbon in your electricity uses Great Britain’s carbon intensity for each half hour, the same figure as the rest of this dashboard. It counts the power stations’ emissions, not the electricity lost on the way to you. Gas uses the UK government’s conversion factor for natural gas, <span id="gas-factor">0.183</span> kg of CO₂ per kWh, whenever you burn it.</p>
+        <p>Costs use your tariff’s unit rates and standing charges, including VAT, as Octopus publishes them. They leave out discounts, credits and anything else on your bill, so they won’t match it to the penny. Tariffs with day and night rates aren’t costed.</p>
+        <p>Your readings are kept on this server only. The Octopus API key stays with the server and is never sent to the browser.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/home.js}}"></script>
+</body>
+</html>

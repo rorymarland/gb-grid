@@ -426,6 +426,124 @@ def mock_warnings(start, end):
     return [w for w in out if start <= parse(w['publishTime']) <= end]
 
 
+# ---- Octopus Energy: one home, with a Home Mini, on fixed tariffs ----------
+
+OCTOPUS_KEY = 'sk_live_mockkey0123456789'
+OCTOPUS_ACCOUNT = 'A-1234ABCD'
+OCTOPUS_DEVICE = '00-11-22-33-44-55-66-77'
+MPAN, ELEC_SERIAL, MPRN, GAS_SERIAL = '1200012345678', '21L1234567', '1234567890', 'G4A00123456789'
+DAY = 86400
+
+
+def octopus_tariffs():
+    """Two fixed tariffs: one until three weeks ago, the current one since."""
+    switch = int(_clock.time()) // DAY * DAY - 21 * DAY
+    return [(0, switch, 'OE-FIX-12M-25-08-01', 26.95, 51.20, 6.41, 30.10), (switch, None, 'OE-FIX-12M-26-10-20', 24.86, 49.08, 5.93, 31.58)]
+
+
+def home_w(t):
+    """A flat's electricity demand in watts: a base load, a fridge, mornings, evenings and the kettle."""
+    hour = ((t + 0) % DAY) / 3600
+    w = 140 + (60 if (t // 900) % 3 else 0)
+    if 6.75 <= hour < 8.5:
+        w += 380
+    if 17.5 <= hour < 22.5:
+        w += 420 + 180 * math.sin((hour - 17.5) / 5 * math.pi)
+    if (t // 60) % 97 < 3 and 7 <= hour < 23:
+        w += 2600   # the kettle
+    return w
+
+
+def home_gas_kwh(t):
+    hour = (t % DAY) / 3600
+    if 6 <= hour < 8.5 or 17 <= hour < 22:
+        return 1.6 + 0.4 * math.cos(hour)
+    return 0.05
+
+
+def octopus_graphql(query, auth):
+    if 'obtainKrakenToken' in query:
+        if OCTOPUS_KEY not in query:
+            return {'errors': [{'message': 'Invalid data.', 'path': ['obtainKrakenToken'], 'extensions': {
+                'errorType': 'VALIDATION', 'errorCode': 'KT-CT-1139', 'errorDescription': 'Authentication failed.'}}],
+                'data': {'obtainKrakenToken': None}}
+        import base64
+        claims = base64.urlsafe_b64encode(json.dumps({'exp': int(_clock.time()) + 3600}).encode()).decode().rstrip('=')
+        return {'data': {'obtainKrakenToken': {'token': 'eyJhbGciOiJIUzI1NiJ9.' + claims + '.sig'}}}
+    if not auth:
+        return {'errors': [{'message': "'Authorization' header not provided.", 'extensions': {
+            'errorType': 'AUTHORIZATION', 'errorCode': 'KT-CT-1112', 'errorDescription': 'You must provide the AUTHORIZATION header.'}}],
+            'data': None}
+    data = {}
+    if 'account(accountNumber:' in query:
+        if OCTOPUS_ACCOUNT not in query:
+            return {'errors': [{'message': 'Unauthorized.', 'extensions': {'errorType': 'NOT_FOUND', 'errorCode': 'KT-CT-4123'}}],
+                    'data': {'account': None}}
+        tariffs = octopus_tariffs()
+        agreements = lambda prefix: [{'validFrom': iso(a), 'validTo': iso(b) if b else None,  # noqa: E731
+                                      'tariff': {'productCode': code, 'tariffCode': prefix + '-1R-' + code + '-N'}}
+                                     for a, b, code, *_ in [(max(x[0], int(_clock.time()) - 500 * DAY),) + x[1:] for x in tariffs]]
+        data['account'] = {
+            'electricityAgreements': [{'meterPoint': {'mpan': MPAN, 'direction': 'IMPORT', 'meters': [
+                {'serialNumber': ELEC_SERIAL, 'activeFrom': '2023-03-01', 'smartImportElectricityMeter': {'deviceId': OCTOPUS_DEVICE}}],
+                'agreements': agreements('E')}}],
+            'gasAgreements': [{'meterPoint': {'mprn': MPRN, 'meters': [
+                {'serialNumber': GAS_SERIAL, 'activeFrom': '2023-03-01', 'consumptionUnits': 'm³'}],
+                'agreements': agreements('G')}}]}
+    now = int(_clock.time())
+    for alias, device, grouping, start, end in re.findall(
+            r'(\w+): smartMeterTelemetry\(deviceId: "([^"]+)", grouping: (\w+), start: "([^"]+)", end: "([^"]+)"\)', query):
+        start, end = parse(start), min(parse(end), now)
+        rows = []
+        if grouping == 'TEN_SECONDS':
+            for t in range(start - start % 10, end - 20, 10):
+                rows.append({'readAt': iso(t).replace('Z', '+00:00'), 'consumptionDelta': '%.1f' % (home_w(t) / 360), 'demand': '%.1f' % home_w(t)})
+        elif grouping == 'HALF_HOURLY':
+            for t in range(start - start % 1800, end, 1800):
+                stop = min(t + 1800, end)
+                wh = sum(home_w(x) for x in range(t, stop, 60)) / 60
+                rows.append({'readAt': iso(t).replace('Z', '+00:00'), 'consumptionDelta': '%.1f' % wh, 'demand': '%.1f' % home_w(stop - 1)})
+        data[alias] = rows
+    return {'data': data}
+
+
+def octopus_rest(path, q, auth):
+    if not auth.startswith('Basic '):
+        return 401, {'detail': 'Authentication credentials were not provided.'}
+    m = re.match(r'^/octopus/v1/(electricity|gas)-meter-points/(\w+)/meters/(\w+)/consumption/$', path)
+    if m:
+        fuel = m.group(1)
+        if (fuel == 'electricity' and (m.group(2), m.group(3)) != (MPAN, ELEC_SERIAL)) or \
+                (fuel == 'gas' and (m.group(2), m.group(3)) != (MPRN, GAS_SERIAL)):
+            return 404, {'detail': 'Not found.'}
+        lag = int(_clock.time()) // DAY * DAY - (0 if fuel == 'electricity' else DAY)   # readings up to midnight UTC
+        start, end = parse(q['period_from']), min(parse(q.get('period_to', iso(lag))), lag)
+        start = max(start, int(_clock.time()) - 450 * DAY)
+        start -= start % 1800
+        size, page = int(q.get('page_size', 100)), int(q.get('page', 1))
+        times = list(range(start, end, 1800))
+        chunk = times[(page - 1) * size: page * size]
+        results = []
+        for t in chunk:
+            if fuel == 'electricity':
+                value = round(sum(home_w(x) for x in range(t, t + 1800, 60)) / 60 / 1000, 3)
+            else:
+                value = round(home_gas_kwh(t) * 3.6 / (1.02264 * 39.5), 3)
+            results.append({'consumption': value, 'interval_start': iso(t).replace('Z', '+00:00'), 'interval_end': iso(t + 1800).replace('Z', '+00:00')})
+        following = ('https://elsewhere.example/v1/consumption/?page=%d&page_size=%d' % (page + 1, size)) if page * size < len(times) else None
+        return 200, {'count': len(times), 'next': following, 'previous': None, 'results': results}
+    m = re.match(r'^/octopus/v1/products/([\w-]+)/(electricity|gas)-tariffs/([\w-]+)/(standard-unit-rates|standing-charges)/$', path)
+    if m:
+        for start, end, code, e_unit, e_standing, g_unit, g_standing in octopus_tariffs():
+            if code == m.group(1):
+                value = {('electricity', 'standard-unit-rates'): e_unit, ('electricity', 'standing-charges'): e_standing,
+                         ('gas', 'standard-unit-rates'): g_unit, ('gas', 'standing-charges'): g_standing}[(m.group(2), m.group(4))]
+                return 200, {'count': 1, 'next': None, 'previous': None, 'results': [
+                    {'value_exc_vat': value, 'value_inc_vat': value, 'valid_from': '2025-08-01T00:00:00Z', 'valid_to': None, 'payment_method': None}]}
+        return 404, {'detail': 'No such product.'}
+    return 404, {'detail': 'Not mocked.'}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -456,6 +574,9 @@ class Handler(BaseHTTPRequestHandler):
         for name in FAIL:
             if name in path:
                 return self.send(503, {'error': 'mock failure'})
+        if path.startswith('/octopus/'):
+            code, body = octopus_rest(path, q, self.headers.get('Authorization') or '')
+            return self.send(code, body)
         if path == '/commons/w/index.php':
             title = q.get('title', '')
             if not title.startswith('Special:FilePath/') or 'Missing' in title:
@@ -765,6 +886,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {'data': [{'publishTime': iso(start - 3600), 'startTime': iso(t), 'generation': round(wind_total(t) * 0.82)}
                                             for t in range(start - start % 3600, end, 3600)]})
         return self.send(404, {'error': 'not mocked: ' + path})
+
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        body = self.rfile.read(int(self.headers.get('Content-Length') or 0))
+        if any(name in path for name in FAIL):
+            return self.send(503, {'error': 'mock failure'})
+        if path != '/octopus/v1/graphql/':
+            return self.send(404, {'error': 'not mocked: ' + path})
+        try:
+            query = json.loads(body)['query']
+        except (ValueError, KeyError, TypeError):
+            return self.send(400, {'errors': [{'message': 'Must provide query string.'}]})
+        return self.send(200, octopus_graphql(query, self.headers.get('Authorization') or ''))
 
 
 if __name__ == '__main__':

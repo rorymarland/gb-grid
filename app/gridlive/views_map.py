@@ -291,6 +291,7 @@ class MapViews:
             'price': self.store.scalar("SELECT MAX(t) FROM hh WHERE k = 'price'"),
             'solar': self.store.scalar("SELECT MAX(t) FROM hh WHERE k = 'pv'"),
             'units': units['at'] if units else None,
+            'home': self.home.data_time() if getattr(self, 'home', None) else None,
         }
         result = {}
         for key, item in snapshot.items():

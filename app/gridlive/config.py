@@ -32,6 +32,38 @@ def env_int(name, default, lo=None, hi=None):
     return value
 
 
+def env_float(name, default, lo, hi):
+    raw = os.environ.get(name, '').strip()
+    try:
+        value = float(raw) if raw else default
+    except ValueError:
+        print('Ignoring invalid ' + name + '=' + repr(raw), file=sys.stderr)
+        value = default
+    return min(hi, max(lo, value))
+
+
+def env_secret(name):
+    """A secret from NAME, or from the file NAME_FILE points at (a Docker secret)."""
+    path = env_str(name + '_FILE', '')
+    if path:
+        try:
+            with open(path, encoding='utf-8') as handle:
+                return handle.read().strip()
+        except OSError as error:
+            print('Could not read ' + name + '_FILE (' + type(error).__name__ + ')', file=sys.stderr)
+            return ''
+    return env_str(name, '')
+
+
+# Your home: electricity and gas use from an Octopus Energy smart meter (see README).
+# The key is a secret: set it in your .env file or as a Docker secret, never in the compose file.
+OCTOPUS_API_KEY = env_secret('OCTOPUS_API_KEY')
+OCTOPUS_ACCOUNT = env_str('OCTOPUS_ACCOUNT', '').upper()
+OCTOPUS_BASE = env_str('OCTOPUS_BASE_URL', 'https://api.octopus.energy').rstrip('/')
+OCTOPUS_LIVE_SECONDS = env_int('OCTOPUS_LIVE_SECONDS', 60, 30, 600)   # live readings while the page is open
+HOME_ENABLED = bool(OCTOPUS_API_KEY and OCTOPUS_ACCOUNT)
+GAS_CALORIFIC_VALUE = env_float('GAS_CALORIFIC_VALUE', 39.5, 30, 45)     # MJ/m³, for meters that report gas in m³
+GAS_KG_PER_KWH = env_float('GAS_KG_CO2_PER_KWH', 0.183, 0.1, 0.3)       # UK government factor for natural gas
 PORT = env_int('GRID_INTERNAL_PORT', 8080, 1, 65535)
 DATA_DIR = env_str('DATA_DIR', '/data')
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,6 +93,7 @@ POLL = {
     'outlook': env_int('POLL_OUTLOOK_SECONDS', 1800, 300, 7200),
     'response': env_int('POLL_RESPONSE_SECONDS', 3600, 600, 86400),
     'events': env_int('POLL_EVENTS_SECONDS', 120, 30, 3600),
+    'home': OCTOPUS_LIVE_SECONDS,
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card

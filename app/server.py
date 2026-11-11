@@ -26,7 +26,7 @@ import time  # noqa: F401  (tests patch server.time.time)
 from gridlive import fetch  # noqa: F401  (tests patch server.fetch.get_json)
 
 _MODULES = ['config', 'reference', 'timeutil', 'fetch', 'store', 'status', 'ingest', 'units', 'jobs', 'balancing',
-            'outages', 'longterm', 'notices', 'photos', 'views_live', 'views_map', 'views_system', 'views_longterm', 'views_summary', 'frequency', 'events', 'notify', 'views_events', 'views_sandbox', 'grid', 'web', 'main']
+            'outages', 'longterm', 'notices', 'photos', 'home', 'views_live', 'views_map', 'views_system', 'views_longterm', 'views_summary', 'frequency', 'events', 'notify', 'views_events', 'views_sandbox', 'grid', 'web', 'main']
 for _name in _MODULES:
     _module = importlib.import_module('gridlive.' + _name)
     globals().update({key: value for key, value in vars(_module).items() if not key.startswith('__')})
@@ -38,4 +38,7 @@ if __name__ == '__main__':
         if not notifier.channels():
             sys.exit('No notification channel is set: add NOTIFY_NTFY_URL or NOTIFY_WEBHOOK_URL.')
         sys.exit(0 if notifier.test() else 'The test notification could not be sent: %s' % notifier.error)
+    if '--test-octopus' in sys.argv:
+        # docker compose exec gb-grid python /app/server.py --test-octopus
+        sys.exit(test_octopus())  # noqa: F821  (from gridlive.home)
     main()  # noqa: F821  (from gridlive.main)
