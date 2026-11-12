@@ -31,6 +31,7 @@ def check(name, condition, detail=''):
 httpd = ThreadingHTTPServer(('127.0.0.1', 0), mock.Handler)
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 BASE = 'http://127.0.0.1:%d/octopus' % httpd.server_address[1]
+BACKEND = BASE + '-backend'
 
 calls = []
 inject = {'auth_error_once': False}
@@ -48,7 +49,7 @@ def request(url, headers=None, data=None):
 
 def make(key=mock.OCTOPUS_KEY, account=mock.OCTOPUS_ACCOUNT):
     store = server.Store(tempfile.mkdtemp())
-    return store, homemod.Home(store, server.Status(), request=request, key=key, account=account, base=BASE)
+    return store, homemod.Home(store, server.Status(), request=request, key=key, account=account, base=BASE, backend=BACKEND)
 
 
 # ---- off unless configured -------------------------------------------------
@@ -84,15 +85,18 @@ elec_meter = store.scalar("SELECT COUNT(*) FROM home WHERE fuel = 'elec' AND src
 gas_meter = store.scalar("SELECT COUNT(*) FROM home WHERE fuel = 'gas'")
 check('backfilled about 400 days', 380 * 48 < elec_meter < 402 * 48 and 380 * 48 < gas_meter, (elec_meter, gas_meter))
 check('today from the Home Mini', store.scalar("SELECT COUNT(*) FROM home WHERE fuel = 'elec' AND src = 'live'") >= 1)
-first_calls = len(calls)
-check('first run is a handful of requests', first_calls <= 14, first_calls)
+private = [c for c in calls if '/v1/products/' not in c[0]]
+public = [c for c in calls if '/v1/products/' in c[0]]
+check('first run is a handful of account requests', len(private) <= 16, len(private))
+check('other tariffs use the public API only, without credentials', public and all(not (hd or {}).get('Authorization') for _, hd, _ in public),
+      len(public))
 
 # Credentials only ever go to the configured base, whatever "next" says
-hosts = {url.split('/octopus/')[0] for url, _, _ in calls}
-check('only the base host was contacted', hosts == {BASE.split('/octopus')[0]}, hosts)
-check('basic auth on REST, token on GraphQL', all(
-    ('Authorization' in hd and hd['Authorization'].startswith('Basic ')) if '/graphql/' not in url else True
-    for url, hd, _ in calls))
+import urllib.parse  # noqa: E402
+hosts = {urllib.parse.urlsplit(url).netloc for url, _, _ in calls}
+check('only the configured hosts were contacted', hosts == {urllib.parse.urlsplit(BASE).netloc}, hosts)
+check('the key only goes with meter readings', all(
+    (hd.get('Authorization', '').startswith('Basic ')) == ('/consumption/' in url) for url, hd, _ in calls if '/graphql/' not in url))
 path = '/v1/electricity-meter-points/%s/meters/%s/consumption/' % (mock.MPAN, mock.ELEC_SERIAL)
 calls.clear()
 paged = home._rest(path, {'period_from': server.iso(now - 3 * 86400), 'page_size': 50})
@@ -139,6 +143,66 @@ text = json.dumps(view)
 for secret in (mock.MPAN, mock.ELEC_SERIAL, mock.MPRN, mock.GAS_SERIAL, mock.OCTOPUS_DEVICE, mock.OCTOPUS_ACCOUNT, mock.OCTOPUS_KEY):
     check('no identifiers in the API: ' + secret[:4], secret not in text)
 
+# ---- other tariffs ----------------------------------------------------------
+
+check('found the tariffs to compare', set(home.products) == {'flexible', 'agile', 'go', 'fixed'} and home.region == 'N',
+      (home.products, home.region))
+check('no business, export or heat-pump tariffs', all(code not in str(home.products) for code in ('BUS-', 'OUTGOING', 'COSY')))
+cmp = home.view(now)['compare']
+elec = {o['key']: o for o in cmp['fuels']['elec']['options']}
+gas = {o['key']: o for o in cmp['fuels']['gas']['options']}
+check('electricity options', list(elec) == ['yours', 'flexible', 'agile', 'go', 'fixed'] and all(o['complete'] for o in elec.values()), list(elec))
+check('gas options', list(gas) == ['yours', 'flexible', 'fixed'], list(gas))
+start = server.uk_midnight_utc(server.uk_clock(now)[0] - server.timedelta(days=365))
+end = server.uk_midnight_utc(server.uk_clock(now)[0])
+slots = store.query("SELECT t, kwh FROM home WHERE fuel = 'elec' AND t >= ? AND t < ?", (start, end))
+days = len({server.uk_midnight_utc(server.uk_clock(t)[0]) for t, _ in slots})
+kwh = sum(k for _, k in slots)
+check('fixed at today\'s price', abs(elec['fixed']['cost'] - (kwh * 23.9 + 47.0 * days)) < 1, (elec['fixed']['cost'], kwh * 23.9 + 47.0 * days))
+check('agile half hour by half hour', abs(elec['agile']['cost'] - (sum(k * mock.agile_p(t) for t, k in slots) + 48.0 * days)) < 1)
+go = sum(k * (8.5 if 1800 <= t % 86400 < 5.5 * 3600 else 28.0) for t, k in slots) + 49.5 * days
+check('go cheap overnight', abs(elec['go']['cost'] - go) < 1, (elec['go']['cost'], go))
+change = int(now) // 86400 * 86400 - 40 * 86400
+flex = sum(k * (25.5 if t >= change else 24.5) for t, k in slots) + 53.0 * days
+check('flexible at the direct debit price', abs(elec['flexible']['cost'] - flex) < 1, (elec['flexible']['cost'], flex))
+check('months add up', all(abs(sum(o['months']) - o['cost']) < 1 for o in elec.values()))
+check('differences against yours', all(abs(o['diff'] - (o['cost'] - elec['yours']['cost'])) < 0.2 for o in elec.values()))
+
+# ---- Saving Sessions and points ----------------------------------------------
+
+sv = home.view(now)['sessions']
+check('points', sv['points'] == 4321 and sv['pounds'] == 5.4, sv and sv['points'])
+ids = [e['id'] for e in sv['past']] + [e['id'] for e in sv['upcoming']]
+check('sessions for this region only', sorted(ids) == [101, 102, 103], ids)
+first = [e for e in sv['past'] if e['id'] == 101][0]
+check('points Octopus gave', first['given'] == 1240 and first['joined'])
+other = [e for e in sv['past'] if e['id'] == 102][0]
+check('estimated points', other['estimate'] == round(other['saved'] * 1600) and not other['joined'])
+# The baseline worked out independently: previous 10 weekdays, skipping the other session's day
+ev = mock.parse(mock.octopus_backend('savingSessions ' + mock.OCTOPUS_ACCOUNT, 'x')['data']['savingSessions']['events'][1]['startAt'])
+day = server.uk_clock(ev)[0]
+skip = {server.uk_clock(mock.parse(e['startAt']))[0] for e in mock.octopus_backend('savingSessions', 'x')['data']['savingSessions']['events']}
+dates, d = [], day
+while len(dates) < 10:
+    d -= server.timedelta(days=1)
+    if d.weekday() < 5 and d not in skip:
+        dates.append(d)
+offset = ev - server.uk_midnight_utc(day)
+expected = 0
+for off in (offset, offset + 1800):
+    values = [store.scalar("SELECT kwh FROM home WHERE fuel = 'elec' AND t = ?", (server.uk_midnight_utc(x) + off,)) for x in dates]
+    expected += sum(values) / len(values)
+check('baseline as Octopus works it out', abs(other['baseline'] - expected) < 0.001 and other['baseline_complete'], (other['baseline'], expected))
+
+# Octoplus failing doesn't make the feed look broken
+mock.FAIL.add('octopus-backend')
+home.next['sessions'] = 0
+check('sessions failure kept off the feed', home.tick(now + 60) == '' and 'sessions' in home.extra_problem, home.extra_problem)
+mock.FAIL.clear()
+home.next['sessions'] = 0
+home.tick(now + 120)
+check('sessions recover', 'sessions' not in home.extra_problem, home.extra_problem)
+
 # ---- live readings: kept for 24 hours, shown raw for an hour and averaged for longer ----
 
 stored = store.scalar('SELECT COUNT(*) FROM home_live')
@@ -149,7 +213,7 @@ check('six hours in one-minute averages', six['step'] == 60 and len(six['points'
 check('a day in four-minute averages', day['step'] == 240 and len(day['points']) <= 361, (day['step'], len(day['points'])))
 check('odd ranges fall back to an hour', home.view(now, 5)['live']['hours'] == 1)
 check('averages are averages', all(130 <= p[1] <= 3500 for p in six['points']))
-restarted = homemod.Home(store, server.Status(), request=request, key=mock.OCTOPUS_KEY, account=mock.OCTOPUS_ACCOUNT, base=BASE)
+restarted = homemod.Home(store, server.Status(), request=request, key=mock.OCTOPUS_KEY, account=mock.OCTOPUS_ACCOUNT, base=BASE, backend=BACKEND)
 check('latest reading survives a restart', restarted.live and restarted.live['t'] == home.live['t'])
 calls.clear()
 home.next['live'] = 0

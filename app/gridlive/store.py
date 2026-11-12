@@ -112,6 +112,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS home (fuel TEXT NOT NULL, t INTEGER NOT NULL, kwh REAL NOT NULL,
                 src TEXT NOT NULL, ci REAL, PRIMARY KEY (fuel, t)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS home_live (t INTEGER PRIMARY KEY, w REAL NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS tariff_rate (tariff TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
+                end INTEGER, p REAL NOT NULL, PRIMARY KEY (tariff, kind, start)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS home_rate (fuel TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
                 end INTEGER, p REAL NOT NULL, PRIMARY KEY (fuel, kind, start)) WITHOUT ROWID;
         ''')

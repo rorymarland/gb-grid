@@ -60,6 +60,7 @@ def env_secret(name):
 OCTOPUS_API_KEY = env_secret('OCTOPUS_API_KEY')
 OCTOPUS_ACCOUNT = env_str('OCTOPUS_ACCOUNT', '').upper()
 OCTOPUS_BASE = env_str('OCTOPUS_BASE_URL', 'https://api.octopus.energy').rstrip('/')
+OCTOPUS_BACKEND = env_str('OCTOPUS_BACKEND_URL', 'https://api.backend.octopus.energy').rstrip('/')   # Octoplus, Saving Sessions
 OCTOPUS_LIVE_SECONDS = env_int('OCTOPUS_LIVE_SECONDS', 60, 30, 600)   # live readings while the page is open
 HOME_ENABLED = bool(OCTOPUS_API_KEY and OCTOPUS_ACCOUNT)
 GAS_CALORIFIC_VALUE = env_float('GAS_CALORIFIC_VALUE', 39.5, 30, 45)     # MJ/m³, for meters that report gas in m³

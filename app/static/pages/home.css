@@ -67,10 +67,57 @@
 .hm-months th small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
 .hm-months tfoot th, .hm-months tfoot td { font-weight: 650; border-bottom: 0; border-top: 2px solid var(--hair); }
 
+/* Saving Session alert, under the live figure */
+.hm-session-alert { margin: 14px 0 0; display: inline-block; padding: 6px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; font-weight: 550; }
+.hm-session-alert a { color: var(--ink); text-underline-offset: 3px; }
+
+/* Other tariffs */
+.hm-tariffs { display: grid; gap: 0; margin: 6px 0 26px; }
+.hm-tariff { display: grid; grid-template-columns: minmax(180px, 1.6fr) minmax(80px, 1fr) 128px 112px; gap: 4px 18px; align-items: center;
+  padding: 12px 0; margin: 0; border: 0; border-top: 1px solid var(--hair); background: none; font: inherit; color: inherit; text-align: left; border-radius: 0; }
+.hm-tariff:first-child { border-top: 0; }
+button.hm-tariff { cursor: pointer; }
+/* The highlight reaches past the text without moving it */
+button.hm-tariff:hover { background: var(--wash); box-shadow: -10px 0 0 var(--wash), 10px 0 0 var(--wash); }
+button.hm-tariff[aria-pressed="true"] { background: var(--chip); box-shadow: -10px 0 0 var(--chip), 10px 0 0 var(--chip); }
+button.hm-tariff[aria-pressed="true"] + .hm-tariff { border-top-color: transparent; }
+.hm-tariff .nm { font-weight: 600; font-size: 15px; }
+.hm-tariff .nm small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.hm-tariff .track { height: 10px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.hm-tariff .track i { display: block; height: 100%; border-radius: 999px; background: var(--axis); }
+.hm-tariff.mine .track i { background: var(--hm-elec); }
+.hm-tariff .cost { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; }
+.hm-tariff .cost small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.hm-tariff .diff { font-size: 14px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+.hm-tariff.cheaper .diff { color: var(--ink); font-weight: 600; }
+.hm-h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+.hm-h3:empty { display: none; }
+.hm-month-chart { min-height: 200px; }
+.hm-zero { stroke: var(--ink-2); stroke-width: 1; }
+.hm-diff.less { fill: var(--hm-elec); }
+.hm-diff.more { fill: var(--axis); }
+
+/* Saving Sessions */
+.hm-session { padding: 12px 16px; border-radius: 12px; background: var(--wash); margin: 0 0 12px; max-width: 760px; }
+.hm-session.active { background: var(--chip); }
+.hm-session .when { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; font-size: 16px; }
+.hm-session .when span { font-size: 13.5px; color: var(--ink-2); }
+.hm-session .what { margin: 4px 0 0; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+.hm-sessions { width: 100%; border-collapse: collapse; font-size: 14.5px; margin-top: 8px; }
+.hm-sessions thead .u { display: block; font-weight: 400; }
+.hm-sessions th small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.hm-sessions tbody th { font-weight: 550; white-space: nowrap; }
+.hm-sessions tr.off td, .hm-sessions tr.off th { color: var(--muted); }
+
 @media (max-width: 860px) {
   .hm-now { grid-template-columns: minmax(0, 1fr); }
   .hm-range { margin-left: 0; }
   .hm-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .hm-tariff { grid-template-columns: minmax(0, 1fr) auto; }
+  .hm-tariff .track { grid-column: 1 / -1; grid-row: 3; }
+  .hm-tariff .diff { grid-column: 2; }
 }
 @media (max-width: 520px) {
   .hm-figures dd { font-size: 24px; }

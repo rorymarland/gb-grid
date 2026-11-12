@@ -103,6 +103,15 @@ your own use alongside the grid's. Off unless set up; see
 - **When you use electricity:** the carbon intensity of the electricity you
   actually used, against steady use around the clock, which shows whether
   your timing helps.
+- **What other tariffs would have cost:** your last 12 months of half-hourly
+  use priced on Flexible Octopus, Agile Octopus and Octopus Go, and on
+  today's Octopus 12M Fixed as a guide to renewing, for your region, against
+  what you paid; month by month for any of them. The prices come from
+  Octopus's public price list, so they don't use your account's requests.
+- **Saving Sessions:** your Octoplus points, upcoming sessions with your
+  baseline (worked out Octopus's way, from the same half hours on the previous
+  10 weekdays), a reminder under the live figure the day before, and how you
+  did in recent sessions.
 - **Month by month** for the last year.
 
 Electricity's carbon uses GB's carbon intensity for each half hour; gas uses
@@ -376,10 +385,11 @@ meter serials). Readings are kept in the `/data` volume.
 
 **How often it asks Octopus.** Octopus allows about 100 requests an hour per
 account, shared with its app and anything else using your key (Home
-Assistant's Octopus integration, for one). This server makes about 14 an hour
-in the background, about 60 while the Your home page is open (live readings
-every minute) and about 32 while a [Display](#display) shows the Your home
-slide (every two minutes). With other integrations polling too, raise
+Assistant's Octopus integration, for one). This server makes about 17 an hour
+in the background, about 62 while the Your home page is open (live readings
+every minute) and about 34 while a [Display](#display) shows the Your home
+slide (every two minutes). Other tariffs' prices come from Octopus's public
+price list once a day and don't count. With other integrations polling too, raise
 `OCTOPUS_LIVE_SECONDS`.
 
 **Without a Home Mini**, there are no live readings: everything else works,

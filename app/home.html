@@ -30,6 +30,7 @@ OCTOPUS_ACCOUNT=A-1234ABCD</code></pre>
         <p class="hm-figure" id="now-figure"></p>
         <p class="hm-now-text" id="now-text"></p>
         <p class="hm-now-meta" id="now-meta"></p>
+        <p class="hm-session-alert" id="session-alert" hidden></p>
       </div>
       <div class="hm-live">
         <div class="toggle hm-range" role="group" aria-label="Live readings over" id="live-range">
@@ -73,6 +74,38 @@ OCTOPUS_ACCOUNT=A-1234ABCD</code></pre>
       <p class="hm-note" id="timing-note"></p>
     </section>
 
+    <section class="panel" aria-labelledby="compare-title" id="compare-panel" hidden>
+      <div class="panel-head">
+        <h2 id="compare-title">What other tariffs would have cost</h2>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Fuel" id="compare-fuel">
+            <button type="button" data-fuel="elec" aria-pressed="true">Electricity</button>
+            <button type="button" data-fuel="gas" aria-pressed="false">Gas</button>
+          </div>
+        </div>
+      </div>
+      <p class="sub" id="compare-sub"></p>
+      <div class="hm-tariffs" id="compare-list" role="group" aria-label="Choose a tariff to see it month by month"></div>
+      <h3 class="hm-h3" id="compare-month-title"></h3>
+      <div class="chart hm-chart hm-month-chart" id="compare-chart"></div>
+      <p class="hm-note" id="compare-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="sessions-title" id="sessions" hidden>
+      <div class="panel-head"><h2 id="sessions-title">Saving Sessions</h2></div>
+      <p class="sub" id="sessions-sub"></p>
+      <dl class="hm-figures" id="sessions-figures"></dl>
+      <div id="sessions-next"></div>
+      <div class="hm-table-wrap" id="sessions-past-wrap" hidden>
+        <table class="data hm-sessions">
+          <caption class="visually-hidden">Recent sessions</caption>
+          <thead><tr><th scope="col">Session</th><th scope="col" class="num">Baseline <span class="u">kWh</span></th><th scope="col" class="num">Used <span class="u">kWh</span></th><th scope="col" class="num">Saved <span class="u">kWh</span></th><th scope="col" class="num">Points</th></tr></thead>
+          <tbody id="sessions-past"></tbody>
+        </table>
+      </div>
+      <p class="hm-note" id="sessions-note"></p>
+    </section>
+
     <section class="panel" aria-labelledby="months-title" id="months-panel" hidden>
       <div class="panel-head"><h2 id="months-title">Month by month</h2></div>
       <div class="hm-table-wrap">
@@ -89,6 +122,7 @@ OCTOPUS_ACCOUNT=A-1234ABCD</code></pre>
       <div class="explain" id="how">
         <p>Your use comes from Octopus Energy. Live readings and today’s half hours are from your Octopus Home Mini; each day’s meter readings arrive a day or so later and replace them. Gas meters only report through the meter readings, so gas is always a day or two behind.</p>
         <p>The carbon in your electricity uses Great Britain’s carbon intensity for each half hour, the same figure as the rest of this dashboard. It counts the power stations’ emissions, not the electricity lost on the way to you. Gas uses the UK government’s conversion factor for natural gas, <span id="gas-factor">0.183</span> kg of CO₂ per kWh, whenever you burn it.</p>
+        <p>Other tariffs’ prices come from Octopus’s public price list for your region, so checking them doesn’t count towards your account’s requests. Saving Sessions and your Octoplus points come from your account.</p>
         <p>Costs use your tariff’s unit rates and standing charges, including VAT, as Octopus publishes them. They leave out discounts, credits and anything else on your bill, so they won’t match it to the penny. Tariffs with day and night rates aren’t costed.</p>
         <p>Your readings are kept on this server only. The Octopus API key stays with the server and is never sent to the browser.</p>
       </div>

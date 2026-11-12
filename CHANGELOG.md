@@ -16,6 +16,17 @@ releases that keep working with your existing settings and data.
   hours. The server now keeps a day of the Home Mini's 10-second readings, so
   the longer views cost no extra requests, survive a restart, and each live
   request only asks for readings since the last one.
+- **What other tariffs would have cost** on Your home: your last 12 months
+  of half-hourly use priced on Flexible Octopus, Agile Octopus, Octopus Go and
+  today's Octopus 12M Fixed for your region, against what you paid, with
+  each month's difference. Prices come from Octopus's public price list once
+  a day, without your key.
+- **Saving Sessions** on Your home: your Octoplus points, upcoming sessions
+  with your baseline worked out Octopus's way, a reminder under the live
+  figure the day before, and how you did in recent sessions (points Octopus
+  gave, or an estimate until it does). `--test-octopus` checks these too.
+- Tariff prices for your own tariff are now fetched without the key, as
+  they're public; only meter readings and your account's data use it.
 - **Fixed:** the last 30 days chart's axis now gives its unit (kg or kWh, as
   well as £), and so does today's.
 

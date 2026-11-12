@@ -461,6 +461,77 @@ def home_gas_kwh(t):
     return 0.05
 
 
+# Octopus's other tariffs, for the comparison: (code, display name, direction, fuels)
+OTHER_PRODUCTS = [('VAR-22-11-01', 'Flexible Octopus', 'IMPORT', 'eg'), ('AGILE-24-10-01', 'Agile Octopus', 'IMPORT', 'e'),
+                  ('GO-VAR-22-10-14', 'Octopus Go', 'IMPORT', 'e'), ('OE-FIX-12M-26-11-09', 'Octopus 12M Fixed', 'IMPORT', 'eg'),
+                  ('AGILE-OUTGOING-19-05-13', 'Agile Outgoing Octopus', 'EXPORT', 'e'), ('COSY-22-12-08', 'Cosy Octopus', 'IMPORT', 'e')]
+
+
+def agile_p(t):
+    """A half-hourly price: cheap overnight, dear at teatime, now and then below zero."""
+    hour = (t % DAY) / 3600
+    p = 18 + 6 * math.sin((hour - 9) / 24 * 2 * math.pi)
+    if 16 <= hour < 19:
+        p += 14
+    if 2 <= hour < 5 and (t // DAY) % 9 == 0:
+        p = -2.5
+    return round(p, 3)
+
+
+def product_rates(code, fuel, kind, start, end):
+    """Rows as Octopus returns them, newest first."""
+    rows = []
+    if kind == 'standing-charges':
+        value = {'VAR-22-11-01': 53.0 if fuel == 'electricity' else 31.0, 'AGILE-24-10-01': 48.0, 'GO-VAR-22-10-14': 49.5,
+                 'OE-FIX-12M-26-11-09': 47.0 if fuel == 'electricity' else 30.0}.get(code, 50.0)
+        rows.append({'value_exc_vat': value, 'value_inc_vat': value, 'valid_from': '2024-10-01T00:00:00Z', 'valid_to': None, 'payment_method': None})
+    elif code == 'AGILE-24-10-01':
+        for t in range(max(start, int(_clock.time()) - 420 * DAY) // 1800 * 1800, end, 1800):
+            rows.append({'value_exc_vat': agile_p(t), 'value_inc_vat': agile_p(t), 'valid_from': iso(t), 'valid_to': iso(t + 1800), 'payment_method': None})
+    elif code == 'GO-VAR-22-10-14':
+        for day in range(start // DAY * DAY - DAY, end + DAY, DAY):
+            for a, b, p in ((day + 1800, day + 5.5 * 3600, 8.5), (day + 5.5 * 3600, day + DAY + 1800, 28.0)):
+                if b > start and a < end:
+                    rows.append({'value_exc_vat': p, 'value_inc_vat': p, 'valid_from': iso(int(a)), 'valid_to': iso(int(b)), 'payment_method': None})
+    elif code == 'VAR-22-11-01':
+        change = int(_clock.time()) // DAY * DAY - 40 * DAY
+        base = 24.5 if fuel == 'electricity' else 6.2
+        for method, extra in (('DIRECT_DEBIT', 0), ('NON_DIRECT_DEBIT', 1.5)):
+            rows.append({'value_exc_vat': base + 1 + extra, 'value_inc_vat': base + 1 + extra, 'valid_from': iso(change), 'valid_to': None, 'payment_method': method})
+            rows.append({'value_exc_vat': base + extra, 'value_inc_vat': base + extra, 'valid_from': '2024-10-01T00:00:00Z', 'valid_to': iso(change), 'payment_method': method})
+    elif code == 'OE-FIX-12M-26-11-09':
+        p = 23.9 if fuel == 'electricity' else 5.8
+        rows.append({'value_exc_vat': p, 'value_inc_vat': p, 'valid_from': '2026-11-09T00:00:00Z', 'valid_to': None, 'payment_method': None})
+    rows = [r for r in rows if parse(r['valid_from']) < end and (r['valid_to'] is None or parse(r['valid_to']) > start)]
+    return sorted(rows, key=lambda r: r['valid_from'], reverse=True)
+
+
+def octopus_backend(query, auth):
+    if not auth:
+        return {'data': {'savingSessions': None}, 'errors': [{'message': "'Authorization' header not provided.", 'extensions': {
+            'errorCode': 'OE-0101', 'errorDescription': 'Please provide the Authorization header to this query/mutation.'}}]}
+    now = int(_clock.time())
+    today = now // DAY * DAY
+    events = [  # two past sessions (one joined), one tomorrow, one power-up in another region
+        {'id': 101, 'code': 'EVENT_101', 'rewardPerKwhInOctoPoints': 1800, 'startAt': iso(today - 6 * DAY + 17 * 3600 + 1800),
+         'endAt': iso(today - 6 * DAY + 18 * 3600 + 1800), 'eventType': 'TURN_DOWN', 'targetRegion': []},
+        {'id': 102, 'code': 'EVENT_102', 'rewardPerKwhInOctoPoints': 1600, 'startAt': iso(today - 2 * DAY + 17 * 3600),
+         'endAt': iso(today - 2 * DAY + 18 * 3600), 'eventType': 'TURN_DOWN', 'targetRegion': [{'regionId': '_N'}]},
+        {'id': 103, 'code': 'EVENT_103', 'rewardPerKwhInOctoPoints': 2000, 'startAt': iso(today + DAY + 17 * 3600 + 1800),
+         'endAt': iso(today + DAY + 18 * 3600 + 1800), 'eventType': 'TURN_DOWN', 'targetRegion': []},
+        {'id': 104, 'code': 'EVENT_104', 'rewardPerKwhInOctoPoints': 0, 'startAt': iso(today + DAY + 13 * 3600),
+         'endAt': iso(today + DAY + 14 * 3600), 'eventType': 'TURN_UP', 'targetRegion': [{'regionId': '_A'}]},
+    ]
+    account = {'hasJoinedCampaign': True, 'canJoinCampaign': True, 'signedUpMeterPoint': {'regionId': '_N'},
+               'joinedEvents': [{'eventId': 101, 'startAt': events[0]['startAt'], 'endAt': events[0]['endAt'],
+                                 'rewardGivenInOctoPoints': 1240, 'eventType': 'TURN_DOWN'},
+                                {'eventId': 103, 'startAt': events[2]['startAt'], 'endAt': events[2]['endAt'],
+                                 'rewardGivenInOctoPoints': None, 'eventType': 'TURN_DOWN'}]}
+    if 'savingSessions' in query:
+        return {'data': {'savingSessions': {'events': events, 'account': account if OCTOPUS_ACCOUNT in query else None}}}
+    return {'data': {}}
+
+
 def octopus_graphql(query, auth):
     if 'obtainKrakenToken' in query:
         if OCTOPUS_KEY not in query:
@@ -475,6 +546,8 @@ def octopus_graphql(query, auth):
             'errorType': 'AUTHORIZATION', 'errorCode': 'KT-CT-1112', 'errorDescription': 'You must provide the AUTHORIZATION header.'}}],
             'data': None}
     data = {}
+    if 'loyaltyPointLedgers' in query:
+        data['loyaltyPointLedgers'] = [{'balanceCarriedForward': '4321'}]
     if 'account(accountNumber:' in query:
         if OCTOPUS_ACCOUNT not in query:
             return {'errors': [{'message': 'Unauthorized.', 'extensions': {'errorType': 'NOT_FOUND', 'errorCode': 'KT-CT-4123'}}],
@@ -508,7 +581,8 @@ def octopus_graphql(query, auth):
 
 
 def octopus_rest(path, q, auth):
-    if not auth.startswith('Basic '):
+    public = path.startswith('/octopus/v1/products/')
+    if not public and not auth.startswith('Basic '):
         return 401, {'detail': 'Authentication credentials were not provided.'}
     m = re.match(r'^/octopus/v1/(electricity|gas)-meter-points/(\w+)/meters/(\w+)/consumption/$', path)
     if m:
@@ -532,6 +606,31 @@ def octopus_rest(path, q, auth):
             results.append({'consumption': value, 'interval_start': iso(t).replace('Z', '+00:00'), 'interval_end': iso(t + 1800).replace('Z', '+00:00')})
         following = ('https://elsewhere.example/v1/consumption/?page=%d&page_size=%d' % (page + 1, size)) if page * size < len(times) else None
         return 200, {'count': len(times), 'next': following, 'previous': None, 'results': results}
+    if path == '/octopus/v1/products/':
+        at = parse(q['available_at']) if q.get('available_at') else int(_clock.time())
+        results = []
+        for code, name, direction, fuels in OTHER_PRODUCTS:
+            if code.startswith('OE-FIX-12M-26-11') and at < int(_clock.time()) - 5 * DAY:
+                continue
+            results.append({'code': code, 'direction': direction, 'display_name': name, 'full_name': name, 'is_variable': 'FIX' not in code,
+                            'is_green': False, 'is_tracker': False, 'is_prepay': False, 'is_business': False, 'brand': 'OCTOPUS_ENERGY',
+                            'available_from': '2024-10-01T00:00:00+01:00', 'available_to': None})
+        results.append({'code': 'BUS-AGILE-1', 'direction': 'IMPORT', 'display_name': 'Agile Octopus', 'is_business': True,
+                         'available_from': '2024-10-01T00:00:00Z', 'available_to': None, 'brand': 'OCTOPUS_ENERGY'})
+        return 200, {'count': len(results), 'next': None, 'previous': None, 'results': results}
+    m = re.match(r'^/octopus/v1/products/([\w-]+)/(electricity|gas)-tariffs/([\w-]+)/(standard-unit-rates|standing-charges)/$', path)
+    if m and any(m.group(1) == p[0] for p in OTHER_PRODUCTS):
+        code, fuel, tariff, kind = m.groups()
+        info = [p for p in OTHER_PRODUCTS if p[0] == code][0]
+        if (fuel == 'gas' and 'g' not in info[3]) or not tariff.endswith('-' + code + '-N'):
+            return 404, {'detail': 'Not found.'}
+        start = parse(q['period_from']) if q.get('period_from') else int(_clock.time()) - 30 * DAY
+        end = parse(q['period_to']) if q.get('period_to') else int(_clock.time()) + DAY
+        rows = product_rates(code, fuel, kind, start, end)
+        size, page = int(q.get('page_size', 100)), int(q.get('page', 1))
+        chunk = rows[(page - 1) * size: page * size]
+        following = ('https://api.octopus.energy%s?page=%d' % (path[len('/octopus'):], page + 1)) if page * size < len(rows) else None
+        return 200, {'count': len(rows), 'next': following, 'previous': None, 'results': chunk}
     m = re.match(r'^/octopus/v1/products/([\w-]+)/(electricity|gas)-tariffs/([\w-]+)/(standard-unit-rates|standing-charges)/$', path)
     if m:
         for start, end, code, e_unit, e_standing, g_unit, g_standing in octopus_tariffs():
@@ -892,6 +991,12 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get('Content-Length') or 0))
         if any(name in path for name in FAIL):
             return self.send(503, {'error': 'mock failure'})
+        if path == '/octopus-backend/v1/graphql/':
+            try:
+                query = json.loads(body)['query']
+            except (ValueError, KeyError, TypeError):
+                return self.send(400, {'errors': [{'message': 'Must provide query string.'}]})
+            return self.send(200, octopus_backend(query, self.headers.get('Authorization') or ''))
         if path != '/octopus/v1/graphql/':
             return self.send(404, {'error': 'not mocked: ' + path})
         try:

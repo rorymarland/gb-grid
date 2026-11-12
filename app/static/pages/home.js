@@ -2,7 +2,7 @@
 import G from '/static/js/gb.js';
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num, hm = G.hm, niceStep = G.niceStep, makeTip = G.makeTip;
-var state = { data: null, measure: 'kg', hours: 1, drawn: {} };
+var state = { data: null, measure: 'kg', hours: 1, fuel: 'elec', pick: {}, drawn: {} };
 try {
   var saved = localStorage.getItem('gb-home-measure');
   if (saved === 'kwh' || saved === 'cost' || saved === 'kg') state.measure = saved;
@@ -400,6 +400,167 @@ function renderMonths(d) {
   if (starred) wrap.after(h('p', { cls: 'hm-note', text: '* Gas for the latest days isn’t in yet.' }));
 }
 
+/* ---------- other tariffs ---------- */
+
+var longDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: G.TZ });
+var monthShort = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: G.TZ });
+function isoDay(text) { return new Date(text + 'T12:00:00Z'); }
+function poundsWhole(p) { return '£' + G.int(Math.abs(p) / 100); }
+
+function renderCompare(d) {
+  var panel = byId('compare-panel'), c = d.compare;
+  panel.hidden = !c || !c.fuels || !c.fuels.elec;
+  if (panel.hidden) return;
+  var hasGas = Boolean(c.fuels.gas);
+  byId('compare-fuel').hidden = !hasGas;
+  if (!hasGas) state.fuel = 'elec';
+  Array.prototype.forEach.call(byId('compare-fuel').querySelectorAll('button'), function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.fuel === state.fuel));
+  });
+  var f = c.fuels[state.fuel], fuelWord = state.fuel === 'elec' ? 'electricity' : 'gas';
+  var from = isoDay(c.from), to = isoDay(c.to);
+  byId('compare-sub').textContent = 'Your ' + fuelWord + ' from ' + longDate.format(from) + ' to ' + longDate.format(to) +
+    (f.days < 360 ? ' (' + f.days + ' days with readings)' : '') + ', ' + G.int(f.kwh) + ' kWh, priced half hour by half hour on each tariff, with its standing charges.';
+  var options = f.options.filter(function (o) { return num(o.cost); });
+  var yours = options.filter(function (o) { return o.key === 'yours'; })[0];
+  var others = options.filter(function (o) { return o.key !== 'yours'; }).sort(function (a, b) { return a.cost - b.cost; });
+  if (!state.pick[state.fuel] || !others.some(function (o) { return o.key === state.pick[state.fuel]; })) {
+    state.pick[state.fuel] = others.length ? others[0].key : null;
+  }
+  var list = clear(byId('compare-list'));
+  var top = Math.max.apply(null, options.map(function (o) { return o.cost; }));
+  (yours ? [yours] : []).concat(others).forEach(function (o) {
+    var mine = o.key === 'yours';
+    var diff = mine ? 'What you paid' : !num(o.diff) ? '' : Math.abs(o.diff) < 50 ? 'About the same' : poundsWhole(o.diff) + (o.diff < 0 ? ' less' : ' more');
+    var row = h(mine ? 'div' : 'button', { cls: 'hm-tariff' + (mine ? ' mine' : '') + (o.diff < -50 ? ' cheaper' : ''), type: mine ? null : 'button',
+      'aria-pressed': mine ? null : String(o.key === state.pick[state.fuel]), 'data-key': mine ? null : o.key }, [
+      h('span', { cls: 'nm' }, [o.name, h('small', { text: o.note })]),
+      h('span', { cls: 'track' }, h('i', { style: 'width:' + (o.cost / top * 100).toFixed(1) + '%' })),
+      h('span', { cls: 'cost' }, [poundsWhole(o.cost), h('small', { text: fixed(o.unit, 1) + 'p/kWh average' })]),
+      h('span', { cls: 'diff', text: diff })
+    ]);
+    list.appendChild(row);
+  });
+  var pick = others.filter(function (o) { return o.key === state.pick[state.fuel]; })[0];
+  byId('compare-month-title').textContent = pick && yours ? pick.name.replace(/, at today’s prices$/, ' at today’s prices') + ' against yours, month by month' : '';
+  drawCompareMonths(f, yours, pick);
+  var notes = [];
+  if (state.fuel === 'elec') {
+    notes.push('Agile and Go are priced as if you’d used electricity at exactly the same times. On those tariffs most people move some use to the cheap half hours, which would save more than this shows; Agile’s dearest half hours (usually 16:00 to 19:00) can also cost more than this when you can’t.');
+    notes.push('Octopus Go is for people with an electric car.');
+  }
+  notes.push('Today’s fixed price is a guide to renewing: fixed prices change often, and this applies today’s to the whole of your last year.');
+  if (state.fuel === 'elec') notes.push('Tracker isn’t open to new customers, and Cosy and Snug need a heat pump or storage heaters, so they aren’t shown.');
+  byId('compare-note').textContent = notes.join(' ');
+}
+
+function drawCompareMonths(f, yours, pick) {
+  var box = clear(byId('compare-chart'));
+  if (!yours || !pick || !yours.months || !pick.months) return;
+  var diffs = pick.months.map(function (v, i) { return v - yours.months[i]; });
+  var width = Math.max(300, box.clientWidth || 700), height = 200, padL = 62, padR = 6, padT = 14, padB = 26;
+  var n = diffs.length, slotW = (width - padL - padR) / n;
+  var lo = Math.min(0, Math.min.apply(null, diffs)), hi = Math.max(0, Math.max.apply(null, diffs));
+  var step = niceStep(Math.max(hi - lo, 100), 4);
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  if (hi === lo) hi = lo + step;
+  var y = function (v) { return padT + (hi - v) / (hi - lo) * (height - padT - padB); };
+  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img',
+    'aria-label': pick.name + ' against your tariffs, each month: bars below the line would have saved money' });
+  for (var v = lo; v <= hi + 1e-9; v += step) {
+    svg.appendChild(s('line', { 'class': v === 0 ? 'hm-zero' : 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end',
+      text: v === 0 ? '£0' : (v < 0 ? '−£' : '+£') + (step < 100 ? fixed(Math.abs(v) / 100, 2) : G.int(Math.abs(v) / 100)) }));
+  }
+  var gap = Math.min(10, slotW * 0.3), barW = Math.max(3, slotW - gap);
+  diffs.forEach(function (dv, i) {
+    var x0 = padL + i * slotW + gap / 2, top = y(Math.max(0, dv)), bottom = y(Math.min(0, dv));
+    svg.appendChild(s('rect', { 'class': 'hm-diff ' + (dv < 0 ? 'less' : 'more'), x: x0.toFixed(1), y: top.toFixed(1),
+      width: barW.toFixed(1), height: Math.max(1, bottom - top).toFixed(1), rx: 2 }));
+    if (slotW >= 34 || (n - 1 - i) % 2 === 0) {   // every other month on a phone
+      svg.appendChild(s('text', { 'class': 'axis-text', x: (x0 + barW / 2).toFixed(1), y: height - 6, 'text-anchor': 'middle',
+        text: monthShort.format(isoDay(f.months[i] + '-15')) }));
+    }
+  });
+  box.appendChild(svg);
+  var tip = makeTip(box);
+  svg.addEventListener('pointermove', function (e) {
+    var r = svg.getBoundingClientRect(), i = Math.floor(((e.clientX - r.left) * width / r.width - padL) / slotW);
+    if (i < 0 || i >= n) { tip.hide(); return; }
+    var dv = diffs[i];
+    tip.show(monthFmt.format(isoDay(f.months[i] + '-15')), [
+      { value: pounds(yours.months[i]), label: 'your tariffs' },
+      { value: pounds(pick.months[i]), label: pick.name.replace(/, at today’s prices$/, '') },
+      { value: (dv < 0 ? '−' : '+') + pounds(Math.abs(dv)), label: dv < 0 ? 'less' : 'more' }
+    ], (padL + (i + 0.5) * slotW) * r.width / width, 40);
+  });
+  svg.addEventListener('pointerleave', function () { tip.hide(); });
+}
+
+/* ---------- Saving Sessions ---------- */
+
+function points(n) { return G.int(n) + ' points'; }
+function sessionWhen(sv, now) {
+  return G.when(sv.start, now).replace('Tomorrow', 'tomorrow') + ' to ' + hm(sv.end);
+}
+
+function renderSessions(d) {
+  var panel = byId('sessions'), sv = d.sessions;
+  var any = sv && (num(sv.points) || sv.joined_campaign || sv.upcoming.length || sv.active || sv.past.length);
+  panel.hidden = !any;
+  var alert = byId('session-alert');
+  alert.hidden = true;
+  if (!any) return;
+  var dl = clear(byId('sessions-figures'));
+  if (num(sv.points)) figure(dl, 'Octoplus points', G.int(sv.points), null, 'Worth about ' + pounds(sv.pounds * 100) + ' (800 to £1)');
+  var season = sv.past.filter(function (p) { return p.joined; });
+  var given = season.reduce(function (a, p) { return a + (num(p.given) ? p.given : 0); }, 0);
+  if (season.length) figure(dl, 'Sessions joined lately', String(season.length), null, given ? points(given) + ' earned' : null);
+  byId('sessions-sub').textContent = sv.joined_campaign === false
+    ? (sv.can_join ? 'You haven’t joined Saving Sessions this season. Join in the Octopus app to be paid in Octoplus points for using less electricity when the grid is stretched.' : 'Your account isn’t in Saving Sessions.')
+    : 'When the grid is stretched, Octopus pays Octoplus points for every kWh you use below your usual amount.';
+  var next = clear(byId('sessions-next'));
+  var live = sv.active ? [sv.active] : [];
+  live.concat(sv.upcoming).forEach(function (e) {
+    var active = e === sv.active;
+    var lines = [];
+    if (e.kind === 'down') {
+      if (num(e.baseline)) lines.push('Your baseline is ' + (e.baseline_complete ? '' : 'about ') + fixed(e.baseline, 2) + ' kWh: use less than that to earn points.' +
+        (e.baseline_complete ? '' : ' It settles once the days before the session are in.'));
+      if (active && num(e.used) && num(e.baseline)) {
+        var elapsed = Math.min(1, Math.max(0, (d.now - e.start) / (e.end - e.start)));
+        lines.push('So far: ' + fixed(e.used, 2) + ' kWh, against about ' + fixed(e.baseline * elapsed, 2) + ' kWh by this point.');
+      }
+    } else lines.push('A power-up: electricity is cheap or free, so it’s a good time to use more.');
+    if (!e.joined && e.kind === 'down') lines.push('You haven’t joined this one yet: join in the Octopus app.');
+    next.appendChild(h('div', { cls: 'hm-session' + (active ? ' active' : '') }, [
+      h('p', { cls: 'when' }, [h('b', { text: (active ? 'On now, until ' + hm(e.end) : G.when(e.start, d.now) + ' to ' + hm(e.end)) }),
+        e.reward ? h('span', { text: G.int(e.reward) + ' points per kWh saved' }) : null]),
+      h('p', { cls: 'what', text: lines.join(' ') })
+    ]));
+  });
+  var first = live.concat(sv.upcoming)[0];
+  if (first && first.kind === 'down' && first.start - d.now < 36 * 3600) {
+    alert.hidden = false;
+    clear(alert);
+    alert.appendChild(h('a', { href: '#sessions', text: first === sv.active ? 'Saving Session on now, until ' + hm(first.end) : 'Saving Session ' + sessionWhen(first, d.now) }));
+    if (num(first.baseline)) alert.appendChild(document.createTextNode(': aim for under ' + fixed(first.baseline, 2) + ' kWh.'));
+  }
+  var past = clear(byId('sessions-past'));
+  byId('sessions-past-wrap').hidden = !sv.past.length;
+  sv.past.forEach(function (e) {
+    var pts = num(e.given) ? points(e.given) : e.joined && num(e.estimate) ? 'About ' + points(e.estimate) : e.joined ? '–' : 'Not joined';
+    past.appendChild(h('tr', { cls: e.joined ? '' : 'off' }, [
+      h('th', { scope: 'row' }, [dayFmt.format(new Date(e.start * 1000)), h('small', { text: hm(e.start) + ' to ' + hm(e.end) + (e.kind === 'up' ? ', power-up' : '') })]),
+      h('td', { cls: 'num', text: num(e.baseline) ? fixed(e.baseline, 2) : '–' }),
+      h('td', { cls: 'num', text: num(e.used) ? fixed(e.used, 2) : '–' }),
+      h('td', { cls: 'num', text: num(e.saved) ? fixed(e.saved, 2) : '–' }),
+      h('td', { cls: 'num', text: pts })
+    ]));
+  });
+  byId('sessions-note').textContent = 'Baselines follow Octopus’s method: your use in the same half hours, averaged over the previous 10 weekdays (4 weekend days for a weekend session), skipping other session days. Points marked “about” are this page’s estimate until Octopus confirms them, usually a few days later.';
+}
+
 /* ---------- the page ---------- */
 
 function render(d) {
@@ -425,6 +586,8 @@ function render(d) {
   renderToday(d);
   renderDays(d);
   renderTiming(d);
+  renderCompare(d);
+  renderSessions(d);
   renderMonths(d);
   var live = d.live && d.now - d.live.t < 900;
   G.setLive(d.problem ? 'warn' : live ? 'good' : '', d.problem ? 'Octopus: ' + d.problem.slice(0, 90)
@@ -439,6 +602,19 @@ function setMeasure(measure) {
   });
   if (state.data && state.data.enabled) drawDays(state.data);
 }
+
+byId('compare-fuel').addEventListener('click', function (e) {
+  var button = e.target.closest('button[data-fuel]');
+  if (!button) return;
+  state.fuel = button.dataset.fuel;
+  if (state.data) renderCompare(state.data);
+});
+byId('compare-list').addEventListener('click', function (e) {
+  var button = e.target.closest('button[data-key]');
+  if (!button) return;
+  state.pick[state.fuel] = button.dataset.key;
+  if (state.data) renderCompare(state.data);
+});
 
 byId('days-measure').addEventListener('click', function (e) {
   var button = e.target.closest('button[data-measure]');

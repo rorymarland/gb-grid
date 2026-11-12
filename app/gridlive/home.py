@@ -28,7 +28,9 @@ from bisect import bisect_right
 from datetime import datetime, timedelta, timezone
 
 from . import fetch
+from . import tariffs
 from .config import (GAS_CALORIFIC_VALUE, GAS_KG_PER_KWH, HOME_ENABLED, OCTOPUS_ACCOUNT, OCTOPUS_API_KEY, OCTOPUS_BASE,
+                     OCTOPUS_BACKEND,
                      OCTOPUS_LIVE_SECONDS, log)
 from .fetch import FetchError
 from .store import UPSERT_HOME
@@ -40,6 +42,10 @@ TODAY_SECONDS = 300           # today's half hours from the Home Mini
 METER_SECONDS = 3 * 3600      # the meter's half-hourly readings
 RATES_SECONDS = 12 * 3600
 ACCOUNT_SECONDS = 12 * 3600
+TARIFFS_SECONDS = 24 * 3600   # other tariffs' prices, from the public product API
+SESSIONS_SECONDS = 1800       # Saving Sessions (announced a day or so ahead)
+POINTS_SECONDS = 6 * 3600     # Octoplus points balance
+POINT_PENCE = 0.125           # 800 points to £1 (Octopus's help pages)
 BACKFILL_DAYS = 400
 LIVE_KEEP = 26 * 3600         # 10-second readings kept for the live chart (24 hours shown)
 LIVE_CATCH_UP = 2 * 3600      # after a gap, how far back to fetch them
@@ -88,6 +94,32 @@ ACCOUNT_QUERY = '''query {
     }
   }
 }'''
+SESSIONS_QUERY = '''query {
+  savingSessions {
+    events(includeDev: false) {
+      id
+      code
+      rewardPerKwhInOctoPoints
+      startAt
+      endAt
+      eventType
+      targetRegion { regionId }
+    }
+    account(accountNumber: %s) {
+      hasJoinedCampaign
+      canJoinCampaign
+      signedUpMeterPoint { regionId }
+      joinedEvents {
+        eventId
+        startAt
+        endAt
+        rewardGivenInOctoPoints
+        eventType
+      }
+    }
+  }
+}'''
+POINTS_QUERY = 'query { loyaltyPointLedgers { balanceCarriedForward } }'
 TELEMETRY = '''%s: smartMeterTelemetry(deviceId: %s, grouping: %s, start: %s, end: %s) {
     readAt
     consumptionDelta
@@ -184,12 +216,14 @@ def default_request(url, headers=None, data=None):
 
 
 class Home:
-    def __init__(self, store, status=None, request=None, key=None, account=None, base=None):
+    def __init__(self, store, status=None, request=None, key=None, account=None, base=None, backend=None):
         self.store, self.status = store, status
         self.request = request or default_request
         self.key = OCTOPUS_API_KEY if key is None else key
         self.account = OCTOPUS_ACCOUNT if account is None else account
         self.base = (OCTOPUS_BASE if base is None else base).rstrip('/')
+        # Octoplus and Saving Sessions are on Octopus's second GraphQL endpoint
+        self.backend = (OCTOPUS_BACKEND if backend is None else backend).rstrip('/')
         self.enabled = HOME_ENABLED if key is None else bool(self.key and self.account)
         self.lock = threading.Lock()
         self.token, self.token_expires = None, 0
@@ -202,6 +236,12 @@ class Home:
         self.version = 0
         self.cache = None
         self.problem = None
+        self.products, self.region = None, None      # other tariffs, for the comparison
+        self.compare_cache = None
+        self.sessions = None                         # Saving Sessions, from the backend API
+        self.points = None                           # Octoplus points balance
+        self.extra_problem = {}                      # comparison and Octoplus problems, kept off the feed status
+        self.data_version = 0                        # meter readings and tariffs: the comparison's inputs
         if self.enabled and store is not None:
             self.restore()
 
@@ -217,11 +257,11 @@ class Home:
         except (UnicodeDecodeError, ValueError):
             raise OctopusError('Invalid JSON from Octopus')
 
-    def _graphql(self, query, token=None):
+    def _graphql(self, query, token=None, url=None):
         headers = {'Content-Type': 'application/json'}
         if token:
             headers['Authorization'] = token
-        data = self._json(self.base + '/v1/graphql/', headers, json.dumps({'query': query}).encode('utf-8'))
+        data = self._json(url or self.base + '/v1/graphql/', headers, json.dumps({'query': query}).encode('utf-8'))
         errors = data.get('errors') if isinstance(data, dict) else None
         if errors:
             first = errors[0] if isinstance(errors[0], dict) else {}
@@ -256,12 +296,12 @@ class Home:
         self.token, self.token_expires = token, expires
         return token
 
-    def _query(self, query, now, prefix=''):
+    def _query(self, query, now, prefix='', url=None):
         """An authorised GraphQL query; a rejected token is renewed and the query tried once more."""
         for attempt in (1, 2):
             token = self._get_token(now)
             try:
-                return self._graphql(query, prefix + token)
+                return self._graphql(query, prefix + token, url)
             except OctopusError as error:
                 cause = error.__cause__
                 if attempt == 1 and isinstance(cause, OctopusQueryError) and cause.auth:
@@ -269,14 +309,14 @@ class Home:
                     continue
                 raise
 
-    def _rest(self, path, params, pages=MAX_PAGES):
+    def _rest(self, path, params, pages=MAX_PAGES, auth=True):
         """Every page of a REST list. Only the page number is taken from `next`,
         so the key is only ever sent to OCTOPUS_BASE_URL."""
         results, page = [], 1
         for _ in range(pages):
             query = dict(params, **({'page': page} if page > 1 else {}))
             data = self._json(self.base + path + '?' + urllib.parse.urlencode(query),
-                              {'Authorization': self._auth_basic()})
+                              {'Authorization': self._auth_basic()} if auth else None)
             if not isinstance(data, dict):
                 raise OctopusError('Unexpected response from Octopus')
             results.extend(r for r in data.get('results') or [] if isinstance(r, dict))
@@ -410,6 +450,7 @@ class Home:
                 log.info('[home] %s: %d half hours from %s', 'electricity' if fuel == 'elec' else 'gas', added,
                          uk_clock(min(slots))[0].isoformat())
         self.refresh_ci(now, everything=True)
+        self.data_version += 1
 
     def refresh_ci(self, now, everything=False):
         """Carbon intensity firms up after the event; missing values may arrive later."""
@@ -440,7 +481,8 @@ class Home:
                 path = '/v1/products/%s/%s/%s/' % (q(agreement['product']), 'electricity-tariffs' if fuel == 'elec'
                                                    else 'gas-tariffs', q(agreement['tariff']))
                 for kind, leaf in (('unit', 'standard-unit-rates/'), ('standing', 'standing-charges/')):
-                    results = self._rest(path + leaf, {'period_from': iso(lo), 'period_to': iso(hi), 'page_size': 1500})
+                    # Tariff prices are public: no need to send the key
+                    results = self._rest(path + leaf, {'period_from': iso(lo), 'period_to': iso(hi), 'page_size': 1500}, auth=False)
                     direct = [r for r in results if r.get('payment_method') in (None, 'DIRECT_DEBIT')] or results
                     for item in direct:
                         try:
@@ -454,9 +496,45 @@ class Home:
                             end = agreement['end'] if end is None else min(end, agreement['end'])
                         if end is None or end > start:
                             rows.append((fuel, kind, start, end, value))
+            self.data_version += 1
             if self.store.replace('DELETE FROM home_rate WHERE fuel = ?', (fuel,),
                                   'INSERT OR REPLACE INTO home_rate (fuel, kind, start, end, p) VALUES (?, ?, ?, ?, ?)', rows):
                 self.version += 1
+
+    def poll_sessions(self, now):
+        data = self._query(SESSIONS_QUERY % json.dumps(self.account), now, url=self.backend + '/v1/graphql/')
+        block = data.get('savingSessions') or {}
+        account = block.get('account') or {}
+        events = []
+        for item in block.get('events') or []:
+            try:
+                events.append({'id': int(item['id']), 'start': parse_time(item['startAt']), 'end': parse_time(item['endAt']),
+                               'reward': int(item.get('rewardPerKwhInOctoPoints') or 0), 'type': str(item.get('eventType') or ''),
+                               'regions': [str(r.get('regionId')) for r in item.get('targetRegion') or [] if isinstance(r, dict)]})
+            except (KeyError, TypeError, ValueError):
+                continue
+        joined = {}
+        for item in account.get('joinedEvents') or []:
+            try:
+                joined[int(item['eventId'])] = {'start': parse_time(item['startAt']), 'end': parse_time(item['endAt']),
+                                                'given': as_number(item.get('rewardGivenInOctoPoints')), 'type': str(item.get('eventType') or '')}
+            except (KeyError, TypeError, ValueError):
+                continue
+        region = (account.get('signedUpMeterPoint') or {}).get('regionId')
+        with self.lock:
+            self.sessions = {'at': now, 'joined_campaign': bool(account.get('hasJoinedCampaign')),
+                             'can_join': bool(account.get('canJoinCampaign')), 'region': None if region is None else str(region),
+                             'events': events, 'joined': joined}
+            self.version += 1
+
+    def poll_points(self, now):
+        ledgers = self._query(POINTS_QUERY, now, prefix='JWT ').get('loyaltyPointLedgers') or []
+        balance = None
+        if ledgers and isinstance(ledgers[0], dict):
+            balance = as_number(ledgers[0].get('balanceCarriedForward'))
+        with self.lock:
+            self.points = None if balance is None else int(balance)
+            self.version += 1
 
     # ---- scheduling --------------------------------------------------------
 
@@ -488,7 +566,9 @@ class Home:
         due_live = self._due('live', now) or (every is not None and not self.fails.get('live')
                                               and now - self.live_at >= every - 2)
         steps = [name for name, due in (('account', due_account), ('live', due_live or due_today),
-                                        ('rates', self._due('rates', now)), ('meter', self._due('meter', now))) if due]
+                                        ('rates', self._due('rates', now)), ('meter', self._due('meter', now)),
+                                        ('tariffs', self._due('tariffs', now)), ('sessions', self._due('sessions', now)),
+                                        ('points', self._due('points', now))) if due]
         if self.meters is None and not due_account:   # waiting to retry the account: nothing else can run
             steps = []
         if not steps:
@@ -516,6 +596,18 @@ class Home:
                 elif name == 'meter':
                     self.poll_meter(now)
                     self._schedule('meter', now, True, METER_SECONDS)
+                elif name == 'tariffs':
+                    tariffs.run(self, now)
+                    self.data_version += 1
+                    self._schedule('tariffs', now, True, TARIFFS_SECONDS)
+                elif name == 'sessions':
+                    self.poll_sessions(now)
+                    self._schedule('sessions', now, True, SESSIONS_SECONDS)
+                elif name == 'points':
+                    self.poll_points(now)
+                    self._schedule('points', now, True, POINTS_SECONDS)
+                if name in self.extra_problem:
+                    del self.extra_problem[name]
             except Exception as error:   # one step failing shouldn't stop the others
                 message = str(error) if isinstance(error, FetchError) else type(error).__name__ + ': ' + str(error)
                 if not isinstance(error, FetchError):
@@ -523,6 +615,12 @@ class Home:
                 self._schedule(name, now, False, 0)
                 if name == 'live' and due_today:
                     self._schedule('today', now, False, 0)
+                if name in ('tariffs', 'sessions', 'points'):
+                    # Extras: shown on the page, not as a failing feed (Octoplus may simply not apply)
+                    if self.extra_problem.get(name) != message:
+                        log.warning('[home] %s: %s', name, message)
+                    self.extra_problem[name] = message
+                    continue
                 problem = problem or message
         self.problem = problem or None
         if self.status:
@@ -566,7 +664,97 @@ class Home:
             cached = self.cache = (key, self._build(now, day))
         payload = dict(cached[1])
         payload['live'] = self._live(now, hours)
+        payload['compare'] = self._compare(now)
+        payload['sessions'] = self._sessions(now)
+        payload['extra_problems'] = dict(self.extra_problem) or None
         return payload
+
+    def _compare(self, now):
+        if not self.products or not self.region:
+            return None
+        key = (self.data_version, uk_clock(now)[0])
+        cached = self.compare_cache
+        if cached and cached[0] == key:
+            return cached[1]
+        try:
+            result = tariffs.compare(self, self.products, self.region, now)
+        except Exception:   # never let the comparison break the page
+            log.exception('[home] tariff comparison failed')
+            result = None
+        self.compare_cache = (key, result)
+        return result
+
+    def _baseline(self, start, end, skip_days):
+        """Octopus's baseline for a Saving Session: the same half hours averaged over the
+        previous 10 weekdays (4 weekend days for a weekend session), skipping session days."""
+        day = uk_clock(start)[0]
+        day_start = uk_midnight_utc(day)
+        offsets = list(range(int(floor_to(start, 1800)) - day_start, int(end) - day_start, 1800))
+        weekend, need, dates, d = day.weekday() >= 5, 4 if day.weekday() >= 5 else 10, [], day
+        for _ in range(70):
+            d -= timedelta(days=1)
+            if (d.weekday() >= 5) == weekend and d not in skip_days:
+                dates.append(d)
+                if len(dates) == need:
+                    break
+        wanted = {uk_midnight_utc(x) + off: off for x in dates for off in offsets}
+        if not wanted:
+            return None, False
+        found = {}
+        for t, kwh in self.store.query("SELECT t, kwh FROM home WHERE fuel = 'elec' AND t >= ? AND t <= ?",
+                                       (min(wanted), max(wanted))):
+            if t in wanted:
+                found.setdefault(wanted[t], []).append(kwh)
+        if not found:
+            return None, False
+        total = sum(sum(v) / len(v) for v in found.values())
+        complete = len(found) == len(offsets) and all(len(v) == len(dates) for v in found.values()) and len(dates) == need
+        return total, complete
+
+    def _sessions(self, now):
+        with self.lock:
+            s, points = self.sessions, self.points
+        if s is None and points is None:
+            return None
+        out = {'points': points, 'pounds': None if points is None else round(points * POINT_PENCE / 100, 2),
+               'joined_campaign': None, 'can_join': None, 'upcoming': [], 'active': None, 'past': []}
+        if not s:
+            return out
+        out['joined_campaign'], out['can_join'] = s['joined_campaign'], s['can_join']
+        region = s['region']
+        events = [dict(e) for e in s['events'] if e['type'] in ('TURN_DOWN', 'TURN_UP')
+                  and (not e['regions'] or region is None or region in e['regions'])]
+        known = {e['id'] for e in events}
+        for eid, j in s['joined'].items():
+            if eid not in known and j['type'] in ('TURN_DOWN', 'TURN_UP'):
+                events.append({'id': eid, 'start': j['start'], 'end': j['end'], 'reward': None, 'type': j['type'], 'regions': []})
+        skip = {uk_clock(e['start'])[0] for e in events}
+        for e in sorted(events, key=lambda e: e['start']):
+            if e['start'] > now + 7 * 86400 or e['end'] < now - 150 * 86400:
+                continue
+            joined = s['joined'].get(e['id'])
+            item = {'id': e['id'], 'start': e['start'], 'end': e['end'], 'kind': 'down' if e['type'] == 'TURN_DOWN' else 'up',
+                    'reward': e['reward'], 'joined': joined is not None, 'given': joined['given'] if joined else None}
+            if item['kind'] == 'down':
+                baseline, complete = self._baseline(e['start'], e['end'], skip)
+                item['baseline'] = None if baseline is None else round(baseline, 3)
+                item['baseline_complete'] = complete
+            if e['start'] <= now:
+                row = self.store.query("SELECT SUM(kwh), COUNT(*) FROM home WHERE fuel = 'elec' AND t >= ? AND t < ?",
+                                       (floor_to(e['start'], 1800), e['end']))
+                used, n = (row[0] if row else (None, 0))
+                item['used'] = None if not n else round(used, 3)
+                if item['kind'] == 'down' and item.get('baseline') is not None and item['used'] is not None:
+                    item['saved'] = round(max(0.0, item['baseline'] - item['used']), 3)
+                    item['estimate'] = round(item['saved'] * (item['reward'] or 0))
+            if e['end'] <= now:
+                out['past'].append(item)
+            elif e['start'] <= now:
+                out['active'] = item
+            else:
+                out['upcoming'].append(item)
+        out['past'] = out['past'][::-1][:8]
+        return out
 
     def _live(self, now, hours):
         """The latest reading, and the last `hours` of readings: raw for an hour,
@@ -831,6 +1019,15 @@ def test_octopus():
                       % (len(readings), round(float(last['demand'])), uk_clock(parse_time(last['readAt']))[1]))
             else:
                 print("  Home Mini: no readings in the last ten minutes. Check it's plugged in and online.")
+        try:
+            home.poll_points(now)
+            home.poll_sessions(now)
+            s = home.sessions
+            print('Octoplus: %s points; Saving Sessions: %s, %d session%s listed'
+                  % ('{:,}'.format(home.points) if home.points is not None else 'no',
+                     'joined' if s['joined_campaign'] else 'not joined this season', len(s['events']), '' if len(s['events']) == 1 else 's'))
+        except FetchError as error:
+            print('Octoplus and Saving Sessions: not available (' + str(error)[:120] + '). The rest still works.')
     except FetchError as error:
         return str(error)
     print('All good. The Your home page fills in within a few minutes of starting.')
