@@ -41,7 +41,11 @@ METER_SECONDS = 3 * 3600      # the meter's half-hourly readings
 RATES_SECONDS = 12 * 3600
 ACCOUNT_SECONDS = 12 * 3600
 BACKFILL_DAYS = 400
-LIVE_WINDOW = 1800            # seconds of 10-second readings fetched for the live chart
+LIVE_KEEP = 26 * 3600         # 10-second readings kept for the live chart (24 hours shown)
+LIVE_CATCH_UP = 2 * 3600      # after a gap, how far back to fetch them
+LIVE_OVERLAP = 300            # refetch a few minutes, for readings that arrived late
+LIVE_RANGES = {1: 10, 6: 60, 24: 240}   # hours shown: seconds per point (the raw readings, then averages)
+DISPLAY_SECONDS = 120         # live readings while a Display with the Your home slide is running
 MAX_PAGES = 30
 TOKEN_MARGIN = 300            # renew the token this long before it expires
 
@@ -193,10 +197,13 @@ class Home:
         self.live = None              # {'t', 'w', 'points': [[t, w], ...]}
         self.live_at = 0              # when live readings were last fetched
         self.viewed = 0               # when the page last asked for data
+        self.displayed = 0            # when a Display last asked
         self.next, self.fails = {}, {}
         self.version = 0
         self.cache = None
         self.problem = None
+        if self.enabled and store is not None:
+            self.restore()
 
     # ---- the API -----------------------------------------------------------
 
@@ -324,7 +331,9 @@ class Home:
         device = (self.meters or {}).get('elec', {}).get('device')
         if not device:
             return
-        parts = [TELEMETRY % ('live', json.dumps(device), 'TEN_SECONDS', json.dumps(gql_time(now - LIVE_WINDOW)),
+        last = self.store.scalar('SELECT MAX(t) FROM home_live')
+        since = max(now - LIVE_CATCH_UP, (last - LIVE_OVERLAP) if last else 0)
+        parts = [TELEMETRY % ('live', json.dumps(device), 'TEN_SECONDS', json.dumps(gql_time(since)),
                               json.dumps(gql_time(now + 60)))]
         if today:
             day, _ = uk_clock(now)
@@ -343,10 +352,13 @@ class Home:
             if w is not None:
                 points.append([t, round(w)])
         points.sort()
+        if points:
+            self.store.write('INSERT OR REPLACE INTO home_live (t, w) VALUES (?, ?)', points, history=False)
+            self.store.write('DELETE FROM home_live WHERE t < ?', [(now - LIVE_KEEP,)], history=False)
         with self.lock:
             self.live_at = now
             if points:
-                self.live = {'t': points[-1][0], 'w': points[-1][1], 'points': points}
+                self.live = {'t': points[-1][0], 'w': points[-1][1]}
                 self.version += 1
         if today:
             slots = {}
@@ -463,11 +475,18 @@ class Home:
         """Run whatever is due. Returns None if nothing was, else the first error (or '')."""
         if not self.enabled:
             return None
-        viewing = now - self.viewed < VIEWING
+        # Live readings: every OCTOPUS_LIVE_SECONDS while the page is open, every two
+        # minutes while a Display shows the Your home slide, every five otherwise
+        every = (OCTOPUS_LIVE_SECONDS if now - self.viewed < VIEWING else
+                 max(OCTOPUS_LIVE_SECONDS, DISPLAY_SECONDS) if now - self.displayed < VIEWING else None)
         due_account = self._due('account', now)
-        due_today = self._due('today', now)
-        due_live = self._due('live', now) or (viewing and not self.fails.get('live')
-                                              and now - self.live_at >= OCTOPUS_LIVE_SECONDS - 2)
+        # Today's half hours ride along with a live request; on their own only when nothing else is asking
+        due_today = now >= self.next.get('today', 0) - (60 if every is not None else 0)
+        if every is not None and not self._due('live', now) and not (
+                not self.fails.get('live') and now - self.live_at >= every - 2):
+            due_today = False
+        due_live = self._due('live', now) or (every is not None and not self.fails.get('live')
+                                              and now - self.live_at >= every - 2)
         steps = [name for name, due in (('account', due_account), ('live', due_live or due_today),
                                         ('rates', self._due('rates', now)), ('meter', self._due('meter', now))) if due]
         if self.meters is None and not due_account:   # waiting to retry the account: nothing else can run
@@ -513,6 +532,12 @@ class Home:
                 self.status.ok('home')
         return problem
 
+    def restore(self):
+        """The latest reading kept from before a restart."""
+        row = self.store.query('SELECT t, w FROM home_live ORDER BY t DESC LIMIT 1') if self.store else []
+        if row:
+            self.live = {'t': row[0][0], 'w': round(row[0][1])}
+
     def data_time(self):
         with self.lock:
             return self.live['t'] if self.live else None
@@ -526,18 +551,40 @@ class Home:
             rates.setdefault((fuel, kind), []).append((start, end, p))
         return rates
 
-    def view(self, now):
-        self.viewed = now
+    def view(self, now, hours=1, display=False):
+        if display:
+            self.displayed = now
+        else:
+            self.viewed = now
         if not self.enabled:
             return {'enabled': False}
+        hours = hours if hours in LIVE_RANGES else 1
         day, _ = uk_clock(now)
         key = (self.version, day, int(now // 60))
         cached = self.cache
-        if cached and cached[0] == key:
-            return cached[1]
-        payload = self._build(now, day)
-        self.cache = (key, payload)
+        if not cached or cached[0] != key:
+            cached = self.cache = (key, self._build(now, day))
+        payload = dict(cached[1])
+        payload['live'] = self._live(now, hours)
         return payload
+
+    def _live(self, now, hours):
+        """The latest reading, and the last `hours` of readings: raw for an hour,
+        averaged into one- or four-minute points for longer."""
+        with self.lock:
+            latest = dict(self.live) if self.live else None
+        if not latest:
+            return None
+        step = LIVE_RANGES[hours]
+        start = now - hours * 3600
+        if step == 10:
+            points = [[t, round(w)] for t, w in self.store.query(
+                'SELECT t, w FROM home_live WHERE t >= ? ORDER BY t', (start,))]
+        else:
+            points = [[int(b) * step, round(w)] for b, w in self.store.query(
+                'SELECT t / ?, AVG(w) FROM home_live WHERE t >= ? GROUP BY t / ? ORDER BY 1', (step, start, step))]
+        latest.update({'points': points, 'hours': hours, 'step': step})
+        return latest
 
     def _build(self, now, today):
         # From the first of the month twelve months ago, so every month in the table is whole
@@ -662,10 +709,6 @@ class Home:
             'SELECT t, forecast, actual, idx FROM ci WHERE region = 0 AND t >= ? AND t < ? ORDER BY t',
             (today_start, uk_midnight_utc(today + timedelta(days=1)))) if (a if a is not None else f) is not None]
 
-        with self.lock:
-            live = dict(self.live) if self.live else None
-        if live:
-            live['points'] = [p for p in live['points'] if p[0] >= now - LIVE_WINDOW]
         tariffs = {}
         for fuel in ('elec', 'gas'):
             info = (self.meters or {}).get(fuel)
@@ -690,7 +733,6 @@ class Home:
             'meters': {'elec': bool(self.meters and 'elec' in self.meters),
                        'gas': bool(self.meters and 'gas' in self.meters),
                        'live': bool(self.meters and (self.meters.get('elec') or {}).get('device'))} if self.meters else None,
-            'live': live,
             'live_seconds': OCTOPUS_LIVE_SECONDS,
             'grid': {'ci': None if grid_ci is None else round(grid_ci), 'idx': grid[0][2] if grid else None},
             'today': {'d': today.isoformat(), 'start': today_start, 'slots': today_slots, 'ahead': ahead,

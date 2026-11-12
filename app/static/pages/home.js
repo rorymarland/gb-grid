@@ -2,10 +2,12 @@
 import G from '/static/js/gb.js';
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num, hm = G.hm, niceStep = G.niceStep, makeTip = G.makeTip;
-var state = { data: null, measure: 'kg', drawn: {} };
+var state = { data: null, measure: 'kg', hours: 1, drawn: {} };
 try {
   var saved = localStorage.getItem('gb-home-measure');
   if (saved === 'kwh' || saved === 'cost' || saved === 'kg') state.measure = saved;
+  var savedHours = Number(localStorage.getItem('gb-home-hours'));
+  if (savedHours === 1 || savedHours === 6 || savedHours === 24) state.hours = savedHours;
 } catch (e) { /* storage unavailable */ }
 
 var dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: G.TZ });
@@ -69,34 +71,54 @@ function renderNow(d) {
     text.textContent = '';
   }
   meta.textContent = 'Reading at ' + hm(live.t) + '. Updates every ' + (d.live_seconds >= 120 ? Math.round(d.live_seconds / 60) + ' minutes' : d.live_seconds === 60 ? 'minute' : d.live_seconds + ' seconds') + ' while this page is open.';
-  drawSpark(live.points || [], d.now);
+  drawSpark(live, d.now);
 }
 
-function drawSpark(points, now) {
-  var box = clear(byId('spark'));
-  if (points.length < 2) return;
-  var width = Math.max(220, box.clientWidth || 360), height = 92, padT = 16, padB = 18;
-  var end = Math.max(now, points[points.length - 1][0]), start = end - 1800;
+var RANGE_WORDS = { 1: 'the last hour', 6: 'the last 6 hours', 24: 'the last 24 hours' };
+
+function drawSpark(live, now) {
+  var box = clear(byId('spark')), points = live.points || [];
+  if (points.length < 2) {
+    box.appendChild(h('p', { cls: 'hm-spark-empty', text: 'Readings for ' + RANGE_WORDS[live.hours] + ' build up as they arrive.' }));
+    return;
+  }
+  var span = live.hours * 3600, step = live.step || 10;
+  var width = Math.max(240, box.clientWidth || 420), height = 132, padT = 18, padB = 20, padR = 2;
+  var end = Math.max(now, points[points.length - 1][0] + step), start = end - span;
   var top = Math.max.apply(null, points.map(function (p) { return p[1]; }));
-  var step = niceStep(top || 1, 2), hi = Math.ceil((top || 1) / step) * step;
-  var x = function (t) { return (t - start) / 1800 * width; };
+  var yStep = niceStep(top || 1, 2), hi = Math.ceil((top || 1) / yStep) * yStep;
+  var x = function (t) { return (t - start) / span * (width - padR); };
   var y = function (v) { return padT + (1 - v / hi) * (height - padT - padB); };
-  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': 'Power used over the last 30 minutes, up to ' + G.int(top) + ' watts' });
-  svg.appendChild(s('line', { 'class': 'grid-line', x1: 0, x2: width, y1: y(hi), y2: y(hi) }));
-  svg.appendChild(s('text', { 'class': 'axis-text', x: 0, y: y(hi) - 5, text: power(hi).join(' ') }));
-  svg.appendChild(s('line', { 'class': 'grid-line', x1: 0, x2: width, y1: y(0), y2: y(0) }));
-  svg.appendChild(s('text', { 'class': 'axis-text', x: 0, y: height - 3, text: '30 min ago' }));
+  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img',
+    'aria-label': 'Power used over ' + RANGE_WORDS[live.hours] + ', up to ' + power(top).join(' ') });
+  [hi, hi / 2, 0].forEach(function (v) {
+    svg.appendChild(s('line', { 'class': 'grid-line', x1: 0, x2: width, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
+  });
+  svg.appendChild(s('text', { 'class': 'axis-text', x: 0, y: y(hi) - 5, text: hi >= 1000 ? +(hi / 1000).toFixed(1) + ' kW' : hi + ' W' }));
+  /* Clock times along the bottom: every 15 minutes, hour or 6 hours */
+  var tick = live.hours === 1 ? 900 : live.hours === 6 ? 3600 : 6 * 3600;
+  for (var t = Math.ceil(start / tick) * tick; t < end - tick / 3; t += tick) {
+    if (x(t) < 18) continue;
+    svg.appendChild(s('line', { 'class': 'grid-line', x1: x(t).toFixed(1), x2: x(t).toFixed(1), y1: y(0), y2: y(0) + 4 }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: x(t).toFixed(1), y: height - 3, 'text-anchor': 'middle', text: hm(t) }));
+  }
   svg.appendChild(s('text', { 'class': 'axis-text', x: width, y: height - 3, 'text-anchor': 'end', text: 'Now' }));
-  var line = '', prev = null;
+  /* Breaks where readings are missing (the Home Mini offline, or the server down) */
+  var gap = Math.max(60, step * 3), line = '', area = '', run = [];
+  function flush() {
+    if (run.length < 2) { run = []; return; }
+    var d = run.map(function (p, i) { return (i ? 'L' : 'M') + x(p[0]).toFixed(1) + ' ' + y(p[1]).toFixed(1); }).join('');
+    line += d;
+    area += d + 'L' + x(run[run.length - 1][0]).toFixed(1) + ' ' + y(0) + 'L' + x(run[0][0]).toFixed(1) + ' ' + y(0) + 'Z';
+    run = [];
+  }
   points.forEach(function (p) {
     if (p[0] < start) return;
-    line += (!prev || p[0] - prev[0] > 60 ? 'M' : 'L') + x(p[0]).toFixed(1) + ' ' + y(p[1]).toFixed(1);
-    prev = p;
+    if (run.length && p[0] - run[run.length - 1][0] > gap) flush();
+    run.push(p);
   });
-  var first = points.filter(function (p) { return p[0] >= start; })[0];
-  if (first && prev) {
-    svg.appendChild(s('path', { 'class': 'hm-spark-area', d: line + 'L' + x(prev[0]).toFixed(1) + ' ' + y(0) + 'L' + x(first[0]).toFixed(1) + ' ' + y(0) + 'Z' }));
-  }
+  flush();
+  svg.appendChild(s('path', { 'class': 'hm-spark-area', d: area }));
   svg.appendChild(s('path', { 'class': 'hm-spark-line', d: line }));
   var cross = s('line', { 'class': 'xhair', y1: padT, y2: height - padB, visibility: 'hidden' });
   svg.appendChild(cross);
@@ -104,13 +126,15 @@ function drawSpark(points, now) {
   var tip = makeTip(box);
   svg.addEventListener('pointermove', function (e) {
     var rect = svg.getBoundingClientRect();
-    var at = start + (e.clientX - rect.left) / rect.width * 1800, best = null;
+    var at = start + (e.clientX - rect.left) / rect.width * span, best = null;
     points.forEach(function (p) { if (!best || Math.abs(p[0] - at) < Math.abs(best[0] - at)) best = p; });
-    if (!best || Math.abs(best[0] - at) > 60) { tip.hide(); cross.setAttribute('visibility', 'hidden'); return; }
+    if (!best || Math.abs(best[0] - at) > gap) { tip.hide(); cross.setAttribute('visibility', 'hidden'); return; }
     cross.setAttribute('x1', x(best[0]).toFixed(1));
     cross.setAttribute('x2', x(best[0]).toFixed(1));
     cross.setAttribute('visibility', 'visible');
-    tip.show(G.when(best[0], now) + ':' + new Date(best[0] * 1000).toISOString().slice(17, 19), [{ value: power(best[1]).join(' '), label: 'being used' }], x(best[0]) * rect.width / width, 30);
+    var title = step === 10 ? G.when(best[0], now) + ':' + new Date(best[0] * 1000).toISOString().slice(17, 19) : G.when(best[0], now);
+    tip.show(title, [{ value: power(best[1]).join(' '), label: step === 10 ? 'being used' : 'average over ' + step / 60 + ' minutes' }],
+      x(best[0]) * rect.width / width, 30);
   });
   svg.addEventListener('pointerleave', function () { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
 }
@@ -146,7 +170,7 @@ function renderToday(d) {
 
 function drawToday(d) {
   var box = clear(byId('today-chart')), today = d.today;
-  var width = Math.max(300, box.clientWidth || 700), height = 220, padL = 40, padR = 6, padT = 12, padB = 40;
+  var width = Math.max(300, box.clientWidth || 700), height = 220, padL = 62, padR = 6, padT = 12, padB = 40;
   var periods = today.periods, start = today.start, slotW = (width - padL - padR) / periods;
   var used = {};
   today.slots.forEach(function (sl) { used[sl[0]] = sl; });
@@ -160,7 +184,7 @@ function drawToday(d) {
     'aria-label': 'Electricity used in each half hour today, coloured by the grid’s carbon intensity' });
   for (var v = 0; v <= hi + 1e-9; v += step) {
     svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
-    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end', text: step < 0.1 ? fixed(v, 2) : step < 1 ? fixed(v, 1) : G.int(v) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end', text: (step < 0.1 ? fixed(v, 2) : step < 1 ? fixed(v, 1) : G.int(v)) + ' kWh' }));
   }
   var gap = slotW > 8 ? 2 : 1;
   for (var i = 0; i < periods; i++) {
@@ -187,7 +211,6 @@ function drawToday(d) {
     svg.appendChild(s('text', { 'class': 'axis-text', x: tx.toFixed(1), y: height - 6, 'text-anchor': k === 0 ? 'start' : k === periods ? 'end' : 'middle', text: k === periods ? '24:00' : hm(start + k * 1800) }));
   }
   box.appendChild(svg);
-  box.appendChild(h('p', { cls: 'hm-axis-note', text: 'kWh in each half hour' }));
   var tip = makeTip(box);
   svg.addEventListener('pointermove', function (e) {
     var rect = svg.getBoundingClientRect();
@@ -253,7 +276,7 @@ function plural(n, one) { return n + ' ' + one + (n === 1 ? '' : 's'); }
 
 function drawDays(d) {
   var box = clear(byId('days-chart')), m = MEASURES[state.measure], days = d.days;
-  var width = Math.max(300, box.clientWidth || 700), height = 230, padL = 44, padR = 6, padT = 12, padB = 26;
+  var width = Math.max(300, box.clientWidth || 700), height = 230, padL = 62, padR = 6, padT = 12, padB = 26;
   var n = days.length, slotW = (width - padL - padR) / n;
   var totals = days.map(function (x) { return (num(x[m.e]) ? x[m.e] : 0) + (num(x[m.g]) ? x[m.g] : 0); });
   var top = Math.max.apply(null, totals.concat([state.measure === 'cost' ? 100 : 0.5]));
@@ -264,7 +287,8 @@ function drawDays(d) {
     'aria-label': m.label + ' each day for the last 30 days, electricity and gas' });
   for (var v = 0; v <= hi + 1e-9; v += step) {
     svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
-    var label = state.measure === 'cost' ? '£' + (step < 100 ? fixed(v / 100, 2) : G.int(v / 100)) : step < 1 ? fixed(v, 1) : G.int(v);
+    var label = state.measure === 'cost' ? '£' + (step < 100 ? fixed(v / 100, 2) : G.int(v / 100))
+      : (step < 1 ? fixed(v, 1) : G.int(v)) + (state.measure === 'kg' ? ' kg' : ' kWh');
     svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end', text: label }));
   }
   var gap = Math.min(4, slotW * 0.25), barW = Math.max(2, slotW - gap);
@@ -422,10 +446,25 @@ byId('days-measure').addEventListener('click', function (e) {
 });
 setMeasure(state.measure);
 
-var poller = G.poll('/api/home', {
+var poller = G.poll('/api/home?hours=' + state.hours, {
   interval: function () { return 15; },
   onData: render,
   onTick: function (p) { if (G.offline(p)) G.setLive('bad', 'Can’t reach the dashboard server'); }
+});
+
+function setHours(hours) {
+  state.hours = hours;
+  try { localStorage.setItem('gb-home-hours', String(hours)); } catch (e) { /* storage unavailable */ }
+  Array.prototype.forEach.call(byId('live-range').querySelectorAll('button'), function (b) {
+    b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === hours));
+  });
+}
+setHours(state.hours);
+byId('live-range').addEventListener('click', function (e) {
+  var button = e.target.closest('button[data-hours]');
+  if (!button || Number(button.dataset.hours) === state.hours) return;
+  setHours(Number(button.dataset.hours));
+  poller.setUrl('/api/home?hours=' + state.hours);
 });
 
 var resizeTimer = null;
@@ -433,4 +472,3 @@ window.addEventListener('resize', function () {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(function () { if (state.data && state.data.enabled && (state.data.since || state.data.live)) render(state.data); }, 150);
 });
-void poller;

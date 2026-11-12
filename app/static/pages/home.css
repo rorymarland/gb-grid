@@ -13,7 +13,7 @@
 .hm-waiting { padding: 8px 0 60px; font-size: 17px; color: var(--ink-2); max-width: 66ch; }
 
 /* Using now */
-.hm-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 420px); gap: 16px 48px; align-items: end; padding: 4px 0 34px; }
+.hm-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 520px); gap: 16px 48px; align-items: end; padding: 4px 0 34px; }
 .hm-figure { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; font-family: var(--font-display); font-stretch: 84%; line-height: 1; }
 .hm-figure b { font-size: clamp(56px, 2rem + 6vw, 92px); font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .hm-figure span { font-size: 24px; font-weight: 560; color: var(--ink-2); }
@@ -21,7 +21,10 @@
 .hm-now-text { margin: 16px 0 0; font-size: 17px; line-height: 1.5; color: var(--ink); max-width: 56ch; }
 .hm-now-meta { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); }
 .hm-now-meta:empty { display: none; }
-.hm-spark { position: relative; min-height: 92px; }
+.hm-live { min-width: 0; }
+.hm-range { margin: 0 0 10px auto; width: max-content; }
+.hm-spark { position: relative; min-height: 132px; }
+.hm-spark-empty { margin: 0; padding: 40px 0; font-size: 14px; color: var(--muted); }
 .hm-spark svg { display: block; width: 100%; overflow: visible; }
 .hm-spark-line { fill: none; stroke: var(--hm-elec); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .hm-spark-area { fill: var(--hm-elec); opacity: 0.12; }
@@ -40,7 +43,6 @@
 .hm-bar.current, .hm-day.current { opacity: 0.55; }
 .hm-strip.ahead { opacity: 0.45; }
 .hm-now-line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
-.hm-axis-note { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .hm-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
 .hm-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .hm-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
@@ -67,6 +69,7 @@
 
 @media (max-width: 860px) {
   .hm-now { grid-template-columns: minmax(0, 1fr); }
+  .hm-range { margin-left: 0; }
   .hm-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {

@@ -31,7 +31,14 @@ OCTOPUS_ACCOUNT=A-1234ABCD</code></pre>
         <p class="hm-now-text" id="now-text"></p>
         <p class="hm-now-meta" id="now-meta"></p>
       </div>
-      <div class="hm-spark" id="spark"></div>
+      <div class="hm-live">
+        <div class="toggle hm-range" role="group" aria-label="Live readings over" id="live-range">
+          <button type="button" data-hours="1" aria-pressed="true">1 hour</button>
+          <button type="button" data-hours="6" aria-pressed="false">6 hours</button>
+          <button type="button" data-hours="24" aria-pressed="false">24 hours</button>
+        </div>
+        <div class="hm-spark" id="spark"></div>
+      </div>
     </section>
 
     <section class="panel" aria-labelledby="today-title">

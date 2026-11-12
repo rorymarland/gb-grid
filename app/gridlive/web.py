@@ -401,7 +401,12 @@ class Handler(BaseHTTPRequestHandler):
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'max-age=86400'
                     self.respond(200, body, content_type, send_body, etag=etag, cache=cache)
             elif parts.path == '/api/home':
-                self.respond_json(App.home.view(time.time()) if App.home else {'enabled': False}, send_body)
+                try:
+                    hours = int(query.get('hours', ['1'])[0])
+                except ValueError:
+                    hours = 1
+                display = query.get('from', [''])[0] == 'display'
+                self.respond_json(App.home.view(time.time(), hours, display) if App.home else {'enabled': False}, send_body)
             elif parts.path == '/api/live':
                 self.respond_json(App.grid.live(), send_body)
             elif parts.path == '/api/history':

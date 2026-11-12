@@ -94,7 +94,9 @@ your own use alongside the grid's. Off unless set up; see
 [Your home settings](#your-home-octopus-energy).
 
 - **Now:** what your home is drawing, from an Octopus Home Mini, and what that
-  means in CO₂ an hour at the grid's current carbon intensity.
+  means in CO₂ an hour at the grid's current carbon intensity, with the last
+  hour, 6 hours or 24 hours of readings. The server keeps a day of the Home
+  Mini's 10-second readings, so the longer views cost no extra requests.
 - **Today:** each half hour's use coloured by how clean the grid was, with
   the forecast for the rest of the day, and today's carbon and cost so far.
 - **The last 30 days:** carbon, energy or cost each day, electricity and gas.
@@ -211,8 +213,9 @@ allows.
 | ![Display: Today on the grid](docs/display-story.png) | ![Display: the next 48 hours](docs/display-outlook.png) |
 
 Options go in the address:
-`/display?views=now,story,day,map,regions,balancing,outlook,outages,records`
-(which slides, in order), `every=20` (seconds per slide), `night=23-7` (dim
+`/display?views=now,home,story,day,map,regions,balancing,outlook,outages,records`
+(which slides, in order; `home`, Your home, only shows when
+[Octopus is set up](#your-home-octopus-energy)), `every=20` (seconds per slide), `night=23-7` (dim
 hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
 
 ## Quick start
@@ -374,8 +377,9 @@ meter serials). Readings are kept in the `/data` volume.
 **How often it asks Octopus.** Octopus allows about 100 requests an hour per
 account, shared with its app and anything else using your key (Home
 Assistant's Octopus integration, for one). This server makes about 14 an hour
-in the background and about 60 while the Your home page is open, when live
-readings come every minute. With other integrations polling too, raise
+in the background, about 60 while the Your home page is open (live readings
+every minute) and about 32 while a [Display](#display) shows the Your home
+slide (every two minutes). With other integrations polling too, raise
 `OCTOPUS_LIVE_SECONDS`.
 
 **Without a Home Mini**, there are no live readings: everything else works,

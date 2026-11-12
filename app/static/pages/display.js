@@ -12,7 +12,8 @@ import { renderParts } from '/static/js/summary.js';
 
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
-var DEFAULT_VIEWS = 'now,story,day,map,regions,balancing,outlook,outages,records';
+/* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
+var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,outlook,outages,records';
 var every = G.clamp(Number(params.get('every')) || 20, 5, 600);
 var nightSpec = (params.get('night') || '23-7').match(/^(\d{1,2})-(\d{1,2})$/);
 var nightFrom = nightSpec ? Number(nightSpec[1]) : null, nightTo = nightSpec ? Number(nightSpec[2]) : null;
@@ -46,13 +47,13 @@ function whenPhrase(t) {
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
   regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
-  story: ['/api/summary?day=today', 300]
+  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60]
 };
 var data = {}, polls = {};
 function startFeed(name) {
   if (polls[name]) return;
   polls[name] = G.poll(FEEDS[name][0], {
-    onData: function (d) { data[name] = d; slides.forEach(function (sl) { if (sl.needs.indexOf(name) >= 0) sl.update(); }); if (name === 'live') renderNight(); },
+    onData: function (d) { data[name] = d; if (name === 'home' && !d.enabled) { dropSlide('home'); return; } slides.forEach(function (sl) { if (sl.needs.indexOf(name) >= 0) sl.update(); }); if (name === 'live') renderNight(); },
     onTick: function (p) { if (name !== 'live') return; var off = G.offline(p); if (off !== state.offline) { state.offline = off; renderState(); } },
     interval: function () { return FEEDS[name][1]; }
   });
@@ -462,10 +463,115 @@ function buildStory(body, take) {
   };
 }
 
+/* ---------- your home ---------- */
+
+var BAND = function (ci) { return ci < 40 ? 'very low' : ci < 120 ? 'low' : ci < 200 ? 'moderate' : ci < 280 ? 'high' : 'very high'; };
+function homePower(w) { return w >= 1000 ? [(w / 1000).toFixed(2), 'kW'] : [String(Math.round(w)), 'W']; }
+function homeKg(v) { return v < 1 ? Math.round(v * 1000) + ' g' : v < 10 ? v.toFixed(1) + ' kg' : Math.round(v) + ' kg'; }
+function homeKwh(v) { return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + ' kWh'; }
+function homeCost(p) { return '£' + (p / 100).toFixed(2); }
+
+function buildHome(body, take) {
+  var left = h('div', { cls: 'gauge-box home-now' }), side = h('div', { cls: 'side' });
+  var big = h('p', { cls: 'big' }), pill = h('p', { cls: 'pill' }), chart = h('div', { cls: 'home-spark' }), note = h('p', { cls: 'foot-note' });
+  left.appendChild(big); left.appendChild(pill); left.appendChild(chart); left.appendChild(note);
+  body.appendChild(h('div', { cls: 'split even' }, [left, side]));
+  var last = null, drawnAt = '';
+  /* Redrawn whenever the box settles to a new size, as the other slides' charts are */
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    if (last && drawnAt !== chart.clientWidth + 'x' + chart.clientHeight) spark(last[0], last[1]);
+  }).observe(chart);
+  function spark(live, now) {
+    last = [live, now];
+    drawnAt = chart.clientWidth + 'x' + chart.clientHeight;
+    clear(chart);
+    var pts = (live && live.points) || [];
+    var W = chart.clientWidth, H = chart.clientHeight;
+    if (pts.length < 2 || W < 50 || H < 40) return;
+    var start = now - 3600, top = Math.max.apply(null, pts.map(function (p) { return p[1]; })) || 1;
+    var step = G.niceStep(top, 2), hi = Math.ceil(top / step) * step, font = Math.max(13, Math.round(H / 16));
+    var x = function (t) { return (t - start) / 3600 * W; }, y = function (v) { return font + 6 + (1 - v / hi) * (H - font - 8); };
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, 'aria-hidden': 'true' });
+    svg.appendChild(s('line', { 'class': 'home-grid', x1: 0, x2: W, y1: y(hi), y2: y(hi) }));
+    svg.appendChild(s('text', { 'class': 'home-axis', x: 0, y: font, 'font-size': font, text: hi >= 1000 ? +(hi / 1000).toFixed(1) + ' kW' : hi + ' W' }));
+    var d = '', prev = null, fill = '', first = null;
+    pts.forEach(function (p) {
+      if (p[0] < start) return;
+      var gap = prev && p[0] - prev[0] > 60;
+      if (gap && first) { fill += d.slice(d.lastIndexOf('M')) + 'L' + x(prev[0]).toFixed(1) + ' ' + H + 'L' + x(first[0]).toFixed(1) + ' ' + H + 'Z'; first = null; }
+      d += (!prev || gap ? 'M' : 'L') + x(p[0]).toFixed(1) + ' ' + y(p[1]).toFixed(1);
+      if (!first) first = p;
+      prev = p;
+    });
+    if (first && prev) fill += d.slice(d.lastIndexOf('M')) + 'L' + x(prev[0]).toFixed(1) + ' ' + H + 'L' + x(first[0]).toFixed(1) + ' ' + H + 'Z';
+    svg.appendChild(s('path', { d: fill, 'class': 'home-area' }));
+    svg.appendChild(s('path', { d: d, 'class': 'home-line' }));
+    chart.appendChild(svg);
+  }
+  return {
+    ready: function () { var d = data.home; return Boolean(d && d.enabled && (d.live || d.since)); },
+    render: function () {
+      var d = data.home;
+      if (!d) return;
+      if (!d.enabled) { dropSlide('home'); return; }
+      var live = d.live, fresh = live && d.now - live.t < 900, ci = d.grid && d.grid.ci;
+      clear(big); clear(pill); clear(side);
+      if (live) {
+        var p = homePower(live.w);
+        G.add(big, [p[0], h('small', { text: p[1] + (fresh ? ' now' : '') })]);
+      } else big.textContent = '–';
+      big.classList.toggle('stale', !fresh);
+      if (num(ci)) {
+        var level = (d.grid.idx || BAND(ci)).toLowerCase();
+        pill.appendChild(h('i', { style: 'background:' + G.css(CI_LEVEL[level] || '--muted') }));
+        pill.appendChild(document.createTextNode('Grid at ' + ci + ' g/kWh' + (live && fresh ? ', so about ' + Math.round(live.w / 1000 * ci) + ' g of CO₂ an hour' : '')));
+      }
+      note.textContent = live ? (fresh ? 'The last hour. Reading at ' + G.hm(live.t) + '.' : 'Your Home Mini last reported at ' + G.when(live.t) + '.') : 'No live readings.';
+      spark(live, d.now);   /* after the note, so the chart is measured at its final size */
+      var today = d.today && d.today.total, days = d.days || [], yesterday = days[days.length - 2];
+      side.appendChild(h('h3', { text: 'Today so far' }));
+      if (today && num(today.e)) {
+        side.appendChild(h('div', { cls: 'row' }, [h('span', null, [h('i', { cls: 'sw home-elec' }), 'Electricity']), h('b', { text: homeKwh(today.e) }), h('span', { cls: 'muted', text: num(today.e_kg) ? homeKg(today.e_kg) : '' })]));
+        if (num(today.e_cost)) side.appendChild(h('div', { cls: 'row' }, [h('span', { text: 'Cost, with standing charge' }), h('b', { text: homeCost(today.e_cost) }), h('span')]));
+      } else side.appendChild(h('p', { cls: 'foot-note', text: 'Nothing for today yet.' }));
+      if (yesterday && (num(yesterday.e) || num(yesterday.g))) {
+        side.appendChild(h('h3', { text: 'Yesterday' }));
+        if (num(yesterday.e)) side.appendChild(h('div', { cls: 'row' }, [h('span', null, [h('i', { cls: 'sw home-elec' }), 'Electricity']), h('b', { text: homeKwh(yesterday.e) }), h('span', { cls: 'muted', text: num(yesterday.e_kg) ? homeKg(yesterday.e_kg) : '' })]));
+        if (d.meters && d.meters.gas) side.appendChild(h('div', { cls: 'row' }, [h('span', null, [h('i', { cls: 'sw home-gas' }), 'Gas']), h('b', { text: num(yesterday.g) ? homeKwh(yesterday.g) : 'Not in yet' }), h('span', { cls: 'muted', text: num(yesterday.g_kg) ? homeKg(yesterday.g_kg) : '' })]));
+        if (num(yesterday.cost)) side.appendChild(h('div', { cls: 'row' }, [h('span', { text: 'Cost' }), h('b', { text: homeCost(yesterday.cost) }), h('span')]));
+      }
+      var past = days.slice(0, -1), sum = function (k) { return past.reduce(function (a, x) { return a + (num(x[k]) ? x[k] : 0); }, 0); };
+      if (past.some(function (x) { return num(x.e); })) {
+        side.appendChild(h('h3', { text: 'The last 30 days' }));
+        side.appendChild(h('div', { cls: 'row' }, [h('span', { text: 'Carbon' }), h('b', { text: homeKg(sum('e_kg') + sum('g_kg')) }), h('span', { cls: 'muted', text: 'CO₂' })]));
+        side.appendChild(h('div', { cls: 'row' }, [h('span', { text: 'Cost' }), h('b', { text: homeCost(sum('e_cost') + sum('g_cost')) }), h('span')]));
+      }
+      fit(side);
+      take.textContent = live && fresh
+        ? 'Using ' + homePower(live.w).join(' ') + (today && num(today.e) ? '; ' + homeKwh(today.e) + ' so far today' + (num(today.e_kg) ? ', ' + homeKg(today.e_kg) + ' of CO₂' : '') : '') + '.'
+        : today && num(today.e) ? homeKwh(today.e) + ' so far today.' : 'Your electricity and gas, from Octopus.';
+    }
+  };
+}
+
+/* Take a slide out of the rotation (Your home, when Octopus isn't set up) */
+function dropSlide(key) {
+  var i = slides.findIndex(function (sl) { return sl.key === key; });
+  if (i < 0 || slides.length < 2) return;
+  var current = slides[state.index];
+  slides[i].el.remove();
+  slides.splice(i, 1);
+  dots.lastElementChild.remove();
+  var at = slides.indexOf(current);
+  if (at < 0) show(i % slides.length, 1);
+  else { state.index = at; Array.prototype.forEach.call(dots.children, function (d, j) { d.classList.toggle('on', j === at); }); }
+}
+
 /* ---------- the slides in order ---------- */
 
 var BUILDERS = {
   now: ['Right now', ['live', 'alerts'], buildNow],
+  home: ['Your home', ['home'], buildHome],
   story: ['Today on the grid', ['story'], buildStory],
   day: ['The last 24 hours', ['day'], buildDay],
   map: ['Power stations', ['map'], buildMap],

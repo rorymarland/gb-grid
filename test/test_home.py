@@ -139,26 +139,51 @@ text = json.dumps(view)
 for secret in (mock.MPAN, mock.ELEC_SERIAL, mock.MPRN, mock.GAS_SERIAL, mock.OCTOPUS_DEVICE, mock.OCTOPUS_ACCOUNT, mock.OCTOPUS_KEY):
     check('no identifiers in the API: ' + secret[:4], secret not in text)
 
+# ---- live readings: kept for 24 hours, shown raw for an hour and averaged for longer ----
+
+stored = store.scalar('SELECT COUNT(*) FROM home_live')
+check('live readings stored', stored >= 600, stored)   # two hours caught up on the first run
+one, six, day = home.view(now, 1)['live'], home.view(now, 6)['live'], home.view(now, 24)['live']
+check('an hour of raw readings', one['step'] == 10 and 340 <= len(one['points']) <= 362, (one['step'], len(one['points'])))
+check('six hours in one-minute averages', six['step'] == 60 and len(six['points']) <= 361, (six['step'], len(six['points'])))
+check('a day in four-minute averages', day['step'] == 240 and len(day['points']) <= 361, (day['step'], len(day['points'])))
+check('odd ranges fall back to an hour', home.view(now, 5)['live']['hours'] == 1)
+check('averages are averages', all(130 <= p[1] <= 3500 for p in six['points']))
+restarted = homemod.Home(store, server.Status(), request=request, key=mock.OCTOPUS_KEY, account=mock.OCTOPUS_ACCOUNT, base=BASE)
+check('latest reading survives a restart', restarted.live and restarted.live['t'] == home.live['t'])
+calls.clear()
+home.next['live'] = 0
+home.tick(now + 30)
+sent = [data for _, _, data in calls if data and b'smartMeterTelemetry' in data]
+check('later polls only fetch what is new', sent and b'TEN_SECONDS' in sent[0] and
+      json.loads(sent[0])['query'].count('readAt') >= 1 and
+      server.parse_time(json.loads(sent[0])['query'].split('start: "')[1].split('"')[0]) >= home.live['t'] - 400,
+      sent[0][:300] if sent else None)
+
 # ---- staying inside Octopus's limit: about 100 requests an hour per account ----
 
 
-def hour(viewing):
+def hour(mode, at):
     calls.clear()
     home.token_expires = float('inf')   # the mock's tokens expire in real time, not the simulated clock
-    clock = now + 9 * 3600 if viewing else now + 7 * 3600
+    clock = now + at * 3600
     end = clock + 3600
     while clock < end:
-        if viewing:
+        if mode == 'page':
             home.viewed = clock
+        elif mode == 'display':
+            home.displayed = clock
         home.tick(clock)
         clock += 10
     return len(calls)
 
 
-idle, watched = hour(False), hour(True)
-print('Octopus requests in an hour: %d idle, %d with the page open' % (idle, watched))
+home.viewed = home.displayed = 0
+idle, watched, displayed = hour('idle', 7), hour('page', 9), hour('display', 11)
+print('Octopus requests in an hour: %d idle, %d with the page open, %d with a Display running' % (idle, watched, displayed))
 check('idle hour', idle <= 20, idle)
 check('viewing hour', 55 <= watched <= 75, watched)
+check('display hour', 28 <= displayed <= 40, displayed)
 
 # ---- a rejected token is renewed and the query tried again ---------------------
 

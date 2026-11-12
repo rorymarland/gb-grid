@@ -4,6 +4,21 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.7.0 (unreleased)
+
+- **Your home on the Display:** a new slide after Right now, with what your
+  home is drawing, the last hour of readings, today so far, yesterday and the
+  last 30 days. It's in the default slide list and drops out by itself when
+  Octopus isn't set up; with a `views=` list, add `home` where you want it.
+  While a Display shows it, live readings are fetched every two minutes
+  (about 32 requests an hour to Octopus).
+- **Longer live chart** on Your home: the last hour by default, or 6 or 24
+  hours. The server now keeps a day of the Home Mini's 10-second readings, so
+  the longer views cost no extra requests, survive a restart, and each live
+  request only asks for readings since the last one.
+- **Fixed:** the last 30 days chart's axis now gives its unit (kg or kWh, as
+  well as £), and so does today's.
+
 ## 1.6.0 (2026-11-11)
 
 - **Your home** (`/home`, optional): your own electricity and gas from an

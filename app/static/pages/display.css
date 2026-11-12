@@ -186,3 +186,17 @@ body.is-night .night { display: grid; }
   .bar { grid-template-columns: auto minmax(0, 1fr); }
   .state { grid-column: 1 / -1; justify-content: space-between; }
 }
+
+/* Your home */
+.home-now { justify-content: flex-start; }
+.home-now .big.stale { color: var(--muted); }
+.home-spark { flex: 1 1 auto; min-height: calc(var(--u) * 12); position: relative; overflow: hidden; }
+.home-grid { stroke: var(--hair); }
+.home-axis { fill: var(--muted); }
+.home-spark svg { position: absolute; inset: 0; display: block; }
+.home-line { fill: none; stroke: var(--home-elec); stroke-width: 3; stroke-linejoin: round; }
+.home-area { fill: var(--home-elec); opacity: 0.14; }
+.side .sw.home-elec { background: var(--home-elec); }
+.side .sw.home-gas { background: var(--c-gas); }
+:root { --home-elec: #2f63c4; }
+:root[data-theme="dark"] { --home-elec: #6a8fe0; }
