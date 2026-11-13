@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.14.0 (unreleased)
+## 1.14.0 (2026-11-13)
 
 - **ENTSO-E (optional):** with a free security token in `ENTSOE_API_KEY`, every
   neighbour's carbon intensity is live, worked out from its generation mix as
