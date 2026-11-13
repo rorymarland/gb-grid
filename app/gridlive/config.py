@@ -63,6 +63,11 @@ OCTOPUS_BASE = env_str('OCTOPUS_BASE_URL', 'https://api.octopus.energy').rstrip(
 OCTOPUS_BACKEND = env_str('OCTOPUS_BACKEND_URL', 'https://api.backend.octopus.energy').rstrip('/')   # Octoplus, Saving Sessions
 OCTOPUS_LIVE_SECONDS = env_int('OCTOPUS_LIVE_SECONDS', 60, 30, 600)   # live readings while the page is open
 HOME_ENABLED = bool(OCTOPUS_API_KEY and OCTOPUS_ACCOUNT)
+# The ENTSO-E Transparency Platform: Britain's neighbours' generation mix, for their carbon
+# intensity (see README). Optional, and a secret like the Octopus key: set it in .env or as a
+# Docker secret (ENTSOE_API_KEY_FILE).
+ENTSOE_API_KEY = env_secret('ENTSOE_API_KEY')
+ENTSOE = env_str('ENTSOE_BASE_URL', 'https://web-api.tp.entsoe.eu/api').rstrip('/')
 GAS_CALORIFIC_VALUE = env_float('GAS_CALORIFIC_VALUE', 39.5, 30, 45)     # MJ/m³, for meters that report gas in m³
 GAS_KG_PER_KWH = env_float('GAS_KG_CO2_PER_KWH', 0.183, 0.1, 0.3)       # UK government factor for natural gas
 PORT = env_int('GRID_INTERNAL_PORT', 8080, 1, 65535)
@@ -101,6 +106,7 @@ POLL = {
     'gas': env_int('POLL_GAS_SECONDS', 300, 240, 3600),
     'neighbours': env_int('POLL_NEIGHBOURS_SECONDS', 900, 600, 3600),
     'weather': env_int('POLL_WEATHER_SECONDS', 3600, 1800, 21600),
+    'entsoe': env_int('POLL_ENTSOE_SECONDS', 900, 600, 3600),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card

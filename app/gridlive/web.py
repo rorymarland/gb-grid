@@ -16,7 +16,7 @@ from .gas import gas_generation, home_gas_rate, view as gas_view
 from .neighbours import week as neighbours_week
 from .weather import view as weather_view
 from .constraints import view as constraints_view
-from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
+from .config import ACCESS_LOG, ENTSOE_API_KEY, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
 
 # --------------------------------------------------------------------------
@@ -438,7 +438,13 @@ class Handler(BaseHTTPRequestHandler):
             elif parts.path == '/api/weather':
                 self.respond_json(weather_view(App.store, time.time(), App.grid.live() if App.grid else None), send_body)
             elif parts.path == '/api/neighbours':
-                self.respond_json(neighbours_week(App.store, time.time()), send_body)
+                body = neighbours_week(App.store, time.time())
+                # How the feeds behind it are doing, so the page can say why something is missing
+                feeds = App.grid.status.snapshot() if App.grid else {}
+                body['feeds'] = {k: {'ok': feeds[k].get('last_success') is not None, 'error': feeds[k].get('last_error')}
+                                 for k in ('neighbours', 'entsoe') if k in feeds}
+                body['entsoe'] = bool(ENTSOE_API_KEY)
+                self.respond_json(body, send_body)
             elif parts.path == '/api/forecasts':
                 self.respond_json(App.forecasts.page(time.time()) if App.forecasts else {'kinds': []}, send_body)
             elif parts.path == '/api/review':

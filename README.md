@@ -57,9 +57,11 @@ Timeline.
 Each interconnector's country shows its grid's carbon intensity: live for
 France (RTE's figure for French generation) and Denmark (Energinet's for
 electricity used in western Denmark, where Viking Link lands), every 15
-minutes, and NESO's typical figures for the rest, with Norway, almost all
-hydro, an estimate. The panel compares what's coming in with what Britain is
-generating itself. Both live sources are open and need no key.
+minutes. With an [ENTSO-E key](#entso-e-every-neighbours-carbon-intensity),
+every neighbour is live, worked out from its generation mix; without one,
+the rest use NESO's typical figures, with Norway, almost all hydro, an
+estimate. The panel compares what's coming in with what Britain is
+generating itself. RTE and Energinet are open and need no key.
 
 ### Map and Stations
 
@@ -95,9 +97,12 @@ any units that couldn't be placed on the map.
 ### Regions
 
 NESO's 14 regions coloured by carbon intensity, from 24 hours ago to 48 hours
-ahead, with each region's generation mix and solar output. Below, Britain's
-carbon intensity over the last week against France's and western Denmark's,
-half hour by half hour, with each one's average.
+ahead, with each region's generation mix and solar output. Below, a small
+chart for each neighbour with a live figure, its carbon intensity over the
+last week against Britain's, half hour by half hour, with both averages over
+the same half hours: France and Denmark always, and the Netherlands,
+Belgium, Norway and Ireland with an ENTSO-E key. If a source isn't coming
+through, the panel says why.
 
 ![The regions page](docs/regions.png)
 
@@ -383,10 +388,12 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `OCTOPUS_API_KEY_FILE` | (none) | Read the key from this file instead, such as a Docker secret at `/run/secrets/octopus_api_key` |
 | `OCTOPUS_ACCOUNT` | (none) | Your Octopus account number, such as `A-1234ABCD` |
 | `OCTOPUS_LIVE_SECONDS` | `60` | How often live readings are fetched while the Your home page is open (30 to 600) |
+| `ENTSOE_API_KEY` | (off) | Your ENTSO-E security token, for every neighbour's carbon intensity; see [ENTSO-E](#entso-e-every-neighbours-carbon-intensity). A secret: keep it in `.env` or a Docker secret |
+| `ENTSOE_API_KEY_FILE` | (none) | Read the token from this file instead, such as a Docker secret at `/run/secrets/entsoe_api_key` |
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity; `POLL_WEATHER_SECONDS`, every hour, for the weather) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity; `POLL_WEATHER_SECONDS`, every hour, for the weather; `POLL_ENTSOE_SECONDS`, every 15 minutes, for ENTSO-E) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -434,6 +441,48 @@ docker compose exec gb-grid python /app/server.py --test-notification
 one and the last error. With ntfy.sh, the topic name is the only secret and
 the messages pass through their servers; use your own ntfy server or a
 webhook to keep everything on your network.
+
+### ENTSO-E: every neighbour's carbon intensity
+
+Without a key, France's and Denmark's carbon intensity are live (from RTE and
+Energinet) and the other neighbours use NESO's typical figures. With a free
+security token from the ENTSO-E Transparency Platform, the dashboard also
+works out the Netherlands', Belgium's, southern Norway's and Ireland's (and a
+second figure for France and western Denmark, used when RTE's or Energinet's
+is late) from each one's generation mix, every 15 minutes.
+
+1. Register on the [Transparency Platform](https://transparency.entsoe.eu/),
+   then email transparency@entsoe.eu with "Restful API access" in the
+   subject, from the address you registered with. When access is granted, a
+   security token can be made under **My Account Settings**.
+2. Add it to the `.env` file next to `docker-compose.yml`:
+
+   ```sh
+   ENTSOE_API_KEY=your-token
+   ```
+
+3. Restart (`docker compose up -d`) and check it works:
+
+   ```sh
+   docker compose exec gb-grid python /app/server.py --test-entsoe
+   ```
+
+   This asks for each neighbour's last six hours and prints its latest
+   carbon intensity and biggest sources. The token is never printed or
+   logged.
+
+How it's worked out: ENTSO-E's actual generation per production type for each
+bidding zone that a cable from Britain lands in (France; the Netherlands;
+Belgium; southern Norway, NO2; western Denmark, DK1; and the all-island
+market for Ireland and Northern Ireland), at NESO's factors for each fuel,
+counting only what's burned at power stations, the way NESO counts Britain.
+Gas counts as combined cycle, as ENTSO-E doesn't split it; lignite, peat and
+gas made from coal count as coal and waste as NESO's "other", though none of
+those is significant in these zones. A period only counts once most of a
+zone's sources have reported, as the latest often arrives one at a time. One
+request per neighbour each poll, a second apart; ENTSO-E allows 400 a
+minute. The token keeps the same rules as the Octopus key below: `.env` or a
+Docker secret (`ENTSOE_API_KEY_FILE`), never the compose file.
 
 ### Your home (Octopus Energy)
 
@@ -676,14 +725,14 @@ you edit them.
 Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 `python3 test/test_edges.py` and `python3 test/test_features.py`, and each
 feed's own (`test/test_constraints.py`, `test_review.py`, `test_forecasts.py`,
-`test_imbalance.py`, `test_gas.py`, `test_neighbours.py` and `test_weather.py`).
+`test_imbalance.py`, `test_gas.py`, `test_neighbours.py`, `test_entsoe.py` and `test_weather.py`).
 
 ### How the code is laid out
 
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours`, `weather`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours` with `entsoe`, `weather`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -754,6 +803,9 @@ stations sharing coordinates). The tests run it.
 - French carbon intensity from RTE's éCO2mix, through
   [Open Data Réseaux Énergies](https://odre.opendatasoft.com/explore/dataset/eco2mix-national-tr/)
   (Licence Ouverte v2.0).
+- Neighbours' generation mix, with an ENTSO-E key, from the
+  [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/), under its
+  open data policy for TSOs' data.
 - Danish carbon intensity: contains data used pursuant to "Conditions for use
   of Danish public-sector data", from the
   [Energi Data Service](https://www.energidataservice.dk/) portal.
@@ -775,6 +827,6 @@ stations sharing coordinates). The tests run it.
 - Inspired by Kate Morley's [National Grid: Live](https://grid.iamkate.com/).
 
 Live data is fetched from each source's public API and is subject to its terms.
-This project isn't affiliated with or endorsed by Elexon, NESO, National Gas, RTE, Energinet or Open-Meteo.
+This project isn't affiliated with or endorsed by Elexon, NESO, National Gas, RTE, Energinet, ENTSO-E or Open-Meteo.
 
 The code is released under the [MIT licence](LICENSE).

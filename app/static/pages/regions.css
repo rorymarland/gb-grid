@@ -98,15 +98,21 @@
   .mixbar i, .rank .bar i, .sw { forced-color-adjust: none; }
 }
 
-/* Britain and its neighbours */
-:root { --nb-gb: var(--ink); --nb-fr: #2a78d6; --nb-dk: #eb6834; }
-:root[data-theme="dark"] { --nb-fr: #3987e5; --nb-dk: #d95926; }
-.nb-chart { position: relative; min-height: 220px; margin-top: 6px; }
+/* Britain and its neighbours: one small chart for each, Britain in grey behind */
+:root { --nb-gb: var(--muted); --nb-them: #2a78d6; }
+:root[data-theme="dark"] { --nb-them: #3987e5; }
+.nb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 22px 28px; margin-top: 8px; }
+.nb-card { margin: 0; min-width: 0; }
+.nb-card figcaption { font-size: 13px; color: var(--muted); margin-bottom: 4px; min-height: 5.6em; }
+.nb-card figcaption b { display: block; font-size: 14.5px; font-weight: 620; color: var(--ink); }
+.nb-card .nb-src { display: block; }
+.nb-chart { position: relative; min-height: 150px; }
 .nb-chart svg { display: block; width: 100%; }
-.nb-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.nb-line.nb-gb { stroke: var(--nb-gb); } .nb-line.nb-fr { stroke: var(--nb-fr); } .nb-line.nb-dk { stroke: var(--nb-dk); }
-.nb-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
+.nb-line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.nb-line.nb-gb { stroke: var(--nb-gb); stroke-width: 1.5; }
+.nb-line.nb-them { stroke: var(--nb-them); stroke-width: 2; }
+.nb-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
 .nb-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .nb-legend .sw.line { width: 16px; height: 3px; border-radius: 2px; }
-.nb-gb-sw { background: var(--nb-gb); } .nb-fr-sw { background: var(--nb-fr); } .nb-dk-sw { background: var(--nb-dk); }
-.tip .key.nb-gb-sw, .tip .key.nb-fr-sw, .tip .key.nb-dk-sw { height: 3px; }
+.nb-gb-sw { background: var(--nb-gb); } .nb-them-sw { background: var(--nb-them); }
+.tip .key.nb-gb-sw, .tip .key.nb-them-sw { height: 3px; }

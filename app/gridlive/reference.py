@@ -50,6 +50,35 @@ CARBON_FACTORS = {
     'other': 300, 'nuclear': 0, 'wind': 0, 'solar': 0, 'hydro': 0,
     'pumped': 0, 'battery': 0,
 }
+# ENTSO-E production types (psrType) -> g/kWh, for a neighbour's generation mix (entsoe.py).
+# Counted the way NESO counts Britain's own generation: emissions at the power station only, at
+# NESO's factors, so the figures compare like with like. ENTSO-E's gas isn't split into combined
+# and open cycle, so it counts as combined cycle, as most of it is. Lignite, peat and gas from coal
+# (none of them in the zones linked to Britain) count as coal, oil shale as oil, and waste as NESO's
+# 'other'.
+ENTSOE_FACTORS = {
+    'B01': 120,     # biomass
+    'B02': 937,     # lignite, as coal
+    'B03': 937,     # gas derived from coal, as coal
+    'B04': 394,     # fossil gas, as combined cycle
+    'B05': 937,     # hard coal
+    'B06': 935,     # oil
+    'B07': 935,     # oil shale, as oil
+    'B08': 937,     # peat, as coal
+    'B09': 0,       # geothermal
+    'B10': 0,       # pumped storage, generating
+    'B11': 0,       # run-of-river hydro
+    'B12': 0,       # reservoir hydro
+    'B13': 0,       # marine
+    'B14': 0,       # nuclear
+    'B15': 0,       # other renewable
+    'B16': 0,       # solar
+    'B17': 300,     # waste, as NESO's 'other'
+    'B18': 0,       # offshore wind
+    'B19': 0,       # onshore wind
+    'B20': 300,     # other, as NESO's 'other'
+    'B25': 0,       # energy storage, discharging
+}
 IMPORT_FACTORS = {
     'France': 53, 'Netherlands': 474, 'Belgium': 179, 'Ireland': 458,
     'Norway': 25, 'Denmark': 150,

@@ -17,7 +17,23 @@ releases that keep working with your existing settings and data.
   sunshine. Three requests an hour, after fetching the last 92 days once.
 - A **weather slide** on the Display, after gas.
 - Glossary: hub height and power curve.
-- New setting: `POLL_WEATHER_SECONDS` (default 3600, at least 1800).
+- **ENTSO-E (optional):** with a free security token in `ENTSOE_API_KEY`, every
+  neighbour's carbon intensity is live, worked out from its generation mix as
+  reported to ENTSO-E, at NESO's factors: the Netherlands, Belgium, southern
+  Norway and Ireland, and a fallback for France and western Denmark when
+  RTE's or Energinet's figure is late. Check it with
+  `docker compose exec gb-grid python /app/server.py --test-entsoe`.
+- **Britain and its neighbours** on Regions is now a small chart for each
+  neighbour with a live figure, against Britain's, with both averages over
+  the same half hours, and it says why when a source isn't coming through
+  instead of hiding.
+- New settings: `POLL_WEATHER_SECONDS` (default 3600, at least 1800),
+  `ENTSOE_API_KEY` (or `ENTSOE_API_KEY_FILE`) and `POLL_ENTSOE_SECONDS`
+  (default 900, at least 600).
+- Fixed: `docker-compose.yml` didn't pass several settings from `.env` to the
+  container (`GAS_CALORIFIC_VALUE`, `GAS_KG_CO2_PER_KWH` and the newer
+  `POLL_*_SECONDS`), so changing them in `.env` did nothing. Update your copy
+  of `docker-compose.yml` to pick them up.
 
 ## 1.12.0 (2026-11-13)
 

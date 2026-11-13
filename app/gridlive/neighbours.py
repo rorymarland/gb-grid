@@ -7,8 +7,9 @@
              in western Denmark (DK1, where Viking Link lands), every 5 minutes, in UTC. It
              refuses a second request within a minute or so, so it gets one request a poll.
 
-No key for either. The other neighbours have no open live figure without an account, so they
-keep NESO's typical factors (Norway, almost all hydro, an estimate)."""
+No key for either. With an ENTSO-E security token (entsoe.py), every neighbour also has a figure
+from its generation mix; RTE's and Energinet's own come first where they're fresh. Without one,
+the others keep NESO's typical factors (Norway, almost all hydro, an estimate)."""
 
 import json
 import time
@@ -18,21 +19,27 @@ from datetime import datetime, timezone
 from . import fetch
 from .config import ENERGINET, ODRE, log
 from .fetch import FetchError, as_float
-from .reference import IMPORT_FACTORS
+from .reference import COUNTRY_ORDER, IMPORT_FACTORS
 from .timeutil import parse_time
 
 # The countries in NESO's published table; the dashboard's figures for the rest are estimates
 NESO_FACTORS = ('France', 'Netherlands', 'Belgium', 'Ireland')
 KEEP = 8 * 86400
 BACKFILL = 7 * 86400
-STALE = 2 * 3600            # a live figure older than this gives way to the typical one
+STALE = 2 * 3600            # a live figure older than this gives way to the next source
+ENTSOE_STALE = 4 * 3600     # ENTSO-E's figures arrive later
 PAGE = 100                  # ODRÉ's most records a request
 MAX_PAGES = 10
 
-# Country -> (zone, who publishes it, what it measures)
+# Country -> its live sources, best first: (zone, who publishes it, what it measures, how old it may be)
 LIVE = {
-    'France': ('FR', 'RTE', 'French generation'),
-    'Denmark': ('DK1', 'Energinet', 'electricity used in western Denmark'),
+    'France': [('FR', 'RTE', 'French generation', STALE), ('E:FR', 'ENTSO-E', 'French generation', ENTSOE_STALE)],
+    'Norway': [('E:NO2', 'ENTSO-E', 'generation in southern Norway', ENTSOE_STALE)],
+    'Netherlands': [('E:NL', 'ENTSO-E', 'Dutch generation', ENTSOE_STALE)],
+    'Belgium': [('E:BE', 'ENTSO-E', 'Belgian generation', ENTSOE_STALE)],
+    'Denmark': [('DK1', 'Energinet', 'electricity used in western Denmark', STALE),
+                ('E:DK1', 'ENTSO-E', 'generation in western Denmark', ENTSOE_STALE)],
+    'Ireland': [('E:IE', 'ENTSO-E', 'generation across Ireland and Northern Ireland', ENTSOE_STALE)],
 }
 
 
@@ -119,17 +126,19 @@ class Neighbours:
 # ---- the payloads ------------------------------------------------------------------
 
 def country_carbon(store, now):
-    """Each neighbour's carbon intensity now: {country: {v, live, t, source, what}}. Live where
-    there's an open figure from the last two hours; otherwise NESO's typical factor."""
+    """Each neighbour's carbon intensity now: {country: {v, live, t, source, what}}. From the
+    first of its live sources that's fresh enough; otherwise NESO's typical factor."""
     out = {}
     for country, factor in IMPORT_FACTORS.items():
         out[country] = {'v': factor, 'live': False, 'source': 'NESO' if country in NESO_FACTORS else 'estimate'}
         if country == 'Norway':
             out[country]['note'] = 'almost all hydro'
-    for country, (zone, source, what) in LIVE.items():
-        row = store.query('SELECT t, v FROM ext_ci WHERE zone = ? AND t <= ? ORDER BY t DESC LIMIT 1', (zone, now))
-        if row and row[0][0] >= now - STALE:
-            out[country] = {'v': round(row[0][1]), 'live': True, 't': row[0][0], 'source': source, 'what': what}
+    for country, sources in LIVE.items():
+        for zone, source, what, stale in sources:
+            row = store.query('SELECT t, v FROM ext_ci WHERE zone = ? AND t <= ? ORDER BY t DESC LIMIT 1', (zone, now))
+            if row and row[0][0] >= now - stale:
+                out[country] = {'v': round(row[0][1]), 'live': True, 't': row[0][0], 'source': source, 'what': what}
+                break
     return out
 
 
@@ -152,25 +161,26 @@ def half_hours(store, zone, start, end):
 
 def week(store, now):
     """What /api/neighbours returns: the last seven days, half hour by half hour, for Britain
-    (NESO's figure) and each live neighbour, with each one's mean, and every neighbour now."""
+    (NESO's figure) and each neighbour with a live source (the first with a day or more in the
+    week), each with its mean and Britain's over the same half hours, and every neighbour now."""
     end = now - now % 1800 + 1800
     start = end - BACKFILL
     gb = [[int(t), round(a if a is not None else f, 1)] for t, f, a in store.query(
         'SELECT t, forecast, actual FROM ci WHERE region = 0 AND t >= ? AND t < ? ORDER BY t', (start, min(end, now)))
         if (a if a is not None else f) is not None]
-    series = {'GB': gb}
-    for country, (zone, _, _) in LIVE.items():
-        series[zone] = half_hours(store, zone, start, end)
+    gb_at = dict((t, v) for t, v in gb)
 
-    def mean(rows):
-        return round(sum(v for _, v in rows) / len(rows)) if rows else None
-    # Means over the half hours every series has, so they compare like with like
-    common = set(t for t, _ in gb)
-    for rows in series.values():
-        common &= set(t for t, _ in rows)
-    return {
-        'start': start, 'end': end, 'series': series,
-        'means': {k: mean([r for r in rows if r[0] in common]) for k, rows in series.items()} if len(common) >= 48 else None,
-        'common_hours': len(common) / 2,
-        'now': country_carbon(store, now),
-    }
+    def mean(values):
+        return round(sum(values) / len(values)) if values else None
+    countries = []
+    for country in COUNTRY_ORDER:
+        found = [(zone, source, what, half_hours(store, zone, start, end)) for zone, source, what, _ in LIVE.get(country, [])]
+        found = [f for f in found if f[3]]
+        if not found:
+            continue
+        zone, source, what, rows = next((f for f in found if len(f[3]) >= 48), found[0])
+        both = [(v, gb_at[t]) for t, v in rows if t in gb_at]
+        countries.append({'country': country, 'zone': zone, 'source': source, 'what': what, 'series': rows,
+                          'mean': mean([v for v, _ in both]) if len(both) >= 48 else None,
+                          'gb_mean': mean([g for _, g in both]) if len(both) >= 48 else None, 'hours': len(both) / 2})
+    return {'start': start, 'end': end, 'gb': gb, 'countries': countries, 'now': country_carbon(store, now)}

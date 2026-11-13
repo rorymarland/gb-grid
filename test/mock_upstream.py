@@ -514,6 +514,72 @@ def open_meteo(q):
     return 200, out if len(out) > 1 else out[0]
 
 
+ENTSOE_TOKEN = 'mock-entsoe-token'
+ENTSOE_ASKED = []
+# EIC -> (resolution in seconds, a type sent compressed as curve type A03)
+ENTSOE_ZONES = {'10YFR-RTE------C': (3600, None), '10YNL----------L': (900, 'B14'), '10YBE----------2': (900, None),
+                '10YNO-2--------T': (3600, 'B12'), '10YDK-1--------W': (3600, None), '10Y1001A1001A59C': (1800, None)}
+ENTSOE_LAG = 3600           # figures arrive about an hour behind
+
+
+def entsoe_mix(eic, t):
+    """A bidding zone's generation by production type (MW) at t."""
+    swing = math.sin(t / 30000.0)
+    sun = max(0.0, math.sin(math.pi * (hour_of_day(t) - 7) / 9)) if 7 <= hour_of_day(t) <= 16 else 0.0
+    return {
+        '10YFR-RTE------C': {'B14': 40000.0, 'B04': round(3000 + 1500 * swing), 'B12': 6000.0, 'B19': round(5000 + 3000 * swing), 'B16': round(8000 * sun)},
+        '10YNL----------L': {'B04': round(6000 + 1500 * swing), 'B05': 1500.0, 'B19': round(3000 - 1000 * swing), 'B18': 2000.0, 'B16': round(6000 * sun), 'B14': 450.0, 'B20': 800.0},
+        '10YBE----------2': {'B14': 4000.0, 'B04': round(2500 + 800 * swing), 'B19': 1500.0, 'B18': round(1500 - 700 * swing)},
+        '10YNO-2--------T': {'B12': 7000.0, 'B11': round(1500 + 300 * swing), 'B19': 300.0, 'B04': 50.0},
+        '10YDK-1--------W': {'B19': round(2500 + 1500 * swing), 'B18': 1000.0, 'B01': 300.0, 'B05': 200.0, 'B04': 150.0},
+        '10Y1001A1001A59C': {'B04': round(2500 + 600 * swing), 'B19': round(1800 - 800 * swing), 'B05': 100.0, 'B06': 50.0, 'B20': 200.0},
+    }[eic]
+
+
+def entsoe_xml(q):
+    """ENTSO-E's A75 document, or its acknowledgement when there's nothing."""
+    ENTSOE_ASKED.append(q)
+    if q.get('securityToken') != ENTSOE_TOKEN:
+        return 401, '<html><body><h1>401 Unauthorized</h1></body></html>'
+    eic = q.get('in_Domain')
+    if q.get('documentType') != 'A75' or q.get('processType') != 'A16' or eic not in ENTSOE_ZONES:
+        return 400, '<?xml version="1.0" encoding="UTF-8"?><Acknowledgement_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-1:acknowledgementdocument:7:0"><Reason><code>999</code><text>mock: bad request</text></Reason></Acknowledgement_MarketDocument>'
+    def at(text):
+        return int(datetime.strptime(text, '%Y%m%d%H%M').replace(tzinfo=timezone.utc).timestamp())
+    step, compressed = ENTSOE_ZONES[eic]
+    start, end = at(q['periodStart']), min(at(q['periodEnd']), int(_clock.time()) - ENTSOE_LAG)
+    start += (-start) % step
+    end -= end % step
+    if end <= start:
+        return 200, ('<?xml version="1.0" encoding="UTF-8"?><Acknowledgement_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-1:acknowledgementdocument:7:0">'
+                     '<Reason><code>999</code><text>No matching data found for Data item ACTUAL_GENERATION_PER_PRODUCTION_TYPE [16.1.B&amp;C]</text></Reason></Acknowledgement_MarketDocument>')
+    times = list(range(start, end, step))
+    kinds = list(entsoe_mix(eic, start))
+    resolution = {900: 'PT15M', 1800: 'PT30M', 3600: 'PT60M'}[step]
+    def iso_min(x):
+        return datetime.fromtimestamp(x, timezone.utc).strftime('%Y-%m-%dT%H:%MZ')
+    out = ['<?xml version="1.0" encoding="UTF-8"?>', '<GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">',
+           '<mRID>mock</mRID><type>A75</type><process.processType>A16</process.processType>']
+    for kind in kinds:
+        # The latest period has only the first two types in so far
+        rows = [(i + 1, entsoe_mix(eic, x)[kind]) for i, x in enumerate(times) if x != times[-1] or kinds.index(kind) < 2]
+        if kind == compressed:      # A03: a repeated value is sent once
+            rows = [r for j, r in enumerate(rows) if j == 0 or r[1] != rows[j - 1][1]]
+        out.append('<TimeSeries><mRID>%s</mRID><businessType>A01</businessType><objectAggregation>A08</objectAggregation>'
+                   '<inBiddingZone_Domain.mRID codingScheme="A01">%s</inBiddingZone_Domain.mRID><quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>'
+                   '<curveType>%s</curveType><MktPSRType><psrType>%s</psrType></MktPSRType><Period><timeInterval><start>%s</start><end>%s</end></timeInterval>'
+                   '<resolution>%s</resolution>%s</Period></TimeSeries>' % (
+                       kind, eic, 'A03' if kind == compressed else 'A01', kind, iso_min(times[0]), iso_min(times[-1] + step), resolution,
+                       ''.join('<Point><position>%d</position><quantity>%d</quantity></Point>' % (p, v) for p, v in rows)))
+    # Pumping at pumped storage: consumption, which carries an out bidding zone and must be left out
+    out.append('<TimeSeries><mRID>pump</mRID><businessType>A01</businessType><outBiddingZone_Domain.mRID codingScheme="A01">%s</outBiddingZone_Domain.mRID>'
+               '<curveType>A01</curveType><MktPSRType><psrType>B10</psrType></MktPSRType><Period><timeInterval><start>%s</start><end>%s</end></timeInterval>'
+               '<resolution>%s</resolution>%s</Period></TimeSeries>' % (eic, iso_min(times[0]), iso_min(times[-1] + step), resolution,
+                                                                       ''.join('<Point><position>%d</position><quantity>99999</quantity></Point>' % (i + 1) for i in range(len(times)))))
+    out.append('</GL_MarketDocument>')
+    return 200, ''.join(out)
+
+
 def gas_limited():
     """True when the mock should refuse a request as National Gas does with too many."""
     now = _clock.time()
@@ -1094,6 +1160,9 @@ class Handler(BaseHTTPRequestHandler):
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
+        if path == '/entsoe/api':
+            status, xml = entsoe_xml(q)
+            return self.send(status, xml, 'text/html' if status == 401 else 'application/xml')
         if path == '/openmeteo/forecast':
             return self.send(*open_meteo(q))
         if path == '/odre/catalog/datasets/eco2mix-national-tr/records':

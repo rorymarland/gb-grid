@@ -5,7 +5,7 @@ import os
 import signal
 import threading
 
-from .config import APP_DIR, HOME_ENABLED, BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
+from .config import ENTSOE_API_KEY, APP_DIR, HOME_ENABLED, BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
 from .store import Store
 from .status import Status
 from .ingest import Ingest
@@ -27,6 +27,7 @@ from .imbalance import Imbalance
 from .gas import Gas
 from .neighbours import Neighbours
 from .weather import Weather
+from .entsoe import Entsoe
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -89,6 +90,9 @@ def main():
         ('neighbours', Neighbours(store).poll),
         ('weather', Weather(store, fleet).poll),
     ]
+    if ENTSOE_API_KEY:
+        jobs.append(('entsoe', Entsoe(store).poll))
+        log.info('ENTSO-E: on, for the neighbours’ generation mix')
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]
     if REGION_ID:

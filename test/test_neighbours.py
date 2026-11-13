@@ -57,18 +57,26 @@ check('now: Denmark three hours old, so the estimate', c['Denmark'] == {'v': 150
 check('now: the rest typical', c['Netherlands'] == {'v': 474, 'live': False, 'source': 'NESO'} and c['Norway'] == {'v': 25, 'live': False, 'source': 'estimate', 'note': 'almost all hydro'})
 check('now: nothing from the future', nb.country_carbon(store, now - 1700)['France']['t'] == now - 1800)
 
-# The week: means only over half hours every series has
+# The week: each neighbour's mean against Britain's over the same half hours
 week_store = server.Store(tempfile.mkdtemp())
 start = now - nb.BACKFILL + 1800
+# Britain: 100 and 200 by turns
 week_store.write('INSERT INTO ci (region, t, forecast, actual, idx) VALUES (0, ?, ?, ?, ?)',
                  [(start + k * 1800, 999, 100 + (k % 2) * 100, 'low') for k in range(100)], history=False)
-week_store.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)', [('FR', start + k * 1800, 40) for k in range(60)] +
-                 [('DK1', start + k * 1800 + 300, 80) for k in range(10, 70)], history=False)
+week_store.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)',
+                 [('FR', start + k * 1800, 40) for k in range(60)] + [('E:FR', start + k * 1800, 60) for k in range(90)] +
+                 # Denmark: Energinet has under a day, ENTSO-E more, so ENTSO-E's is shown
+                 [('DK1', start + k * 1800 + 300, 80) for k in range(30)] + [('E:DK1', start + k * 1800, 90) for k in range(1, 61)] +
+                 # Norway: only ten hours, so no mean yet
+                 [('E:NO2', start + k * 1800, 20) for k in range(20)], history=False)
 w = nb.week(week_store, now)
-check('week: Britain uses the actual over the forecast', w['series']['GB'][0][1] == 100)
-# Common half hours: 10 to 59, fifty of them, half at 100 and half at 200
-check('week: common half hours', w['common_hours'] == 25.0, w['common_hours'])
-check('week: means over them', w['means'] == {'GB': 150, 'FR': 40, 'DK1': 80}, w['means'])
+check('week: Britain uses the actual over the forecast', w['gb'][0][1] == 100)
+by = {c['country']: c for c in w['countries']}
+check('week: in the usual order, only those with figures', [c['country'] for c in w['countries']] == ['France', 'Norway', 'Denmark'], list(by))
+check('week: RTE first for France', by['France']['zone'] == 'FR' and by['France']['source'] == 'RTE' and len(by['France']['series']) == 60)
+check('week: France against Britain', by['France']['mean'] == 40 and by['France']['gb_mean'] == 150 and by['France']['hours'] == 30.0, by['France'])
+check('week: ENTSO-E for Denmark, with more than a day', by['Denmark']['zone'] == 'E:DK1' and by['Denmark']['mean'] == 90 and by['Denmark']['gb_mean'] == 150)
+check('week: under a day, no mean', by['Norway']['mean'] is None and by['Norway']['hours'] == 10.0)
 
 # ---- from the mock ---------------------------------------------------------------------
 httpd = ThreadingHTTPServer(('127.0.0.1', 0), mock.Handler)
@@ -114,7 +122,8 @@ except server.FetchError:
     pass
 
 w = nb.week(fresh, time.time())
-check('week: France and Denmark from the mock', len(w['series']['FR']) >= 335 and len(w['series']['DK1']) >= 335)
+by = {c['country']: c for c in w['countries']}
+check('week: France and Denmark from the mock', len(by['France']['series']) >= 335 and len(by['Denmark']['series']) >= 335)
 
 httpd.shutdown()
 print('neighbour tests:', 'all passed' if not failures else '%d failed' % failures)

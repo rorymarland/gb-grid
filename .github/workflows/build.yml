@@ -38,6 +38,7 @@ jobs:
           python test/test_imbalance.py
           python test/test_gas.py
           python test/test_neighbours.py
+          python test/test_entsoe.py
           python test/test_weather.py
           node test/test_sim.mjs
           node test/test_osgrid.mjs

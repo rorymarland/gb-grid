@@ -4,7 +4,7 @@
 import { h, s, clear, byId } from './dom.js';
 import { hm, ago, dayKey } from './format.js';
 
-var ORDER = ['generation', 'frequency', 'carbon', 'region', 'price', 'solar', 'embedded', 'ddu', 'units', 'constraints', 'gas', 'neighbours', 'weather', 'forecasts', 'imbalance', 'home'];
+var ORDER = ['generation', 'frequency', 'carbon', 'region', 'price', 'solar', 'embedded', 'ddu', 'units', 'constraints', 'gas', 'neighbours', 'entsoe', 'weather', 'forecasts', 'imbalance', 'home'];
 /* Seconds after which a feed's newest data counts as delayed */
 var STALE_AFTER = { generation: 1200, frequency: 600, price: 3 * 3600, solar: 2 * 3600, units: 1800, home: 1800 };
 var weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'Europe/London' });
