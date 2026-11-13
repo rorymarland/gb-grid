@@ -42,8 +42,9 @@ INDEX_LEVELS = ['very low', 'low', 'moderate', 'high', 'very high']
 
 # Emission factors (gCO2/kWh) from NESO's Carbon Intensity methodology
 # (May 2024 issue). Norway and Denmark are not in NESO's published table;
-# the values used here are approximations. Only used as a fallback when the
-# official Carbon Intensity API figure is unavailable.
+# the values used here are approximations. Used for the estimate when the
+# official Carbon Intensity API figure is unavailable, and as each
+# neighbour's typical figure where there is no live one (neighbours.py).
 CARBON_FACTORS = {
     'ccgt': 394, 'ocgt': 651, 'coal': 937, 'oil': 935, 'biomass': 120,
     'other': 300, 'nuclear': 0, 'wind': 0, 'solar': 0, 'hydro': 0,

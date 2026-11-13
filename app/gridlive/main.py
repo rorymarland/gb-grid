@@ -25,6 +25,7 @@ from .review import Review
 from .forecasts import Forecasts
 from .imbalance import Imbalance
 from .gas import Gas
+from .neighbours import Neighbours
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -84,6 +85,7 @@ def main():
         ('forecasts', App.forecasts.poll),
         ('imbalance', App.imbalance.poll),
         ('gas', App.gas.poll),
+        ('neighbours', Neighbours(store).poll),
     ]
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]

@@ -4,6 +4,21 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.12.0 (unreleased)
+
+- **The carbon of imports:** each interconnector's country now shows its
+  grid's carbon intensity, on the Overview and the Map. France's is live from
+  RTE (French generation) and Denmark's from Energinet (electricity used in
+  western Denmark, where Viking Link lands), every 15 minutes, with no key;
+  the rest are NESO's typical figures, and Norway, almost all hydro, an
+  estimate. The Overview compares what's coming in with what Britain is
+  generating itself, and the Display's power station slide gives the figure
+  too.
+- **Britain and its neighbours** on Regions: the last week's carbon
+  intensity for Britain, France and western Denmark, half hour by half hour,
+  with each one's average.
+- New setting: `POLL_NEIGHBOURS_SECONDS` (default 900, at least 600).
+
 ## 1.11.0 (2026-11-13)
 
 - **Gas** (`/gas`): Britain's gas system, from National Gas's open data with

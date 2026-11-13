@@ -32,6 +32,7 @@ SOURCE_LABELS = {
     'home': 'Your home (Octopus Energy)',
     'constraints': 'Constraints (NESO boundary flows, costs and wind turned down)',
     'gas': 'Gas (National Gas: flows, linepack, daily allocations and price)',
+    'neighbours': 'Neighbours’ carbon intensity (RTE for France, Energinet for Denmark)',
     'imbalance': 'Imbalance prices, trades and temperature (Elexon)',
     'forecasts': 'Forecast scorecard (NESO forecast records, and day-ahead forecasts kept here)',
 }

@@ -856,6 +856,9 @@ function renderFlows(live) {
   var netText = net > 0.05 ? 'Britain is importing ' + gw(net) + ' GW overall.'
     : net < -0.05 ? 'Britain is exporting ' + gw(-net) + ' GW overall.'
     : 'Imports and exports are roughly balanced.';
+  if (num(live.imports_ci) && num(live.generation_ci) && (live.countries || []).some(function (c) { return c.gw > 0.05; })) {
+    netText += ' What’s coming in averages about ' + live.imports_ci + ' g/kWh of CO₂, against ' + live.generation_ci + ' g/kWh for what Britain is generating itself.';
+  }
   host.appendChild(h('p', { cls: 'net', text: netText }));
   host.appendChild(h('p', { cls: 'flow-key', 'aria-hidden': 'true' }, [
     h('span'), h('span', null, [h('span', null, ['← ', h('span', { cls: 'long', text: 'Exporting' }), h('span', { cls: 'short', text: 'Out' })]), h('span', null, [h('span', { cls: 'long', text: 'Importing' }), h('span', { cls: 'short', text: 'In' }), ' →'])]), h('span')
@@ -867,10 +870,10 @@ function renderFlows(live) {
   (live.countries || []).forEach(function (country) {
     var cables = links[country.country] || [];
     var capacity = cables.reduce(function (a, link) { return a + (link.capacity || 0); }, 0) || Math.max(1, Math.abs(country.gw));
-    list.appendChild(flowRow(country.country, country.gw, capacity, 'imports', cables.map(function (link) {
+    list.appendChild(flowRow(country.country, country.gw, capacity, 'imports', [cables.map(function (link) {
       var state = Math.abs(link.gw) < 0.01 ? 'idle' : (link.gw > 0 ? gw(link.gw) + ' in' : gw(-link.gw) + ' out');
       return link.name + ' ' + state;
-    }).join(', ')));
+    }).join(', '), carbonNote(country.ci)]));
   });
   host.appendChild(list);
 
@@ -899,8 +902,17 @@ function flowRow(name, value, capacity, colourKey, detail, words) {
     h('span', { cls: 'who', text: name }),
     bar,
     h('span', { cls: 'what' }, what),
-    detail ? h('span', { cls: 'detail', text: detail }) : null
+    detail ? h('span', { cls: 'detail' }, Array.isArray(detail) ? detail : [detail]) : null
   ]);
+}
+
+/* A neighbour's carbon intensity: live from its grid operator, or a typical figure */
+function carbonNote(ci) {
+  if (!ci || !num(ci.v)) return null;
+  var text = ci.live ? ci.v + ' g/kWh ' + (Date.now() / 1000 - ci.t > 2700 ? 'at ' + hm(ci.t) : 'now') + ', live from ' + ci.source
+    : ci.source === 'estimate' ? 'About ' + ci.v + ' g/kWh, ' + (ci.note ? ci.note + ' (an estimate)' : 'an estimate')
+    : 'About ' + ci.v + ' g/kWh, NESO’s typical figure';
+  return h('span', { cls: 'ci-note' + (ci.live ? ' live' : ''), text: text });
 }
 
 /* ---------- history charts ---------- */

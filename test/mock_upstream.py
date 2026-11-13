@@ -408,6 +408,63 @@ def gas_publications(body):
     return 200, out
 
 
+def france_ci(t):
+    """RTE's carbon intensity of French generation at t (g/kWh), a whole number as RTE gives it."""
+    return int(round(45 + 20 * math.sin(t / 30000.0)))
+
+
+def denmark_ci(t):
+    """Energinet's carbon intensity of electricity used in western Denmark at t (g/kWh)."""
+    return float(round(95 + 60 * math.sin(t / 20000.0)))
+
+
+ENERGINET_GAP = None        # set to seconds to refuse requests closer together than that, as Energinet does
+ENERGINET_ASKED = []
+
+
+def odre_records(q):
+    limit, offset = int(q.get('limit', 10)), int(q.get('offset', 0))
+    if not -1 <= limit <= 100:
+        return 400, {'error_code': 'InvalidRESTParameterError', 'message': 'Invalid value for limit API parameter: %d was found but -1 <= limit <= 100 is expected.' % limit}
+    where = q.get('where', '')
+    m = re.search(r"date_heure >= '([^']+)'", where)
+    start = parse(m.group(1)) if m else _clock.time() - 3 * 86400
+    now = _clock.time()
+    times = []
+    t = start + (-start) % 900
+    while t <= now - 900:                     # published about a quarter of an hour behind
+        times.append(t)
+        t += 900
+    if 'taux_co2 is not null' not in where:   # later quarter hours are listed, empty, to the end of tomorrow
+        times += [t + 900 * k for k in range(8)]
+    rows = [{'date_heure': datetime.fromtimestamp(x, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S+00:00'),
+             'taux_co2': france_ci(x) if x <= now - 900 else None} for x in times]
+    if q.get('order_by', '').endswith('desc'):
+        rows.reverse()
+    return 200, {'total_count': len(rows), 'results': rows[offset:offset + limit]}
+
+
+def energinet_co2(q):
+    now = _clock.time()
+    if ENERGINET_GAP and ENERGINET_ASKED and now - ENERGINET_ASKED[-1] < ENERGINET_GAP:
+        ENERGINET_ASKED.append(now)
+        return 429, {'statusCode': 429, 'message': 'Rate limit is exceeded. Try again in 60 seconds.'}
+    ENERGINET_ASKED.append(now)
+    m = re.fullmatch(r'-PT(\d+)H', q.get('startOffset', ''))
+    if q.get('start') != 'now' or not m:
+        return 400, {'error': 'mock: expected start=now and startOffset=-PTnH'}
+    start = now - int(m.group(1)) * 3600
+    areas = json.loads(q.get('filter', '{}')).get('PriceArea', ['DK1', 'DK2'])
+    records = []
+    t = start + (-start) % 300
+    while t <= now - 300:
+        for area in areas:
+            records.append({'Minutes5UTC': datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'), 'PriceArea': area,
+                            'CO2Emission': denmark_ci(t) if area == 'DK1' else 30.0})
+        t += 300
+    return 200, {'total': len(records), 'dataset': 'CO2Emis', 'records': records}
+
+
 def gas_limited():
     """True when the mock should refuse a request as National Gas does with too many."""
     now = _clock.time()
@@ -988,6 +1045,10 @@ class Handler(BaseHTTPRequestHandler):
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
+        if path == '/odre/catalog/datasets/eco2mix-national-tr/records':
+            return self.send(*odre_records(q))
+        if path == '/energinet/dataset/CO2Emis':
+            return self.send(*energinet_co2(q))
         if path == '/gas/instantaneousflow/sites':
             if gas_limited():
                 return self.send(429, {'error': {'code': '429', 'message': 'Too many requests. You are temporarily blocked from accessing this resource.'}})

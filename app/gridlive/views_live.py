@@ -7,6 +7,7 @@ from .config import BROWSER_REFRESH, HISTORY_DAYS, REGION_ID, VERSION
 from .reference import COUNTRY_ORDER, INTERCONNECTORS, NEGATIVE_SERIES, SUPPLY_SERIES
 from .timeutil import floor_to
 from .fetch import r2
+from .neighbours import country_carbon, imports_carbon
 
 
 class LiveViews:
@@ -204,9 +205,11 @@ class LiveViews:
             name, country, capacity, note = INTERCONNECTORS.get(code, (code, 'Other', None, ''))
             links.append({'code': code, 'name': name, 'country': country, 'capacity': capacity,
                           'note': note, 'gw': r2(mw / 1000.0)})
-        countries = [{'country': c, 'gw': r2(m['countries'][c] / 1000.0)}
+        neighbour_ci = country_carbon(self.store, t)
+        countries = [{'country': c, 'gw': r2(m['countries'][c] / 1000.0), 'ci': neighbour_ci.get(c)}
                      for c in COUNTRY_ORDER + sorted(set(m['countries']) - set(COUNTRY_ORDER))
                      if c in m['countries']]
+        coming_in = imports_carbon(m['countries'], neighbour_ci)
 
         official = carbon_future.get(current_half_hour)
         if official and official[0] is not None:
@@ -241,5 +244,7 @@ class LiveViews:
             'countries': countries,
             'storage': {'pumped': r2(m['pumped'] / 1000.0), 'battery': r2(m['battery'] / 1000.0)},
             'carbon': carbon,
+            'imports_ci': round(coming_in) if coming_in is not None else None,
+            'generation_ci': round(m['generation_ci']) if m['generation_ci'] is not None else None,
         })
         return payload

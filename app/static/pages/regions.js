@@ -368,3 +368,62 @@ Promise.all([G.fetchJSON('/regions.json'), G.fetchJSON('/geo.json')]).then(funct
 });
 state.poll = G.poll('/api/regions', { onData: onData, onTick: updateHeader, interval: function () { return 60; } });
 setInterval(updateHeader, 5000);
+
+/* ---------- Britain and its neighbours: the last week ---------- */
+
+var NB = [['GB', 'Great Britain', 'nb-gb'], ['FR', 'France', 'nb-fr'], ['DK1', 'Western Denmark', 'nb-dk']];
+var nbData = null;
+
+function renderNeighbours() {
+  var d = nbData, panel = byId('nb-panel');
+  if (!d || !d.series || !d.series.GB.length || !(d.series.FR.length || d.series.DK1.length)) { panel.hidden = true; return; }
+  panel.hidden = false;
+  var m = d.means;
+  byId('nb-sub').textContent = 'Carbon intensity over the last week, in g/kWh, half hour by half hour.' + (m ? ' On average Britain ran at ' + m.GB +
+    ', France at ' + m.FR + ' and western Denmark at ' + m.DK1 + '.' : '');
+  var host = clear(byId('nb-chart'));
+  var width = Math.max(300, host.clientWidth || 900), height = 220, padL = 40, padR = 8, padT = 10, padB = 24;
+  var hi = 0;
+  NB.forEach(function (z) { (d.series[z[0]] || []).forEach(function (r) { hi = Math.max(hi, r[1]); }); });
+  var step = G.niceStep(Math.max(hi, 40), 4);
+  hi = Math.max(step, Math.ceil(hi / step) * step);
+  var x = function (t) { return padL + (t - d.start) / (d.end - d.start) * (width - padL - padR); };
+  var y = function (v) { return padT + (hi - v) / hi * (height - padT - padB); };
+  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': 'Carbon intensity of Great Britain, France and western Denmark over the last week' });
+  for (var v = 0; v <= hi + 0.01; v += step) {
+    svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (y(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: String(v) }));
+  }
+  for (var t = d.start; t <= d.end; t += 1800) {
+    if (G.hm(t) === '00:00') {
+      svg.appendChild(s('line', { 'class': 'grid-line', x1: x(t).toFixed(1), x2: x(t).toFixed(1), y1: padT, y2: height - padB }));
+      if (t < d.end - 3 * 3600) svg.appendChild(s('text', { 'class': 'axis-text', x: (x(t) + 4).toFixed(1), y: height - 6, text: G.day(t).split(' ')[0] }));
+    }
+  }
+  NB.forEach(function (z) {
+    var rows = d.series[z[0]] || [], dd = '';
+    rows.forEach(function (r, i) { dd += (i && r[0] - rows[i - 1][0] <= 3600 ? 'L' : 'M') + x(r[0]).toFixed(1) + ' ' + y(r[1]).toFixed(1); });
+    svg.appendChild(s('path', { 'class': 'nb-line ' + z[2], d: dd }));
+  });
+  var cross = s('line', { 'class': 'xhair', y1: padT, y2: height - padB, visibility: 'hidden' });
+  svg.appendChild(cross);
+  host.appendChild(svg);
+  var tip = G.makeTip(host), lookup = {};
+  NB.forEach(function (z) { lookup[z[0]] = {}; (d.series[z[0]] || []).forEach(function (r) { lookup[z[0]][r[0]] = r[1]; }); });
+  svg.addEventListener('pointermove', function (e) {
+    var b = svg.getBoundingClientRect(), at = d.start + ((e.clientX - b.left) * width / b.width - padL) / (width - padL - padR) * (d.end - d.start);
+    var slot = Math.floor(at / 1800) * 1800, rows = NB.filter(function (z) { return num(lookup[z[0]][slot]); });
+    if (at < d.start || at > d.end || !rows.length) { tip.hide(); cross.setAttribute('visibility', 'hidden'); return; }
+    var cx = x(slot + 900);
+    cross.setAttribute('x1', cx.toFixed(1)); cross.setAttribute('x2', cx.toFixed(1)); cross.setAttribute('visibility', 'visible');
+    tip.show(G.day(slot) + ' ' + G.hm(slot), rows.map(function (z) { return { cls: z[2] + '-sw', value: Math.round(lookup[z[0]][slot]) + ' g/kWh', label: z[1] }; }), cx * b.width / width, 40);
+  });
+  svg.addEventListener('pointerleave', function () { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
+  var legend = clear(byId('nb-legend'));
+  NB.forEach(function (z) { legend.appendChild(h('li', null, [h('i', { cls: 'sw line ' + z[2] + '-sw' }), z[1]])); });
+  byId('nb-note').textContent = 'Britain is NESO’s figure for the electricity used here, imports included. France is RTE’s for French generation and western Denmark is Energinet’s for electricity used there, where Viking Link lands. Each counts only what is burned at power stations, not the rest of a fuel’s life.';
+}
+
+G.poll('/api/neighbours', { onData: function (d) { nbData = d; renderNeighbours(); }, interval: function () { return 900; } });
+var nbWidth = window.innerWidth;
+window.addEventListener('resize', function () { if (window.innerWidth !== nbWidth) { nbWidth = window.innerWidth; renderNeighbours(); } });

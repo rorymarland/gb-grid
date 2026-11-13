@@ -13,6 +13,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .gas import gas_generation, home_gas_rate, view as gas_view
+from .neighbours import week as neighbours_week
 from .constraints import view as constraints_view
 from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
@@ -120,7 +121,8 @@ CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
     'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
-    '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Gas flows, linepack, allocations and prices from '
+    '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. French carbon intensity from RTE’s éCO2mix through <a href="https://odre.opendatasoft.com/" rel="noopener">Open Data Réseaux Énergies</a> (Licence Ouverte v2.0); Danish from the <a href="https://www.energidataservice.dk/" rel="noopener">Energi Data Service</a>, under the conditions for use of Danish public-sector data. '
+    'Gas flows, linepack, allocations and prices from '
     '<a href="https://data.nationalgas.com/" rel="noopener">National Gas Transmission’s open data</a>. Station locations '
     'from '
     '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>, the government’s <a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract" rel="noopener">Renewable Energy Planning Database</a> (Open Government Licence v3.0) and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
@@ -429,6 +431,8 @@ class Handler(BaseHTTPRequestHandler):
                 body = gas_view(App.store, now, gas_generation(App.store),
                                 home_gas_rate(App.store, now) if App.home and App.home.enabled else None) if App.gas else {'ready': False}
                 self.respond_json(body, send_body)
+            elif parts.path == '/api/neighbours':
+                self.respond_json(neighbours_week(App.store, time.time()), send_body)
             elif parts.path == '/api/forecasts':
                 self.respond_json(App.forecasts.page(time.time()) if App.forecasts else {'kinds': []}, send_body)
             elif parts.path == '/api/review':

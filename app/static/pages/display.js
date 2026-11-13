@@ -233,7 +233,7 @@ function buildMap(body, take) {
       clear(side);
       side.appendChild(h('div', { cls: 'stats' }, [
         h('div', null, [h('b', { text: gw(gen) }), h('span', { text: 'GW generated in GB' })]),
-        h('div', null, [h('b', { text: gw(Math.abs(net)) }), h('span', { text: 'GW net ' + (net >= 0 ? 'imports' : 'exports') })])
+        h('div', null, [h('b', { text: gw(Math.abs(net)) }), h('span', { text: 'GW net ' + (net >= 0 ? 'imports' + (num(d.imports_ci) ? '; what comes in is about ' + d.imports_ci + ' g/kWh' : '') : 'exports') })])
       ]));
       side.appendChild(h('h3', { text: 'Biggest right now' }));
       var top = (d.stations || []).filter(function (x) { return x.mw > 0; }).sort(function (a, b) { return b.mw - a.mw; }).slice(0, 7);

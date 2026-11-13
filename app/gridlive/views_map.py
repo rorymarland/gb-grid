@@ -72,6 +72,8 @@ class MapViews:
             'exports_gw': live.get('exports_gw'), 'storing_gw': live.get('storing_gw'),
             'carbon': live.get('carbon'), 'stations': [], 'links': [], 'categories': [],
             'unplaced': [], 'model': None,
+            'neighbour_ci': {c['country']: c.get('ci') for c in live.get('countries', [])},
+            'imports_ci': live.get('imports_ci'),
         }
         for link in live.get('links', []):
             item = {'code': link['code'], 'name': link['name'], 'country': link['country'], 'note': link['note'],

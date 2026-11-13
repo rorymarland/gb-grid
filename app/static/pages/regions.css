@@ -97,3 +97,16 @@
 @media (forced-colors: active) {
   .mixbar i, .rank .bar i, .sw { forced-color-adjust: none; }
 }
+
+/* Britain and its neighbours */
+:root { --nb-gb: var(--ink); --nb-fr: #2a78d6; --nb-dk: #eb6834; }
+:root[data-theme="dark"] { --nb-fr: #3987e5; --nb-dk: #d95926; }
+.nb-chart { position: relative; min-height: 220px; margin-top: 6px; }
+.nb-chart svg { display: block; width: 100%; }
+.nb-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.nb-line.nb-gb { stroke: var(--nb-gb); } .nb-line.nb-fr { stroke: var(--nb-fr); } .nb-line.nb-dk { stroke: var(--nb-dk); }
+.nb-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
+.nb-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.nb-legend .sw.line { width: 16px; height: 3px; border-radius: 2px; }
+.nb-gb-sw { background: var(--nb-gb); } .nb-fr-sw { background: var(--nb-fr); } .nb-dk-sw { background: var(--nb-dk); }
+.tip .key.nb-gb-sw, .tip .key.nb-fr-sw, .tip .key.nb-dk-sw { height: 3px; }

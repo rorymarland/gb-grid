@@ -14,7 +14,7 @@ standard library inside.
 |---|---|---|
 | Overview | `/` | What Britain is using now, where it comes from, today in plain English and the next 48 hours |
 | Map and Stations | `/map`, `/stations` | Every power station and interconnector, live, with a seven-day time machine |
-| Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead |
+| Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead, and Britain against France and Denmark over the week |
 | Your home | `/home` | Your own electricity and gas from an Octopus smart meter, with carbon and cost (optional) |
 | Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
 | Balancing | `/balancing` | Who NESO is paying to turn up or down, and what it costs |
@@ -53,6 +53,13 @@ demand, prices, peaks, imports, balancing costs and any notices, led by
 whatever was most notable. Beside it, the latest few events from the
 Timeline.
 
+Each interconnector's country shows its grid's carbon intensity: live for
+France (RTE's figure for French generation) and Denmark (Energinet's for
+electricity used in western Denmark, where Viking Link lands), every 15
+minutes, and NESO's typical figures for the rest, with Norway, almost all
+hydro, an estimate. The panel compares what's coming in with what Britain is
+generating itself. Both live sources are open and need no key.
+
 ### Map and Stations
 
 Every grid-connected power station as a circle sized by what it's generating
@@ -87,7 +94,9 @@ any units that couldn't be placed on the map.
 ### Regions
 
 NESO's 14 regions coloured by carbon intensity, from 24 hours ago to 48 hours
-ahead, with each region's generation mix and solar output.
+ahead, with each region's generation mix and solar output. Below, Britain's
+carbon intensity over the last week against France's and western Denmark's,
+half hour by half hour, with each one's average.
 
 ![The regions page](docs/regions.png)
 
@@ -361,7 +370,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -597,7 +606,7 @@ Allowlist `api.neso.energy` to fix it.
 
 | Endpoint | Returns |
 |---|---|
-| `/api/live` | The current snapshot behind the overview |
+| `/api/live` | The current snapshot behind the overview, including each neighbour's carbon intensity and that of what's coming in |
 | `/api/history?range=24h` | History series (`24h`, `7d` or `30d`) |
 | `/api/map` | Stations, interconnectors and totals for the map |
 | `/api/station?id=N` | One station's last 24 hours, and its location, Wikidata item and photo credit. Add `&full=1` for everything on the station page: the week, statistics, units, facts, events and neighbours |
@@ -608,6 +617,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/balancing` | Live instructions, half-hourly costs, top payments, constraint costs, and imbalance prices and trades for today and yesterday |
 | `/api/constraints?group=SCOTEX` | Today's and tomorrow's boundary flows against their limits, one group's half hours for the chart (`group=`), each group's last 30 and 365 days, constraint costs by reason, and wind turned down by day and wind farm |
 | `/api/gas` | Gas now: supply by source, use by category and every entry point; the gas day's flows and linepack with National Gas's predicted close and demand forecast; power stations' gas against gas-fired generation; and a year of daily allocations (GWh) and the System Average Price |
+| `/api/neighbours` | Britain's, France's and western Denmark's carbon intensity for the last week, by half hour, with means over the half hours all three have, and each neighbour's figure now (live or typical) |
 | `/boundaries.json` | The ETYS transmission boundaries as map paths |
 | `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |
 | `/api/alerts` | Grid notices in force and the margin summary (drives the banner) |
@@ -637,6 +647,8 @@ CARBON_BASE_URL=http://127.0.0.1:9101/carbon \
 PVLIVE_BASE_URL=http://127.0.0.1:9101/pvlive/api/v4 \
 NESO_BASE_URL=http://127.0.0.1:9101/neso \
 NATIONAL_GAS_BASE_URL=http://127.0.0.1:9101/gas \
+ODRE_BASE_URL=http://127.0.0.1:9101/odre \
+ENERGINET_BASE_URL=http://127.0.0.1:9101/energinet \
 GRID_INTERNAL_PORT=8080 python3 app/server.py
 ```
 
@@ -646,14 +658,14 @@ you edit them.
 Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 `python3 test/test_edges.py` and `python3 test/test_features.py`, and each
 feed's own (`test/test_constraints.py`, `test_review.py`, `test_forecasts.py`,
-`test_imbalance.py` and `test_gas.py`).
+`test_imbalance.py`, `test_gas.py` and `test_neighbours.py`).
 
 ### How the code is laid out
 
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -718,6 +730,12 @@ stations sharing coordinates). The tests run it.
 - Gas flows, linepack, allocations and prices from National Gas Transmission's
   [open data](https://data.nationalgas.com/), which it publishes under its gas
   system operator licence.
+- French carbon intensity from RTE's éCO2mix, through
+  [Open Data Réseaux Énergies](https://odre.opendatasoft.com/explore/dataset/eco2mix-national-tr/)
+  (Licence Ouverte v2.0).
+- Danish carbon intensity: contains data used pursuant to "Conditions for use
+  of Danish public-sector data", from the
+  [Energi Data Service](https://www.energidataservice.dk/) portal.
 - Station locations from [Wikidata](https://www.wikidata.org/) (CC0) and the
   [Power Station Dictionary](https://github.com/OSUKED/Power-Station-Dictionary) (MIT),
   and the Department for Energy Security and Net Zero's
@@ -736,6 +754,6 @@ stations sharing coordinates). The tests run it.
 - Inspired by Kate Morley's [National Grid: Live](https://grid.iamkate.com/).
 
 Live data is fetched from each source's public API and is subject to its terms.
-This project isn't affiliated with or endorsed by Elexon, NESO or National Gas.
+This project isn't affiliated with or endorsed by Elexon, NESO, National Gas, RTE or Energinet.
 
 The code is released under the [MIT licence](LICENSE).

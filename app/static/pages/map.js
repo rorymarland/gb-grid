@@ -354,7 +354,7 @@ function renderSide() {
   }
   if (changed('stats', [data.time, data.links, data.categories, data.demand_gw])) renderStats(data);
   if (changed('fuels', [data.time, data.categories, state.hidden])) renderFuels(data);
-  if (changed('ic', [data.time, data.links])) renderInterconnectors(data);
+  if (changed('ic', [data.time, data.links, data.neighbour_ci])) renderInterconnectors(data);
   if (changed('unmapped', [data.time, data.categories, data.model && data.model.unplaced_count])) renderUnmapped(data);
   if (changed('fskey', [data.time, data.categories, data.links, state.fuelOrder])) renderFsKey(data);
   byId('idle-toggle').checked = state.showIdle;
@@ -477,9 +477,17 @@ function renderInterconnectors(data) {
     host.appendChild(h('li', null, [
       h('span', { cls: 'who', text: group.country }),
       h('span', { cls: 'fv', text: v }),
-      h('span', { cls: 'cables', text: group.links.map(function (link) { return link.name + ' ' + linkWords(link); }).join(', ') })
+      h('span', { cls: 'cables', text: group.links.map(function (link) { return link.name + ' ' + linkWords(link); }).join(', ') }),
+      carbonLine((data.neighbour_ci || {})[group.country])
     ]));
   });
+}
+
+/* A neighbour's carbon intensity, live or typical */
+function carbonLine(ci) {
+  if (!ci || !num(ci.v)) return null;
+  return h('span', { cls: 'cables ci' + (ci.live ? ' live' : ''), text: ci.live ? ci.v + ' g/kWh ' + (Date.now() / 1000 - ci.t > 2700 ? 'at ' + G.hm(ci.t) : 'now') + ', live from ' + ci.source
+    : ci.source === 'estimate' ? 'About ' + ci.v + ' g/kWh, ' + (ci.note ? ci.note + ' (an estimate)' : 'an estimate') : 'About ' + ci.v + ' g/kWh, NESO’s typical figure' });
 }
 
 function renderUnmapped(data) {

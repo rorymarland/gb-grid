@@ -127,6 +127,8 @@ class Grid(LiveViews, MapViews, SystemViews, LongtermViews, SummaryViews, EventV
         m['supply'] = generation + m['imports'] + m['storage_out']
         m['demand'] = m['supply'] + m['exports'] + m['storage_in'] + min(0.0, m['other'])
         emitted = sum(max(0.0, m[k]) * factor for k, factor in CARBON_FACTORS.items() if k in m)
+        # Britain's own generation, on NESO's factors (imports and storage left out)
+        m['generation_ci'] = emitted / generation if generation > 0 else None
         emitted += sum(mw * IMPORT_FACTORS.get(country, 300) for country, mw in countries.items() if mw > 0)
         m['carbon_estimate'] = emitted / m['supply'] if m['supply'] > 0 else None
         m['links'] = links
