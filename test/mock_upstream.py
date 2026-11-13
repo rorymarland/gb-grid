@@ -465,6 +465,55 @@ def energinet_co2(q):
     return 200, {'total': len(records), 'dataset': 'CO2Emis', 'records': records}
 
 
+def mock_national_demand(t):
+    """National demand (MW): higher when it's cold (by the mock's London temperature that day) and
+    lower at weekends."""
+    noon = t - t % 86400 + 43200
+    cold = 12 - sum(weather_value('temperature_2m', noon - 43200 + k * 3600, 51.51, -0.13) for k in range(24)) / 24
+    weekend = datetime.fromtimestamp(t, timezone.utc).weekday() >= 5
+    return demand_mw(t) * 1.1 * (1 + 0.025 * cold) * (0.9 if weekend else 1.0)
+
+
+def weather_value(var, t, lat, lon):
+    """Open-Meteo's value for a variable at hour t and a point: wind at 100 m follows the mock's wind
+    output, sunshine its solar, and temperature runs through the day and the week."""
+    season = math.cos(2 * math.pi * (t % 31557600) / 31557600)
+    if var == 'wind_speed_100m':
+        gust = 0.55 + 0.45 * math.sin(t / 41000.0) + 0.25 * math.sin(t / 9000.0 + 1.3) + 0.2 * season
+        return round(max(0.5, 3 + 9 * gust + 0.3 * (lat - 54)), 2)
+    if var == 'temperature_2m':
+        return round(10 - 4 * season + 4 * math.sin(math.pi * (hour_of_day(t) - 9) / 12) + 3 * math.sin(t / 300000.0) - 0.6 * (lat - 52), 1)
+    if var == 'shortwave_radiation':     # the mean over the hour before t
+        return round(sum(solar_mw(t - 3600 + k * 600) for k in range(6)) / 6 / 3200 * 520 * (1.2 - 0.04 * (lat - 51)), 1)
+    return None
+
+
+WEATHER_ASKED = []
+
+
+def open_meteo(q):
+    WEATHER_ASKED.append(q)
+    lats, lons = [float(x) for x in q['latitude'].split(',')], [float(x) for x in q['longitude'].split(',')]
+    var = q.get('hourly')
+    if len(lats) != len(lons) or var not in ('wind_speed_100m', 'temperature_2m', 'shortwave_radiation'):
+        return 400, {'error': True, 'reason': 'mock: bad request'}
+    if var == 'wind_speed_100m' and q.get('wind_speed_unit') != 'ms':
+        return 400, {'error': True, 'reason': 'mock: wind would be in km/h'}
+    if q.get('timeformat') != 'unixtime' or q.get('timezone') != 'GMT':
+        return 400, {'error': True, 'reason': 'mock: expected unixtime and GMT'}
+    today = int(_clock.time() // 86400 * 86400)
+    times = list(range(today - int(q.get('past_days', 0)) * 86400, today + int(q.get('forecast_days', 7)) * 86400, 3600))
+    unit = {'wind_speed_100m': 'm/s', 'temperature_2m': '°C', 'shortwave_radiation': 'W/m²'}[var]
+    out = []
+    for i, (lat, lon) in enumerate(zip(lats, lons)):
+        place = {'latitude': lat, 'longitude': lon, 'timezone': 'GMT', 'hourly_units': {'time': 'unixtime', var: unit},
+                 'hourly': {'time': times, var: [weather_value(var, x, lat, lon) for x in times]}}
+        if i:
+            place['location_id'] = i
+        out.append(place)
+    return 200, out if len(out) > 1 else out[0]
+
+
 def gas_limited():
     """True when the mock should refuse a request as National Gas does with too many."""
     now = _clock.time()
@@ -508,7 +557,7 @@ def forecast_records(rid, sql):
                 out.append({'Date': day.isoformat(), 'Settlement_period': sp, 'Capacity': round(11000 + 1700 * (day.year - 2018)),
                             'Incentive_forecast': round(act * (1 + 0.2 * math.sin(t / 30000.0)))})
             else:
-                act = demand_mw(t) * 1.1
+                act = mock_national_demand(t)
                 out.append({'Date': day.isoformat(), 'Settlement_Period': sp, 'Demand_Forecast': round(act * (1 + 0.03 * math.sin(t / 20000.0))),
                             'Demand_Outturn': round(act)})
         day += timedelta(days=1)
@@ -1045,6 +1094,8 @@ class Handler(BaseHTTPRequestHandler):
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
+        if path == '/openmeteo/forecast':
+            return self.send(*open_meteo(q))
         if path == '/odre/catalog/datasets/eco2mix-national-tr/records':
             return self.send(*odre_records(q))
         if path == '/energinet/dataset/CO2Emis':

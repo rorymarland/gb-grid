@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Weather – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/weather.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>Weather</h1>
+    <p class="lede">Wind, cold and sunshine move Britain’s electricity more than anything else. This is the weather where it matters to the grid, now and for the week ahead, and how the grid has answered it over the last three months.</p>
+  </section>
+
+  <p class="wx-waiting" id="waiting">Fetching the weather from Open-Meteo.</p>
+
+  <div id="content" hidden>
+    <section class="wx-now" aria-labelledby="now-title">
+      <h2 class="visually-hidden" id="now-title">Now</h2>
+      <dl class="wx-figures" id="figures"></dl>
+    </section>
+
+    <section class="panel" aria-labelledby="week-title">
+      <div class="panel-head"><h2 id="week-title">The week ahead</h2></div>
+      <p class="sub" id="week-sub"></p>
+      <div class="wx-rows">
+        <figure class="wx-row">
+          <figcaption><b>Wind at hub height</b> <span id="wind-note"></span></figcaption>
+          <div class="chart wx-chart" id="wind-chart"></div>
+        </figure>
+        <figure class="wx-row">
+          <figcaption><b>Temperature</b> <span id="temp-note"></span></figcaption>
+          <div class="chart wx-chart" id="temp-chart"></div>
+        </figure>
+        <figure class="wx-row">
+          <figcaption><b>Sunshine</b> <span id="sun-note"></span></figcaption>
+          <div class="chart wx-chart" id="sun-chart"></div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="rel-title">
+      <div class="panel-head"><h2 id="rel-title">How the grid answers the weather</h2></div>
+      <p class="sub">The last 90 days, from this dashboard’s records of the weather and NESO’s of the grid.</p>
+      <div class="wx-rels">
+        <figure class="wx-rel">
+          <figcaption><b>Wind farms against the wind</b><span id="wind-rel-sub"></span></figcaption>
+          <div class="chart wx-scatter" id="wind-rel"></div>
+          <ul class="wx-legend" id="wind-rel-legend"></ul>
+        </figure>
+        <figure class="wx-rel">
+          <figcaption><b>Demand against the temperature</b><span id="temp-rel-sub"></span></figcaption>
+          <div class="chart wx-scatter" id="temp-rel"></div>
+          <ul class="wx-legend" id="temp-rel-legend"></ul>
+        </figure>
+        <figure class="wx-rel">
+          <figcaption><b>Solar against the sunshine</b><span id="sun-rel-sub"></span></figcaption>
+          <div class="chart wx-scatter" id="sun-rel"></div>
+          <ul class="wx-legend" id="sun-rel-legend"></ul>
+        </figure>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>The dashboard asks Open-Meteo for the weather every hour at a few dozen places and turns each measure into one figure for Britain. <b>Wind</b> is the wind speed 100 metres up, about the height of a turbine’s hub, at a dozen points among the wind farms, each counted by the capacity of the farms nearest it. <b>Temperature</b> is the air temperature in each English region, Scotland and Wales, counted by how many people live there (the ONS’s mid-2022 estimates). <b>Sunshine</b> is the sunlight reaching the ground, in watts per square metre averaged over the hour, in each of NESO’s 14 regions, counted by how much solar power each produced over the last week.</p>
+        <p>The past two days are Open-Meteo’s most recent forecasts for those hours, which follow the measurements closely; the rest is its forecast. The first time it runs, the dashboard asks for the last 92 days as well, so the charts below have something to show straight away.</p>
+        <p>Against the wind, the share of their capacity that transmission-connected wind farms made each hour, plus what NESO paid them to turn down, so constraints don’t hide the wind. Against the temperature, each day’s average national demand, with weekends apart because businesses use less; the figure for each degree is a straight line through working days below 15.5°C, where heating takes over. Against the sunshine, solar output each hour, as NESO records it in its historic generation mix.</p>
+        <p class="wx-source">Weather data by <a href="https://open-meteo.com/" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>), combined here into averages for Britain.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/weather.js}}"></script>
+</body>
+</html>

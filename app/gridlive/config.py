@@ -100,6 +100,7 @@ POLL = {
     'imbalance': env_int('POLL_IMBALANCE_SECONDS', 900, 300, 3600),
     'gas': env_int('POLL_GAS_SECONDS', 300, 240, 3600),
     'neighbours': env_int('POLL_NEIGHBOURS_SECONDS', 900, 600, 3600),
+    'weather': env_int('POLL_WEATHER_SECONDS', 3600, 1800, 21600),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
@@ -123,6 +124,7 @@ ELEXON = env_str('ELEXON_BASE_URL', 'https://data.elexon.co.uk/bmrs/api/v1').rst
 CARBON = env_str('CARBON_BASE_URL', 'https://api.carbonintensity.org.uk').rstrip('/')
 PVLIVE = env_str('PVLIVE_BASE_URL', 'https://api.pvlive.uk/pvlive/api/v4').rstrip('/')
 NESO = env_str('NESO_BASE_URL', 'https://api.neso.energy').rstrip('/')
+OPEN_METEO = env_str('OPEN_METEO_BASE_URL', 'https://api.open-meteo.com/v1').rstrip('/')
 ODRE = env_str('ODRE_BASE_URL', 'https://odre.opendatasoft.com/api/explore/v2.1').rstrip('/')
 ENERGINET = env_str('ENERGINET_BASE_URL', 'https://api.energidataservice.dk').rstrip('/')
 NATIONAL_GAS = env_str('NATIONAL_GAS_BASE_URL', 'https://api.nationalgas.com/operationaldata/v1').rstrip('/')

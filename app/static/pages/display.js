@@ -13,7 +13,7 @@ import { renderParts } from '/static/js/summary.js';
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
 /* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
-var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,gas,outlook,outages,records';
+var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,gas,weather,outlook,outages,records';
 /* The year in review joins the default slides from mid-December to the end of January */
 (function () {
   var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
@@ -53,7 +53,7 @@ function whenPhrase(t) {
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
   regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
-  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900], review: ['/api/review', 3600], gas: ['/api/gas', 300]
+  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900], review: ['/api/review', 3600], gas: ['/api/gas', 300], weather: ['/api/weather', 1800]
 };
 var data = {}, polls = {};
 function startFeed(name) {
@@ -490,6 +490,45 @@ function buildGas(body, take) {
   };
 }
 
+/* ---------- weather ---------- */
+
+function buildWeather(body, take) {
+  var gauge = h('div', { cls: 'gauge-box' }), list = h('div', { cls: 'side' });
+  body.appendChild(h('div', { cls: 'split even' }, [gauge, list]));
+  function f1(v) { return num(v) ? v.toFixed(1) : '–'; }
+  return {
+    ready: function () { return Boolean(data.weather && data.weather.ready); },
+    render: function () {
+      var d = data.weather;
+      if (!d || !d.ready) return;
+      var c = d.current, g = d.grid || {};
+      clear(gauge);
+      gauge.appendChild(h('p', { cls: 'big' }, [f1(c.wind), h('small', { text: 'm/s of wind at hub height' })]));
+      if (num(g.wind_gw)) gauge.appendChild(h('p', { cls: 'pill', text: 'Wind farms are making ' + f1(g.wind_gw) + ' GW' }));
+      gauge.appendChild(h('p', { cls: 'foot-note', text: 'Weather data by Open-Meteo.com (CC BY 4.0), averaged across Britain’s wind farms, people and solar panels.' }));
+      clear(list);
+      list.appendChild(h('h3', { text: 'The next two days' }));
+      var ahead = d.week.filter(function (r) { return r[0] > d.now && r[0] <= d.now + 48 * 3600; });
+      function pick(i, better) { var best = null; ahead.forEach(function (r) { if (num(r[i]) && (!best || better(r[i], best[i]))) best = r; }); return best; }
+      var windy = pick(1, function (a, b) { return a > b; }), calm = pick(1, function (a, b) { return a < b; });
+      var cold = pick(2, function (a, b) { return a < b; }), sunny = pick(3, function (a, b) { return a > b; });
+      function row(label, r, i, unit, shift) {
+        if (!r) return;
+        var t = r[0] - (shift || 0);
+        list.appendChild(h('div', { cls: 'row' }, [h('span', { text: label }), h('b', { text: (i === 3 ? Math.round(r[i]) : f1(r[i])) + ' ' + unit }),
+          h('span', { cls: 'muted', text: G.day(t).split(' ')[0] + ' ' + G.hm(t) })]));
+      }
+      row('Windiest', windy, 1, 'm/s'); row('Calmest', calm, 1, 'm/s'); row('Coldest', cold, 2, '°C');
+      if (sunny && sunny[3] > 20) row('Sunniest hour', sunny, 3, 'W/m²', 3600);
+      list.appendChild(h('div', { cls: 'stats cn-stats' }, [
+        h('div', null, [h('b', { text: f1(c.temp) + '°C' }), h('span', { text: 'where people live, now' + (num(g.demand_gw) ? '; Britain is using ' + f1(g.demand_gw) + ' GW' : '') })]),
+        h('div', null, [h('b', { text: (num(c.sun) ? Math.round(c.sun) : '–') + ' W/m²' }), h('span', { text: 'of sunshine' + (num(g.solar_gw) ? '; solar is making ' + f1(g.solar_gw) + ' GW' : '') })])
+      ]));
+      take.textContent = windy && calm ? 'Wind at hub height ranges from ' + f1(calm[1]) + ' to ' + f1(windy[1]) + ' m/s over the next two days.' : '';
+    }
+  };
+}
+
 /* ---------- spare capacity and outages ---------- */
 
 function buildOutages(body, take) {
@@ -703,6 +742,7 @@ var BUILDERS = {
   balancing: ['Balancing the grid', ['balancing'], buildBalancing],
   constraints: ['Constraints', ['constraints'], buildConstraints],
   gas: ['Gas', ['gas'], buildGas],
+  weather: ['Weather', ['weather'], buildWeather],
   review: ['The year in review', ['review'], buildReview],
   outlook: ['The next 48 hours', [], buildOutlook],
   outages: ['Spare capacity and outages', ['outages'], buildOutages],

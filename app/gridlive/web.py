@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .gas import gas_generation, home_gas_rate, view as gas_view
 from .neighbours import week as neighbours_week
+from .weather import view as weather_view
 from .constraints import view as constraints_view
 from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
@@ -54,6 +55,7 @@ PAGES = [
     ('map', '/map', 'Map', 'map.html'),
     ('stations', '/stations', 'Stations', 'map.html'),
     ('regions', '/regions', 'Regions', 'regions.html'),
+    ('weather', '/weather', 'Weather', 'weather.html'),
     ('home', '/home', 'Your home', 'home.html'),
     ('frequency', '/frequency', 'Frequency', 'frequency.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
@@ -76,6 +78,7 @@ PAGE_META = {
     'map': ('now', 'Every power station and interconnector, live'),
     'stations': ('now', 'Output by fuel, nation and station, in tables'),
     'regions': ('now', 'Carbon intensity across the 14 regions'),
+    'weather': ('now', 'Wind, temperature and sunshine, and what they do to the grid'),
     'home': ('now', 'Your electricity and gas: use, carbon and cost'),
     'frequency': ('system', 'Live frequency, inertia and the response held'),
     'balancing': ('system', 'Who NESO is paying to turn up or down'),
@@ -122,6 +125,7 @@ CREDITS_HTML = (
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
     'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. French carbon intensity from RTE’s éCO2mix through <a href="https://odre.opendatasoft.com/" rel="noopener">Open Data Réseaux Énergies</a> (Licence Ouverte v2.0); Danish from the <a href="https://www.energidataservice.dk/" rel="noopener">Energi Data Service</a>, under the conditions for use of Danish public-sector data. '
+    'Weather data by <a href="https://open-meteo.com/" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>). '
     'Gas flows, linepack, allocations and prices from '
     '<a href="https://data.nationalgas.com/" rel="noopener">National Gas Transmission’s open data</a>. Station locations '
     'from '
@@ -431,6 +435,8 @@ class Handler(BaseHTTPRequestHandler):
                 body = gas_view(App.store, now, gas_generation(App.store),
                                 home_gas_rate(App.store, now) if App.home and App.home.enabled else None) if App.gas else {'ready': False}
                 self.respond_json(body, send_body)
+            elif parts.path == '/api/weather':
+                self.respond_json(weather_view(App.store, time.time(), App.grid.live() if App.grid else None), send_body)
             elif parts.path == '/api/neighbours':
                 self.respond_json(neighbours_week(App.store, time.time()), send_body)
             elif parts.path == '/api/forecasts':

@@ -4,6 +4,21 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.13.0 (unreleased)
+
+- **Weather** (`/weather`): the weather where it matters to the grid, from
+  Open-Meteo with no key. Wind 100 metres up among the wind farms, temperature
+  where people live and sunshine where the solar panels are, each one figure
+  for Britain, now and hour by hour from two days ago to a week ahead, with
+  the windiest, coldest and sunniest times ahead. Below, the last 90 days of
+  how the grid answered: wind farms against the wind (a power curve, counting
+  what they were turned down), each day's demand against its temperature,
+  with how much each degree colder adds on a working day, and solar against
+  sunshine. Three requests an hour, after fetching the last 92 days once.
+- A **weather slide** on the Display, after gas.
+- Glossary: hub height and power curve.
+- New setting: `POLL_WEATHER_SECONDS` (default 3600, at least 1800).
+
 ## 1.12.0 (2026-11-13)
 
 - **The carbon of imports:** each interconnector's country now shows its

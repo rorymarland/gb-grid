@@ -14,6 +14,7 @@ standard library inside.
 |---|---|---|
 | Overview | `/` | What Britain is using now, where it comes from, today in plain English and the next 48 hours |
 | Map and Stations | `/map`, `/stations` | Every power station and interconnector, live, with a seven-day time machine |
+| Weather | `/weather` | Wind at hub height, temperature and sunshine for Britain, the week ahead, and how wind farms, demand and solar answer them |
 | Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead, and Britain against France and Denmark over the week |
 | Your home | `/home` | Your own electricity and gas from an Octopus smart meter, with carbon and cost (optional) |
 | Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
@@ -99,6 +100,21 @@ carbon intensity over the last week against France's and western Denmark's,
 half hour by half hour, with each one's average.
 
 ![The regions page](docs/regions.png)
+
+### Weather
+
+The weather where it matters to the grid, from Open-Meteo with no key: wind
+100 metres up among the wind farms (weighted by their capacity), temperature
+where people live (weighted by population) and sunshine where the solar
+panels are (weighted by each region's solar output), each as one figure for
+Britain, hour by hour from two days ago to a week ahead. Below, the last 90
+days of how the grid answered: wind farms' output as a share of capacity
+against wind speed (a power curve, counting what they were turned down),
+each day's demand against its temperature, with how much each degree colder
+adds on a working day, and solar output against sunshine. Three requests an
+hour; the first run also fetches the last 92 days.
+
+![The weather page](docs/weather.png)
 
 ### Your home (optional)
 
@@ -296,7 +312,7 @@ shows up in the dashboard.
 A kiosk view for a tablet or spare screen, opened from the Display button in
 the header. Each slide is designed to fit one screen with nothing cut off:
 right now, Today on the grid, the last 24 hours, the station map, regions,
-balancing, constraints, gas, the next 48 hours, spare capacity and outages, and then and now
+balancing, constraints, gas, the weather, the next 48 hours, spare capacity and outages, and then and now
 (once the history has downloaded). Tap to pause, swipe or use the arrow keys to
 move on, and it dims to a clock overnight. On an iPad, add it to the home
 screen for a full-screen app; it keeps the screen awake where the browser
@@ -308,7 +324,7 @@ allows.
 | ![Display: Today on the grid](docs/display-story.png) | ![Display: the next 48 hours](docs/display-outlook.png) |
 
 Options go in the address:
-`/display?views=now,home,story,day,map,regions,balancing,constraints,gas,outlook,outages,records`
+`/display?views=now,home,story,day,map,regions,balancing,constraints,gas,weather,outlook,outages,records`
 (which slides, in order; `home`, Your home, only shows when
 [Octopus is set up](#your-home-octopus-energy); `review`, the year in review,
 joins the default list from 15 December to the end of January), `every=20` (seconds per slide), `night=23-7` (dim
@@ -370,7 +386,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity; `POLL_WEATHER_SECONDS`, every hour, for the weather) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -617,6 +633,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/balancing` | Live instructions, half-hourly costs, top payments, constraint costs, and imbalance prices and trades for today and yesterday |
 | `/api/constraints?group=SCOTEX` | Today's and tomorrow's boundary flows against their limits, one group's half hours for the chart (`group=`), each group's last 30 and 365 days, constraint costs by reason, and wind turned down by day and wind farm |
 | `/api/gas` | Gas now: supply by source, use by category and every entry point; the gas day's flows and linepack with National Gas's predicted close and demand forecast; power stations' gas against gas-fired generation; and a year of daily allocations (GWh) and the System Average Price |
+| `/api/weather` | Wind at hub height, temperature and sunshine for Britain now and hour by hour from two days back to a week ahead, the grid now, and the last 90 days of wind farms against wind, demand against temperature and solar against sunshine |
 | `/api/neighbours` | Britain's, France's and western Denmark's carbon intensity for the last week, by half hour, with means over the half hours all three have, and each neighbour's figure now (live or typical) |
 | `/boundaries.json` | The ETYS transmission boundaries as map paths |
 | `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |
@@ -648,6 +665,7 @@ PVLIVE_BASE_URL=http://127.0.0.1:9101/pvlive/api/v4 \
 NESO_BASE_URL=http://127.0.0.1:9101/neso \
 NATIONAL_GAS_BASE_URL=http://127.0.0.1:9101/gas \
 ODRE_BASE_URL=http://127.0.0.1:9101/odre \
+OPEN_METEO_BASE_URL=http://127.0.0.1:9101/openmeteo \
 ENERGINET_BASE_URL=http://127.0.0.1:9101/energinet \
 GRID_INTERNAL_PORT=8080 python3 app/server.py
 ```
@@ -658,14 +676,14 @@ you edit them.
 Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 `python3 test/test_edges.py` and `python3 test/test_features.py`, and each
 feed's own (`test/test_constraints.py`, `test_review.py`, `test_forecasts.py`,
-`test_imbalance.py`, `test_gas.py` and `test_neighbours.py`).
+`test_imbalance.py`, `test_gas.py`, `test_neighbours.py` and `test_weather.py`).
 
 ### How the code is laid out
 
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours`, `weather`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -730,6 +748,9 @@ stations sharing coordinates). The tests run it.
 - Gas flows, linepack, allocations and prices from National Gas Transmission's
   [open data](https://data.nationalgas.com/), which it publishes under its gas
   system operator licence.
+- Weather data by [Open-Meteo.com](https://open-meteo.com/)
+  ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), combined into
+  averages for Britain; free for non-commercial use.
 - French carbon intensity from RTE's éCO2mix, through
   [Open Data Réseaux Énergies](https://odre.opendatasoft.com/explore/dataset/eco2mix-national-tr/)
   (Licence Ouverte v2.0).
@@ -754,6 +775,6 @@ stations sharing coordinates). The tests run it.
 - Inspired by Kate Morley's [National Grid: Live](https://grid.iamkate.com/).
 
 Live data is fetched from each source's public API and is subject to its terms.
-This project isn't affiliated with or endorsed by Elexon, NESO, National Gas, RTE or Energinet.
+This project isn't affiliated with or endorsed by Elexon, NESO, National Gas, RTE, Energinet or Open-Meteo.
 
 The code is released under the [MIT licence](LICENSE).
