@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.7.0 (unreleased)
+## 1.7.0 (2026-11-13)
 
 - **Constraints** (`/constraints`), a new page on why Scottish wind gets
   turned down. NESO's day-ahead forecast of each transmission boundary's
