@@ -217,7 +217,9 @@ rec = {r['key']: r for r in summary['records']}
 check('cleanest half hour', rec['cleanest-hh']['value'] == 150, rec.get('cleanest-hh'))
 check('wind peak', rec['wind-peak']['value'] == 21000 and rec['wind-peak']['t'] == start + 300 * 1800, rec.get('wind-peak'))
 check('last coal', summary['last_coal'] == start + 99 * 1800, summary['last_coal'])
-check('year apart', summary['compare']['now'] and summary['compare']['then'] and summary['compare']['now']['t'] - summary['compare']['then']['t'] == 364 * 86400, summary['compare'])
+check('year apart', summary['compare']['now'] and summary['compare']['then'] and abs(summary['compare']['now']['t'] - summary['compare']['then']['t'] - 364 * 86400) <= 3600, summary['compare'])
+check('days are UK days', all(server.uk_midnight_utc(server.uk_day(r['t'])) == r['t'] for r in summary['records'] if r['span'] == 'day')
+      and server.uk_midnight_utc(server.uk_day(summary['compare']['now']['t'])) == summary['compare']['now']['t'], summary['records'])
 check('years', len(summary['years']) >= 2 and abs(sum(summary['years'][0]['mix'].values()) - 1) < 0.01, summary['years'])
 
 ol = server.Outlook()

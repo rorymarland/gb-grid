@@ -21,6 +21,7 @@ from .notify import Notifier
 from .photos import Photos
 from .home import Home, run_home
 from .constraints import Constraints
+from .review import Review
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -46,6 +47,7 @@ def main():
     App.grid.notifier = notifier
     App.home = App.grid.home = Home(store, status)
     App.constraints = App.grid.constraints = Constraints(store, fleet)
+    App.review = Review(store, App.grid, App.home)
 
     def poll_events():
         changed = events.poll()

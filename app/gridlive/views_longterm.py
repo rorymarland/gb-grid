@@ -1,9 +1,10 @@
 """API views: /api/longterm, its summary and /api/outlook."""
 
 import time
+from datetime import timedelta
 
 from .config import LONG_HISTORY
-from .timeutil import floor_to
+from .timeutil import floor_to, uk_day, uk_midnight_utc
 from .longterm import LH_START
 
 
@@ -92,11 +93,11 @@ class LongtermViews:
         add('cleanest-hh', 'Cleanest half hour', 'g/kWh',
             (q('SELECT t, ci FROM lh WHERE ci > 0 ORDER BY ci, t DESC LIMIT 1') or [None])[0], 'hh', 'low')
         add('cleanest-day', 'Cleanest day', 'g/kWh',
-            (q('SELECT (t / 86400) * 86400 AS d, AVG(ci) a FROM lh WHERE ci > 0 %s ORDER BY a LIMIT 1' % full_day) or [None])[0], 'day', 'low')
+            (q('SELECT ukday(t) AS d, AVG(ci) a FROM lh WHERE ci > 0 %s ORDER BY a LIMIT 1' % full_day) or [None])[0], 'day', 'low')
         add('wind-peak', 'Most wind power', 'MW',
             (q('SELECT t, COALESCE(wind, 0) + COALESCE(wind_emb, 0) w FROM lh ORDER BY w DESC LIMIT 1') or [None])[0], 'hh', 'high')
         add('windiest-day', 'Windiest day', 'MW',
-            (q('SELECT (t / 86400) * 86400 AS d, AVG(COALESCE(wind, 0) + COALESCE(wind_emb, 0)) a FROM lh %s ORDER BY a DESC LIMIT 1' % full_day) or [None])[0], 'day', 'high')
+            (q('SELECT ukday(t) AS d, AVG(COALESCE(wind, 0) + COALESCE(wind_emb, 0)) a FROM lh %s ORDER BY a DESC LIMIT 1' % full_day) or [None])[0], 'day', 'high')
         add('wind-share', 'Highest wind share', '%',
             (q('SELECT t, 100.0 * (COALESCE(wind, 0) + COALESCE(wind_emb, 0)) / generation s FROM lh '
                'WHERE generation > 10000 ORDER BY s DESC LIMIT 1') or [None])[0], 'hh', 'high')
@@ -117,23 +118,25 @@ class LongtermViews:
 
         # The latest complete day against the same weekday a year earlier
         compare = None
-        latest = q('SELECT (t / 86400) * 86400 AS d FROM lh %s ORDER BY d DESC LIMIT 1' % full_day)
+        latest = q('SELECT ukday(t) AS d FROM lh %s ORDER BY d DESC LIMIT 1' % full_day)
         if latest:
             def day(d):
-                row = q('SELECT %s, COUNT(*) FROM lh WHERE t >= ? AND t < ?' % self.LT_SQL, (d, d + 86400))[0]
+                end = uk_midnight_utc(uk_day(d + 43200) + timedelta(days=1))
+                row = q('SELECT %s, COUNT(*) FROM lh WHERE t >= ? AND t < ?' % self.LT_SQL, (d, end))[0]
                 if not row[-1]:
                     return None
-                price = q('SELECT AVG(price) FROM lp WHERE t >= ? AND t < ? AND price IS NOT NULL', (d, d + 86400))[0][0]
+                price = q('SELECT AVG(price) FROM lp WHERE t >= ? AND t < ? AND price IS NOT NULL', (d, end))[0][0]
                 total = sum(v or 0 for v in row[:10]) or 1
                 return {'t': d, 'mix': {f: round((row[i] or 0) / total, 4) for i, f in enumerate(self.LT_FUELS)},
                         'generation': round(row[10] or 0), 'ci': None if row[11] is None else round(row[11]),
                         'price': None if price is None else round(price, 2)}
             d = latest[0][0]
-            compare = {'now': day(d), 'then': day(d - 364 * 86400)}
+            then = uk_midnight_utc(uk_day(d + 43200) - timedelta(days=364))
+            compare = {'now': day(d), 'then': day(then)}
 
         years = []
-        prices = dict(q("SELECT CAST(strftime('%Y', t, 'unixepoch') AS INTEGER) y, AVG(price) FROM lp WHERE price IS NOT NULL GROUP BY y"))
-        for row in q("SELECT CAST(strftime('%%Y', t, 'unixepoch') AS INTEGER) y, %s, COUNT(*) FROM lh GROUP BY y ORDER BY y" % self.LT_SQL):
+        prices = dict(q("SELECT ukyear(t) y, AVG(price) FROM lp WHERE price IS NOT NULL GROUP BY y"))
+        for row in q("SELECT ukyear(t) y, %s, COUNT(*) FROM lh GROUP BY y ORDER BY y" % self.LT_SQL):
             total = sum(v or 0 for v in row[1:11]) or 1
             years.append({'year': row[0], 'mix': {f: round((row[1 + i] or 0) / total, 4) for i, f in enumerate(self.LT_FUELS)},
                           'ci': None if row[12] is None else round(row[12]), 'generation': round(row[11] or 0),

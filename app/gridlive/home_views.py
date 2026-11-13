@@ -73,12 +73,10 @@ class ViewsMixin:
         latest.update({'points': points, 'hours': hours, 'step': step})
         return latest
 
-    def _build(self, now, today):
-        # From the first of the month twelve months ago, so every month in the table is whole
-        oldest = today.replace(day=1)
-        for _ in range(12):
-            oldest = (oldest - timedelta(days=1)).replace(day=1)
-        since = uk_midnight_utc(min(oldest, today - timedelta(days=365)))
+    def _day_summaries(self, since, until=None):
+        """Each UK day's electricity and gas: kWh, kg of CO2 and cost (with standing charges),
+        for the half hours from `since` (and before `until`). Keyed by date."""
+        until = until if until is not None else 2 ** 40
         rate_lists = self._rates()
         starts = {k: [row[0] for row in v] for k, v in rate_lists.items()}
 
@@ -102,12 +100,8 @@ class ViewsMixin:
                                   'g': 0.0, 'g_n': 0, 'g_cost': 0.0, 'g_cost_ok': True, 'live': False}
             return item
 
-        today_slots = []
-        today_start = uk_midnight_utc(today)
-        timing_from = uk_midnight_utc(today - timedelta(days=30))
-        weighted, weight, flat, flat_n = 0.0, 0.0, 0.0, 0
         for t, kwh, src, ci in self.store.query(
-                "SELECT t, kwh, src, ci FROM home WHERE fuel = 'elec' AND t >= ? ORDER BY t", (since,)):
+                "SELECT t, kwh, src, ci FROM home WHERE fuel = 'elec' AND t >= ? AND t < ? ORDER BY t", (since, until)):
             item = bucket(t)
             item['e'] += kwh
             item['e_n'] += 1
@@ -120,14 +114,7 @@ class ViewsMixin:
                 item['e_cost_ok'] = False
             else:
                 item['e_cost'] += kwh * unit
-            if t >= today_start:
-                today_slots.append([t, round(kwh, 3), None if ci is None else round(ci), src])
-            elif t >= timing_from and ci is not None:
-                weighted += kwh * ci
-                weight += kwh
-                flat += ci
-                flat_n += 1
-        for t, kwh in self.store.query("SELECT t, kwh FROM home WHERE fuel = 'gas' AND t >= ? ORDER BY t", (since,)):
+        for t, kwh in self.store.query("SELECT t, kwh FROM home WHERE fuel = 'gas' AND t >= ? AND t < ? ORDER BY t", (since, until)):
             item = bucket(t)
             item['g'] += kwh
             item['g_n'] += 1
@@ -163,7 +150,35 @@ class ViewsMixin:
                 'live': item['live'],
             }
 
-        summaries = {d: summarise(d, item) for d, item in days.items()}
+        return {d: summarise(d, item) for d, item in days.items()}
+
+    def _build(self, now, today):
+        # From the first of the month twelve months ago, so every month in the table is whole
+        oldest = today.replace(day=1)
+        for _ in range(12):
+            oldest = (oldest - timedelta(days=1)).replace(day=1)
+        since = uk_midnight_utc(min(oldest, today - timedelta(days=365)))
+        rate_lists = self._rates()
+
+        def rate(fuel, kind, t):
+            table = [row for row in rate_lists.get((fuel, kind), []) if row[0] <= t]
+            if not table:
+                return None
+            start, end, p = table[-1]
+            return p if end is None or t < end else None
+
+        summaries = self._day_summaries(since)
+        today_start = uk_midnight_utc(today)
+        timing_from = uk_midnight_utc(today - timedelta(days=30))
+        today_slots = [[t, round(kwh, 3), None if ci is None else round(ci), src] for t, kwh, src, ci in self.store.query(
+            "SELECT t, kwh, src, ci FROM home WHERE fuel = 'elec' AND t >= ? ORDER BY t", (today_start,))]
+        weighted, weight, flat, flat_n = 0.0, 0.0, 0.0, 0
+        for kwh, ci in self.store.query("SELECT kwh, ci FROM home WHERE fuel = 'elec' AND t >= ? AND t < ? AND ci IS NOT NULL",
+                                        (timing_from, today_start)):
+            weighted += kwh * ci
+            weight += kwh
+            flat += ci
+            flat_n += 1
         recent = []
         for back in range(30, -1, -1):
             d = today - timedelta(days=back)

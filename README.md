@@ -22,6 +22,7 @@ standard library inside.
 | Outages | `/outages` | Spare capacity, offline units and grid notices |
 | Timeline | `/timeline` | Notable moments, kept for a year, linked to the map and History |
 | History | `/history` | The mix, carbon and price since 2009, with records |
+| Year in review | `/review` | The grid's year and your home's, saved for good once the year is over |
 | What if? | `/sandbox` | Trip a power station and watch the first minute and the next hour |
 | Glossary | `/glossary` | Every term the dashboard uses, in plain English |
 | Display | `/display` | A full-screen slideshow for a spare screen |
@@ -192,6 +193,26 @@ background on first start; see `LONG_HISTORY` below.
 
 ![The history page](docs/history.png)
 
+### Year in review
+
+A calendar year on one page, worth keeping: carbon intensity every year
+since 2009 with this one picked out; the year's figures against the year
+before (the same days of it, while the year is still going); the mix for
+the year and month by month; the year's highs and lows, marked where
+they're the highest or lowest since 2009; wind and the wind turned down,
+with constraint costs; the timeline's major moments; and, with
+[Octopus set up](#your-home-octopus-energy), your home's year: electricity,
+gas, cost and carbon by month, how your timing compared with using
+electricity evenly, and your Saving Sessions. It makes no requests of its
+own, to Octopus or anyone else. Pick any year since 2009; until the middle
+of January it opens on the year just finished. Two weeks after a year ends,
+the page is saved as it stands, so it reads the same after the timeline and
+NESO's data have moved on. It prints, or saves as a PDF, without the site
+around it, and from 15 December to the end of January it's also a slide on
+the Display.
+
+![The year in review](docs/review.png)
+
 ### What if?
 
 A sandbox for seeing how the pieces fit. **The first minute** simulates a
@@ -239,7 +260,8 @@ allows.
 Options go in the address:
 `/display?views=now,home,story,day,map,regions,balancing,constraints,outlook,outages,records`
 (which slides, in order; `home`, Your home, only shows when
-[Octopus is set up](#your-home-octopus-energy)), `every=20` (seconds per slide), `night=23-7` (dim
+[Octopus is set up](#your-home-octopus-energy); `review`, the year in review,
+joins the default list from 15 December to the end of January), `every=20` (seconds per slide), `night=23-7` (dim
 hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
 
 ## Quick start
@@ -506,6 +528,13 @@ Allowlist `api.neso.energy` to fix it.
   hour's MWh is half the figure. Its share is the energy turned down over
   what transmission-connected wind farms made plus that, for the latest 30
   days NESO has both.
+- **The year in review's carbon check:** each month's published intensity is
+  compared with the intensity its mix implies (gas 394, coal 937, biomass 120
+  and other 300 g/kWh; imports and zero-carbon sources as none), against how
+  the two related over the 24 months before. A month more than 15% out of
+  line is marked as suspect. The History page shows NESO's figures as
+  published. The record since 2009 is read again for the last 400 days once
+  a week, so NESO's revisions arrive.
 - **Northern Ireland** is part of the all-island grid with Ireland rather than
   the GB grid, so it only appears through the Moyle interconnector.
 
@@ -533,6 +562,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
 | `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
 | `/api/sandbox?at=` | Starting figures for the sandbox: response held at that moment and the inertia fit |
+| `/api/review?year=2026` | The year in review: the grid's year (figures, the year before, months, highs and lows, constraints, moments, every year since 2009) and your home's (`null` without Octopus). Without `year`, the year just finished until mid-January, then this one |
 | `/api/home` | Your home: live reading, today's half hours, the last 30 days, months and timing (`{"enabled": false}` when Octopus isn't set up) |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
 | `/healthz` | 200 when the server is running |
@@ -563,7 +593,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `review`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |

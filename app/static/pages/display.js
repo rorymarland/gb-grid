@@ -14,6 +14,12 @@ var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
 /* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
 var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,outlook,outages,records';
+/* The year in review joins the default slides from mid-December to the end of January */
+(function () {
+  var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+  var m = Number(parts.filter(function (p) { return p.type === 'month'; })[0].value), d = Number(parts.filter(function (p) { return p.type === 'day'; })[0].value);
+  if ((m === 12 && d >= 15) || m === 1) DEFAULT_VIEWS = DEFAULT_VIEWS.replace(',records', ',review,records');
+})();
 var every = G.clamp(Number(params.get('every')) || 20, 5, 600);
 var nightSpec = (params.get('night') || '23-7').match(/^(\d{1,2})-(\d{1,2})$/);
 var nightFrom = nightSpec ? Number(nightSpec[1]) : null, nightTo = nightSpec ? Number(nightSpec[2]) : null;
@@ -47,7 +53,7 @@ function whenPhrase(t) {
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
   regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
-  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900]
+  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900], review: ['/api/review', 3600]
 };
 var data = {}, polls = {};
 function startFeed(name) {
@@ -366,6 +372,49 @@ function buildOutlook(body, take) {
   };
 }
 
+/* ---------- the year in review ---------- */
+
+function buildReview(body, take) {
+  var gauge = h('div', { cls: 'gauge-box' }), list = h('div', { cls: 'side' });
+  body.appendChild(h('div', { cls: 'split even' }, [gauge, list]));
+  return {
+    ready: function () { return Boolean(data.review && data.review.grid); },
+    render: function () {
+      var d = data.review;
+      if (!d || !d.grid) return;
+      var g = d.grid, f = g.figures, b = g.before, year = d.year;
+      var vs = g.whole ? String(year - 1) : 'the same days of ' + (year - 1);
+      clear(gauge);
+      var odd = Boolean(g.ci_check && g.ci_check.odd && g.ci_check.odd.length);
+      if (odd) {
+        // NESO's carbon figures for part of the year look wrong: show the zero-carbon share instead
+        gauge.appendChild(h('p', { cls: 'big' }, [pct(f.zero), h('small', { text: 'zero-carbon' })]));
+        gauge.appendChild(h('p', { cls: 'pill' }, [g.whole ? String(year) : year + ' so far']));
+        if (b) gauge.appendChild(h('p', { cls: 'foot-note', text: 'Against ' + pct(b.zero) + ' ' + vs + '. Nuclear, wind, solar and hydro.' }));
+      } else {
+        gauge.appendChild(h('p', { cls: 'big' }, [String(f.ci), h('small', { text: 'g/kWh' })]));
+        gauge.appendChild(h('p', { cls: 'pill' }, [(g.whole ? year : year + ' so far') + ', on average']));
+      }
+      if (!odd && b && num(b.ci)) gauge.appendChild(h('p', { cls: 'foot-note', text: Math.abs(Math.round((f.ci - b.ci) / b.ci * 100)) + '% ' + (f.ci <= b.ci ? 'cleaner' : 'dirtier') + ' than ' + vs + '. Britain’s electricity was ' + pct(f.zero) + ' zero-carbon.' }));
+      clear(list);
+      list.appendChild(h('h3', { text: 'Where it came from' }));
+      [['wind', 'Wind'], ['gas', 'Gas'], ['nuclear', 'Nuclear'], ['imports', 'Imports'], ['biomass', 'Biomass'], ['solar', 'Solar']].forEach(function (k) {
+        list.appendChild(h('div', { cls: 'row' }, [h('span', null, [h('i', { cls: 'sw', style: 'background:' + fuelColour(k[0]) }), k[1]]),
+          h('b', { text: pct(f.mix[k[0]]) }), h('span', { cls: 'muted', text: (f.fuel_twh[k[0]] >= 10 ? Math.round(f.fuel_twh[k[0]]) : f.fuel_twh[k[0]].toFixed(1)) + ' TWh' })]));
+      });
+      var home = d.home;
+      if (home && home.total) {
+        list.appendChild(h('div', { cls: 'stats cn-stats' }, [
+          h('div', null, [h('b', { text: G.int(home.total.e) + ' kWh' }), h('span', { text: 'your electricity' + (g.whole ? '' : ' so far') })]),
+          num(home.total.cost) ? h('div', null, [h('b', { text: '£' + G.int(home.total.cost / 100) }), h('span', { text: 'your energy bill' + (g.whole ? '' : ' so far') })]) : null
+        ]));
+      }
+      take.textContent = (g.whole ? 'In ' + year : 'So far in ' + year) + ', ' + (odd ? pct(f.zero) + ' of Britain’s electricity was zero-carbon and ' + pct(f.mix.wind) + ' came from wind.'
+        : 'Britain’s electricity averaged ' + f.ci + ' g of CO₂ per kWh, ' + pct(f.mix.wind) + ' of it from wind.');
+    }
+  };
+}
+
 /* ---------- constraints ---------- */
 
 function buildConstraints(body, take) {
@@ -616,6 +665,7 @@ var BUILDERS = {
   regions: ['Carbon intensity by region', ['regions'], buildRegions],
   balancing: ['Balancing the grid', ['balancing'], buildBalancing],
   constraints: ['Constraints', ['constraints'], buildConstraints],
+  review: ['The year in review', ['review'], buildReview],
   outlook: ['The next 48 hours', [], buildOutlook],
   outages: ['Spare capacity and outages', ['outages'], buildOutages],
   records: ['Then and now', ['summary'], buildRecords]

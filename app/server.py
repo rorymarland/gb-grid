@@ -26,7 +26,7 @@ import time  # noqa: F401  (tests patch server.time.time)
 from gridlive import fetch  # noqa: F401  (tests patch server.fetch.get_json)
 
 _MODULES = ['config', 'reference', 'timeutil', 'fetch', 'store', 'status', 'ingest', 'units', 'jobs', 'balancing',
-            'outages', 'longterm', 'notices', 'photos', 'octopus', 'home_sessions', 'home_views', 'home', 'constraints', 'views_live', 'views_map', 'views_system', 'views_longterm', 'views_summary', 'frequency', 'events', 'notify', 'views_events', 'views_sandbox', 'grid', 'web', 'main']
+            'outages', 'longterm', 'notices', 'photos', 'octopus', 'home_sessions', 'home_views', 'home', 'constraints', 'review', 'views_live', 'views_map', 'views_system', 'views_longterm', 'views_summary', 'frequency', 'events', 'notify', 'views_events', 'views_sandbox', 'grid', 'web', 'main']
 for _name in _MODULES:
     _module = importlib.import_module('gridlive.' + _name)
     globals().update({key: value for key, value in vars(_module).items() if not key.startswith('__')})

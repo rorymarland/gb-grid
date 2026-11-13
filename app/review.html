@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Year in review – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/review.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head rv-head">
+    <div class="rv-title">
+      <h1 id="title">The year in review</h1>
+      <div class="rv-controls">
+        <label class="rv-year"><span class="visually-hidden">Year</span><select id="year"></select></label>
+        <button type="button" class="rv-print" id="print">Print or save as PDF</button>
+      </div>
+    </div>
+    <p class="lede" id="lede">Britain’s electricity over a calendar year, and your home’s, from what the dashboard keeps.</p>
+    <p class="rv-status" id="status"></p>
+  </section>
+
+  <p class="rv-waiting" id="waiting">Putting the year together…</p>
+
+  <div id="content" hidden>
+    <section class="rv-long" aria-labelledby="long-title">
+      <h2 class="rv-long-title" id="long-title">Carbon intensity, every year since 2009</h2>
+      <p class="sub" id="long-sub"></p>
+      <div class="chart rv-long-chart" id="long-chart"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="figures-title">
+      <div class="panel-head"><h2 id="figures-title">The grid’s year in figures</h2></div>
+      <p class="sub" id="figures-sub"></p>
+      <dl class="rv-figures" id="grid-figures"></dl>
+      <p class="rv-note rv-warn" id="ci-note" hidden></p>
+      <p class="rv-note" id="coal-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="mix-title">
+      <div class="panel-head"><h2 id="mix-title">Where the electricity came from</h2></div>
+      <p class="sub">Each source’s share of the electricity Britain used, for the year and month by month. Wind includes the smaller wind farms on local networks.</p>
+      <div class="rv-mixbar" id="year-mix" role="img"></div>
+      <ul class="rv-legend" id="mix-legend"></ul>
+      <h3 class="rv-h3">Month by month</h3>
+      <div class="chart rv-months" id="months-chart"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="bests-title">
+      <div class="panel-head"><h2 id="bests-title">Highs and lows</h2></div>
+      <p class="sub">The year’s extremes, half hour by half hour and day by day. Where one is also the highest or lowest since 2009, it says so.</p>
+      <dl class="rv-bests" id="bests"></dl>
+    </section>
+
+    <section class="panel" aria-labelledby="wind-title">
+      <div class="panel-head"><h2 id="wind-title">Wind, and the wind turned down</h2></div>
+      <p class="sub" id="wind-sub"></p>
+      <dl class="rv-figures rv-figures-3" id="wind-figures"></dl>
+      <p class="rv-note" id="wind-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="moments-title" id="moments-panel">
+      <div class="panel-head"><h2 id="moments-title">Moments</h2></div>
+      <p class="sub" id="moments-sub">The year’s major events from the <a href="/timeline">timeline</a>.</p>
+      <ol class="rv-moments" id="moments"></ol>
+    </section>
+
+    <section class="panel rv-home" aria-labelledby="home-title" id="home-panel" hidden>
+      <div class="panel-head">
+        <h2 id="home-title">Your home’s year</h2>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Show" id="home-mode">
+            <button type="button" data-mode="energy" aria-pressed="true">Energy</button>
+            <button type="button" data-mode="cost" aria-pressed="false">Cost</button>
+            <button type="button" data-mode="carbon" aria-pressed="false">Carbon</button>
+          </div>
+        </div>
+      </div>
+      <p class="sub" id="home-sub"></p>
+      <dl class="rv-figures" id="home-figures"></dl>
+      <div class="chart rv-home-chart" id="home-chart"></div>
+      <ul class="rv-legend" id="home-legend"></ul>
+      <ul class="rv-points" id="home-points"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>The grid’s figures come from NESO’s historic generation mix, the same half hours as the <a href="/history">History</a> page, and Elexon’s wholesale prices. A year’s carbon intensity is weighted by how much was generated, so a busy winter evening counts for more than a quiet summer night; History’s yearly figures are a plain average of the half hours, so they can differ by a few g/kWh.</p>
+        <p>While a year is still going, it runs to the last whole day NESO has published, usually two days ago, and compares with the same days of the year before.</p>
+        <p>Wind turned down and constraint costs come from the <a href="/constraints">Constraints</a> page’s data, which goes back about 400 days from when the dashboard first ran. Moments come from the timeline, which keeps about 400 days too.</p>
+        <p>Your home’s year uses the meter readings and prices the dashboard already keeps, with carbon at the grid’s intensity in each half hour and gas at <span id="gas-factor">0.183</span> kg of CO₂ per kWh. Making this page sends no requests to Octopus.</p>
+        <p>Two weeks after a year ends, once the late data is in, the page is saved as it stands and kept, so it reads the same in years to come.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/review.js}}"></script>
+</body>
+</html>

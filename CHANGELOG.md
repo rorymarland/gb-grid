@@ -4,6 +4,37 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.8.0 (unreleased)
+
+- **Year in review** (`/review`): a calendar year on one page, worth
+  keeping. Carbon intensity every year since 2009 with this one picked out;
+  the year's figures against the year before (the same days of it while
+  the year is going); the mix for the year and month by month; highs and
+  lows, marked where they're the highest or lowest since 2009; wind turned
+  down and constraint costs; the timeline's major moments; and your home's
+  year, with electricity, gas, cost and carbon by month, your timing and
+  your Saving Sessions. Any year since 2009 can be picked. Two weeks after
+  a year ends it's saved as it stands, so it still reads the same once the
+  timeline and NESO's data have moved on. It prints or saves as a PDF
+  without the site around it, and it's a Display slide from 15 December to
+  the end of January (or any time with `views=…,review`). No requests to
+  Octopus or anyone else.
+- **NESO's corrections are picked up:** NESO revises its historic generation
+  mix after publishing it, but the dashboard only ever fetched new half
+  hours. It now reads the last 400 days again once a week (two or three
+  requests to NESO), changing only the rows NESO has revised.
+- **A check on NESO's carbon figures:** the year in review compares each
+  month's published carbon intensity with what NESO's own mix implies.
+  From 2011 to 2025 the two never part by more than about 6%; from March
+  to October 2026 NESO's figure is about 28% higher than its mix suggests,
+  while the Carbon Intensity API's own figures agree with the mix. Months
+  like that are marked, the page leads with the zero-carbon share instead
+  of the carbon comparison, and the year isn't saved for good until
+  1 April, giving NESO time to correct it.
+- **Fixed:** History's records and yearly figures grouped half hours by UTC
+  day and year, so in summer a "day" ran from 01:00 to 01:00. They now use
+  UK days and years.
+
 ## 1.7.0 (2026-11-13)
 
 - **Constraints** (`/constraints`), a new page on why Scottish wind gets

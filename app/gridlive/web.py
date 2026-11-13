@@ -29,6 +29,7 @@ class App:
     photos = None
     home = None
     constraints = None
+    review = None
     boundaries = (b'', '')
 
 
@@ -55,6 +56,7 @@ PAGES = [
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
+    ('review', '/review', 'Year in review', 'review.html'),
     ('sandbox', '/sandbox', 'What if?', 'sandbox.html'),
     ('glossary', '/glossary', 'Glossary', 'glossary.html'),
     ('station', '/station', 'Station', 'station.html'),  # one station: reached from the map, Stations and search
@@ -74,6 +76,7 @@ PAGE_META = {
     'outages': ('system', 'Spare capacity, offline units and grid notices'),
     'timeline': ('time', 'Notable moments, kept for a year'),
     'history': ('time', 'The mix, carbon and price since 2009'),
+    'review': ('time', 'The grid’s year and your home’s, worth keeping'),
     'sandbox': ('explore', 'Trip a power station and see what happens'),
     'glossary': ('explore', 'Every term the dashboard uses, in plain English'),
 }
@@ -412,6 +415,10 @@ class Handler(BaseHTTPRequestHandler):
                     etag = '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'max-age=86400'
                     self.respond(200, body, content_type, send_body, etag=etag, cache=cache)
+            elif parts.path == '/api/review':
+                raw = query.get('year', [''])[0]
+                year = int(raw) if raw.isdigit() and len(raw) == 4 else None
+                self.respond_json(App.review.view(year, time.time()) if App.review else {'grid': None, 'home': None}, send_body)
             elif parts.path == '/api/home':
                 try:
                     hours = int(query.get('hours', ['1'])[0])

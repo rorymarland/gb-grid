@@ -19,6 +19,12 @@ from .fetch import FetchError, as_float
 LH_COLUMNS = ['gas', 'coal', 'nuclear', 'wind', 'wind_emb', 'hydro', 'imports', 'biomass', 'other', 'solar', 'storage', 'generation', 'ci']
 LH_SOURCE = ['GAS', 'COAL', 'NUCLEAR', 'WIND', 'WIND_EMB', 'HYDRO', 'IMPORTS', 'BIOMASS', 'OTHER', 'SOLAR', 'STORAGE', 'GENERATION', 'CARBON_INTENSITY']
 LH_RESOURCE = 'f93d1835-75bc-43e5-84ad-12472b180a98'  # NESO "Historic generation mix", looked up by name first
+# Only rows NESO has changed are written, so re-reading costs nothing when nothing changed
+UPSERT_LH = ('INSERT INTO lh (t, %s) VALUES (%s) ON CONFLICT (t) DO UPDATE SET %s WHERE %s'
+             % (', '.join(LH_COLUMNS), ', '.join('?' * 14), ', '.join('%s = excluded.%s' % (c, c) for c in LH_COLUMNS),
+                ' OR '.join('lh.%s IS NOT excluded.%s' % (c, c) for c in LH_COLUMNS)))
+REFRESH_DAYS = 400            # NESO revises recent figures: read this far back again ...
+REFRESH_EVERY = 7 * 86400     # ... once a week
 LH_START = int(datetime(2009, 1, 1, tzinfo=timezone.utc).timestamp())
 PRICE_HISTORY_START = int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp())
 
@@ -31,6 +37,7 @@ class LongHistory:
         self.store = store
         self.resource = None
         self.mix_checked = 0
+        self.refreshed = 0         # when the last year was last read again
         self.price_span = 6 * 86400  # steps down to 3 days, then 1, if Elexon refuses the range
         self.version = 0
 
@@ -44,10 +51,11 @@ class LongHistory:
             log.debug('[longhistory] dataset lookup failed: %s', error)
         return LH_RESOURCE
 
-    def fetch_mix(self, limit=10000):
+    def fetch_mix(self, limit=10000, after=None):
+        """The next `limit` half hours after the newest kept (or after `after`)."""
         if not self.resource:
             self.resource = self.find_resource()
-        last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
+        last = after if after is not None else (self.store.scalar('SELECT MAX(t) FROM lh') or 0)
         since = datetime.fromtimestamp(last, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') if last else '2000-01-01T00:00:00'
         columns = ', '.join('"%s"' % c for c in ['DATETIME'] + LH_SOURCE)
         sql = 'SELECT %s FROM "%s" WHERE "DATETIME" > \'%s\' ORDER BY "DATETIME" LIMIT %d' % (columns, self.resource, since, limit)
@@ -61,8 +69,23 @@ class LongHistory:
                 continue
             values = [as_float(record.get(c)) for c in LH_SOURCE]
             rows.append((t,) + tuple(None if v is None else int(round(v)) for v in values))
-        self.store.write('INSERT OR REPLACE INTO lh (t, %s) VALUES (%s)' % (', '.join(LH_COLUMNS), ', '.join('?' * 14)), rows, history=False)
+        changed = self.store.write(UPSERT_LH, rows, history=False)
+        if after is not None:
+            return (rows[-1][0] if rows else None), changed
         return len(rows)
+
+    def refresh_recent(self, days=REFRESH_DAYS):
+        """Read the last `days` again: NESO cleans its figures after publishing them, sometimes
+        months later, and only new half hours are fetched otherwise. Two or three requests."""
+        after = time.time() - days * 86400
+        changed = 0
+        for _ in range(days * 48 // 10000 + 2):
+            last, n = self.fetch_mix(after=after)
+            changed += n
+            if last is None or last <= after:
+                break
+            after = last
+        return changed
 
     def fetch_prices(self):
         last = self.store.scalar('SELECT MAX(t) FROM lp') or (PRICE_HISTORY_START - 1800)
@@ -109,6 +132,14 @@ class LongHistory:
                 break
             time.sleep(1)
         self.mix_checked = now
+        if now - last < 10 * 86400 and now - self.refreshed > REFRESH_EVERY:
+            self.refreshed = now
+            try:
+                if self.refresh_recent():
+                    self.version += 1
+                    log.info('[longhistory] NESO has revised figures in the last %d days', REFRESH_DAYS)
+            except FetchError as error:
+                log.info('[longhistory] re-reading the last year failed: %s', error)
 
     def poll_prices(self):
         """A week of prices per request, one request at a time, until caught up."""

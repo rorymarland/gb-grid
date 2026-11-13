@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from .config import log
+from .timeutil import uk_day, uk_midnight_utc
 
 
 # --------------------------------------------------------------------------
@@ -81,6 +82,11 @@ class Store:
             self.db = sqlite3.connect(':memory:', check_same_thread=False, isolation_level=None)
             self.persistent = False
         self.db.execute('PRAGMA synchronous=NORMAL')
+        # UK days and years for GROUP BY (SQLite's own date functions only know UTC):
+        # ukday(t) is the UTC epoch of the UK midnight that starts t's day
+        self.db.create_function('ukday', 1, lambda t: None if t is None else uk_midnight_utc(uk_day(t)), deterministic=True)
+        self.db.create_function('ukyear', 1, lambda t: None if t is None else uk_day(t).year, deterministic=True)
+        self.db.create_function('ukmonth', 1, lambda t: None if t is None else uk_day(t).month, deterministic=True)
         self.db.executescript('''
             CREATE TABLE IF NOT EXISTS gen (t INTEGER NOT NULL, fuel TEXT NOT NULL,
                 mw REAL NOT NULL, PRIMARY KEY (t, fuel)) WITHOUT ROWID;
@@ -125,6 +131,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS wcurt_hh (t INTEGER PRIMARY KEY, mwh REAL NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS tariff_rate (tariff TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
                 end INTEGER, p REAL NOT NULL, PRIMARY KEY (tariff, kind, start)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS review (year INTEGER PRIMARY KEY, made INTEGER NOT NULL, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS home_rate (fuel TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
                 end INTEGER, p REAL NOT NULL, PRIMARY KEY (fuel, kind, start)) WITHOUT ROWID;
         ''')
