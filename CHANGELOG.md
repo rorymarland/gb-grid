@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.10.0 (unreleased)
+## 1.10.0 (2026-11-13)
 
 - **The imbalance price** on Balancing: each half hour's system price against
   the market price, for today and yesterday, with the day's average,
