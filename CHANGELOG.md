@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.8.0 (unreleased)
+## 1.8.0 (2026-11-13)
 
 - **Year in review** (`/review`): a calendar year on one page, worth
   keeping. Carbon intensity every year since 2009 with this one picked out;
