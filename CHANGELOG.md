@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.9.0 (unreleased)
+## 1.9.0 (2026-11-13)
 
 - **Forecasts** (`/forecasts`): how good NESO's forecasts are. The latest
   day of each against what happened; a scorecard of the typical miss and
