@@ -4,6 +4,23 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.11.0 (unreleased)
+
+- **Gas** (`/gas`): Britain's gas system, from National Gas's open data with
+  no key. What's coming in now and from where (Norway through Langeled, the
+  North Sea, LNG, the continent and storage) and where it's going (local
+  networks, power stations, industry, exports and storage), every five
+  minutes; the gas day so far, from 05:00, with linepack against National
+  Gas's prediction for where it will close and its demand forecast; a rough
+  efficiency for gas power stations; and the last year of daily use and
+  supply, in GWh, and the System Average Price, against your own gas unit
+  rate when Octopus is set up. The year downloads once, a request every
+  20 seconds, then daily figures are checked every 3 hours; if National Gas
+  ever turns a request away as too many, the dashboard waits half an hour.
+- A **gas slide** on the Display, after constraints.
+- Glossary: linepack, the gas day, LNG and the System Average Price.
+- New setting: `POLL_GAS_SECONDS` (default 300, at least 240).
+
 ## 1.10.0 (2026-11-13)
 
 - **The imbalance price** on Balancing: each half hour's system price against

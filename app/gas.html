@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Gas – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/gas.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>Gas</h1>
+    <p class="lede">Gas still makes about a quarter of Britain’s electricity and heats most of its homes. This is where it comes from, where it goes, and how much is in the pipes, from National Gas, every few minutes.</p>
+  </section>
+
+  <p class="gs-waiting" id="waiting">Fetching National Gas’s figures.</p>
+
+  <div id="content" hidden>
+    <section class="gs-now" aria-labelledby="now-title">
+      <h2 class="visually-hidden" id="now-title">Now</h2>
+      <dl class="gs-figures" id="figures"></dl>
+    </section>
+
+    <section class="panel" aria-labelledby="flow-title">
+      <div class="panel-head"><h2 id="flow-title">Coming in and going out</h2></div>
+      <p class="sub" id="flow-sub"></p>
+      <div class="gs-cols">
+        <div>
+          <h3 class="gs-h3">Where it’s coming from</h3>
+          <ul class="gs-bars" id="sources"></ul>
+        </div>
+        <div>
+          <h3 class="gs-h3">Where it’s going</h3>
+          <ul class="gs-bars" id="uses"></ul>
+        </div>
+      </div>
+      <p class="gs-note" id="power"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="day-title">
+      <div class="panel-head"><h2 id="day-title">The gas day so far</h2></div>
+      <p class="sub" id="day-sub"></p>
+      <div class="chart gs-chart" id="day-chart"></div>
+      <ul class="gs-legend" id="day-legend"></ul>
+      <h3 class="gs-h3">Linepack</h3>
+      <p class="sub" id="pack-sub"></p>
+      <div class="chart gs-chart gs-pack" id="pack-chart"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="year-title">
+      <div class="panel-head">
+        <h2 id="year-title">The last year</h2>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Show" id="year-mode">
+            <button type="button" data-mode="uses" aria-pressed="true">Where it went</button>
+            <button type="button" data-mode="sources" aria-pressed="false">Where it came from</button>
+          </div>
+        </div>
+      </div>
+      <p class="sub" id="year-sub"></p>
+      <div class="chart gs-chart gs-year" id="year-chart"></div>
+      <ul class="gs-legend" id="year-legend"></ul>
+      <h3 class="gs-h3">The wholesale price</h3>
+      <p class="sub" id="sap-sub"></p>
+      <div class="chart gs-chart gs-sap" id="sap-chart"></div>
+      <ul class="gs-legend" id="sap-legend"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>National Gas runs the National Transmission System, the high-pressure pipes that carry gas from where it lands to the local networks, power stations and big industrial users. It publishes the flow at every entry point every two minutes, in millions of cubic metres a day (mcm/d) as if that rate held for a whole day; the dashboard reads them every five minutes and keeps three days.</p>
+        <p>Where the gas comes from is grouped by entry point: Norway through Langeled to Easington; the North Sea through St Fergus, Teesside, Bacton and Easington, where St Fergus also lands some Norwegian gas; liquefied natural gas (LNG) shipped to the Isle of Grain and Milford Haven; the continent through the Bacton interconnectors; and storage. Anything National Gas counts in its total that isn’t listed by entry point shows as other.</p>
+        <p><b>Linepack</b> is the gas in the pipes themselves. It rises when more comes in than goes out and falls when less does; National Gas aims to end each gas day, at 05:00, near where it began, and publishes a prediction of where it will close.</p>
+        <p>The last year comes from National Gas’s allocations, which settle two days after each gas day, in energy rather than volume. Where it came from shows LNG, the continent and storage as published, and the rest, by difference, as the North Sea and Norway. The price is the System Average Price, the average of each gas day’s trades on the on-the-day market.</p>
+        <p>Turning mcm/d into gigawatts uses <span id="cv">39.5</span> MJ per cubic metre, the calorific value the dashboard uses for gas meters; the real figure varies a little with where the gas comes from.</p>
+        <p class="gs-source">Data: National Gas Transmission’s operational data, published openly.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/gas.js}}"></script>
+</body>
+</html>

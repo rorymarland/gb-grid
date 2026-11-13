@@ -31,6 +31,7 @@ SOURCE_LABELS = {
     'events': 'Timeline (built from the other feeds)',
     'home': 'Your home (Octopus Energy)',
     'constraints': 'Constraints (NESO boundary flows, costs and wind turned down)',
+    'gas': 'Gas (National Gas: flows, linepack, daily allocations and price)',
     'imbalance': 'Imbalance prices, trades and temperature (Elexon)',
     'forecasts': 'Forecast scorecard (NESO forecast records, and day-ahead forecasts kept here)',
 }

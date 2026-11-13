@@ -325,6 +325,99 @@ def fy_range(rid):
     return datetime(year, 4, 1).date(), datetime(year + 1, 4, 1).date()
 
 
+# ---- National Gas ----------------------------------------------------------------
+# Entry points and their usual flows (mcm/day), as on 13 November 2026, with Barrow's terminal left out of
+# the entry points (as National Gas does) so 'other' has something to find
+GAS_SITES = {'EASINGTON LANGELED': 74.0, 'ST FERGUS NSMP': 41.0, 'ST FERGUS SHELL': 23.0, 'ST FERGUS MOBIL': 8.0, 'TEESSIDE CATS': 14.0,
+             'TEESSIDE PX': 7.5, 'BACTON PERENCO': 7.8, 'BACTON SEAL': 4.7, 'BACTON SHELL': 3.3, 'EASINGTON DIMLINGTON': 4.2,
+             'GRAIN NTS 1': 0.0, 'GRAIN NTS 2': 13.8, 'MILFORD HAVEN - DRAGON': 19.8, 'MILFORD HAVEN - SOUTH HOOK': 29.5,
+             'BACTON BBL': 0.0, 'BACTON IC': 2.0, 'EASINGTON ROUGH ST': 4.3, 'HORNSEA': 2.5, 'ALDBROUGH': 0.0}
+GAS_BARROW = 1.5
+GAS_LIMIT = None            # set to (requests, seconds) to refuse with 429 as National Gas does
+GAS_ASKED = []
+GAS_PUBS = {'PUBOBJ1289': 'ndm', 'PUBOBJ1288': 'dmc', 'PUBOBJ1287': 'industrial', 'PUBOBJ1286': 'power', 'PUBOBJ521': 'storage_in',
+            'PUBOBJ519': 'exports', 'PUBOBJ518': 'lng', 'PUBOBJ515': 'imports', 'PUBOBJ517': 'storage_out', 'PUBOB694': 'linepack',
+            'PUBOB603': 'sap', 'PUBOB623': 'demand_fc', 'PUBOBJ510': 'temp_normal', 'PUBOB30': 'pclp'}
+
+
+def gas_flows(t):
+    """Every entry point's flow, the uses and linepack at time t (mcm/day; linepack mcm)."""
+    swing = math.sin(t / 20000.0)
+    sites = {n: round(v * (1 + 0.05 * swing), 4) for n, v in GAS_SITES.items()}
+    uses = {'LDZ Offtake Flow': round(150 + 50 * math.cos(math.pi * (hour_of_day(t) - 18) / 12), 3), 'Power Station Demand Flow': round(52 + 12 * swing, 3),
+            'Industrial Demand Flow': 3.7, 'Storage Demand Flow': 0.0, 'Interconnector Export Demand Flow': 34.1}
+    # Storage at Stublach balances the system, so supply less demand is the rate linepack changes (mcm/day)
+    rising = 8 * 86400 / 15000.0 * math.cos(t / 15000.0)
+    need = sum(uses.values()) + rising - sum(sites.values()) - GAS_BARROW
+    sites['STUBLACH'] = round(max(0.0, need), 4)
+    uses['Storage Demand Flow'] = round(max(0.0, -need), 3)
+    supply = sum(sites.values()) + GAS_BARROW
+    return sites, round(supply, 3), uses, round(sum(uses.values()), 3), round(342 + 8 * math.sin(t / 15000.0), 3)
+
+
+def gas_sites_payload():
+    now = _clock.time()
+    times = [int(now // 120 * 120) - 120 * k for k in range(5, -1, -1)]
+
+    def site(name, values):
+        return {'siteName': name, 'siteGasDetail': [{'applicableAt': iso(t), 'flowRate': v, 'qualityIndicator': ''} for t, v in values]}
+    per = {t: gas_flows(t) for t in times}
+    groups = [
+        {'description': 'Supply from entry points', 'sites': [site(n, [(t, per[t][0][n]) for t in times]) for n in per[times[0]][0]]},
+        {'description': 'Total Supply', 'sites': [site('TOTAL SUPPLY', [(t, per[t][1]) for t in times])]},
+        {'description': 'Demand by category', 'sites': [site(n, [(t, per[t][2][n]) for t in times]) for n in per[times[0]][2]]},
+        {'description': 'Total Demand', 'sites': [site('NTS Demand Flow', [(t, per[t][3]) for t in times])]},
+        {'description': 'Actual linepack', 'sites': [site('NTS Actual Linepack', [(t, per[t][4]) for t in times])]},
+    ]
+    return {'publishedTime': iso(times[-1]), 'currentGasDay': iso(times[-1])[:10], 'instantaneousFlow': groups}
+
+
+def gas_value(key, d):
+    """A daily publication's value for gas day d: energy in kWh, linepack mcm, SAP p/kWh, temperature °C."""
+    season = math.cos(2 * math.pi * (d.timetuple().tm_yday - 15) / 365.25)          # 1 in mid-January, -1 in July
+    wobble = math.sin(d.toordinal() / 3.0)
+    return {'ndm': 6.0e8 + 5.0e8 * season, 'dmc': 2.0e8, 'industrial': 4.0e7, 'power': 6.5e8 + 1.5e8 * wobble,
+            'storage_in': 5.0e7 * (1 - season), 'exports': 3.0e8, 'lng': 5.0e8, 'imports': 3.0e6 + 1.0e8 * max(0, season),
+            'storage_out': 2.0e8 * max(0, season), 'linepack': 352 + 5 * wobble, 'sap': 6.5 + 1.5 * season, 'demand_fc': 250 + 60 * season,
+            'temp_normal': 10.5 - 6.0 * season, 'pclp': 347.0}[key]
+
+
+def gas_publications(body):
+    first, last = date.fromisoformat(body['fromDate']), date.fromisoformat(body['toDate'])
+    ids = body.get('publicationIds') or []
+    if len(ids) * ((last - first).days + 1) > 1000:
+        return 400, {'error': {'code': '2005', 'message': 'The current request exceeds the publication data volume threshold. Reduce the date range or number of items.'}}
+    today = datetime.fromtimestamp(_clock.time(), timezone.utc).date()
+    out = []
+    for pid in ids:
+        key = GAS_PUBS.get(pid)
+        if not key:
+            continue
+        pubs = []
+        d = first
+        # Allocations are two days behind; the rest run to today (forecasts and the normal to tomorrow)
+        stop = today - timedelta(days=2) if key in ('ndm', 'dmc', 'industrial', 'power', 'storage_in', 'exports', 'lng', 'imports', 'storage_out') \
+            else today - timedelta(days=1) if key in ('linepack', 'sap') else today + timedelta(days=1)
+        while d <= min(last, stop):
+            pubs.append({'applicableAt': d.isoformat() + 'T23:30:00Z', 'applicableFor': d.isoformat(), 'value': str(gas_value(key, d)),
+                         'generatedTimeStamp': d.isoformat() + 'T23:30:00Z', 'qualityIndicator': '', 'substituted': 'N', 'createdDate': d.isoformat()})
+            if key == 'pclp':       # an earlier, superseded prediction the same day
+                pubs.insert(-1, dict(pubs[-1], applicableAt=d.isoformat() + 'T09:00:00Z', value='360.0'))
+            d += timedelta(days=1)
+        out.append({'publicationId': pid, 'publicationName': key, 'publications': pubs})
+    return 200, out
+
+
+def gas_limited():
+    """True when the mock should refuse a request as National Gas does with too many."""
+    now = _clock.time()
+    GAS_ASKED.append(now)
+    if not GAS_LIMIT:
+        return False
+    count, seconds = GAS_LIMIT
+    return sum(1 for t in GAS_ASKED if t > now - seconds) > count
+
+
 FC_WIND, FC_DEMAND, FC_CARBON = '7524ec65-f782-4258-aaf8-5b926c17b966', '08e41551-80f8-4e28-a416-ea473a695db9', '0e5fde43-2de7-4fb4-833d-c7bca3b658b0'
 
 
@@ -895,6 +988,10 @@ class Handler(BaseHTTPRequestHandler):
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
+        if path == '/gas/instantaneousflow/sites':
+            if gas_limited():
+                return self.send(429, {'error': {'code': '429', 'message': 'Too many requests. You are temporarily blocked from accessing this resource.'}})
+            return self.send(200, gas_sites_payload())
         if path.startswith('/bmrs/api/v1/balancing/settlement/system-prices/'):
             day = date.fromisoformat(path.rsplit('/', 1)[1])
             rows = []
@@ -1240,6 +1337,14 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get('Content-Length') or 0))
         if any(name in path for name in FAIL):
             return self.send(503, {'error': 'mock failure'})
+        if path == '/gas/publications/gasday':
+            if gas_limited():
+                return self.send(429, {'error': {'code': '429', 'message': 'Too many requests. You are temporarily blocked from accessing this resource.'}})
+            try:
+                code, payload = gas_publications(json.loads(body))
+            except (ValueError, KeyError, TypeError):
+                return self.send(400, {'error': {'code': '1000', 'message': 'Bad request'}})
+            return self.send(code, payload)
         if path == '/octopus-backend/v1/graphql/':
             try:
                 query = json.loads(body)['query']

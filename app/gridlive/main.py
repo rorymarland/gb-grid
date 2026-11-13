@@ -24,6 +24,7 @@ from .constraints import Constraints
 from .review import Review
 from .forecasts import Forecasts
 from .imbalance import Imbalance
+from .gas import Gas
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -52,6 +53,7 @@ def main():
     App.review = Review(store, App.grid, App.home)
     App.forecasts = Forecasts(store)
     App.imbalance = Imbalance(store)
+    App.gas = Gas(store)
 
     def poll_events():
         changed = events.poll()
@@ -81,6 +83,7 @@ def main():
         ('constraints', App.constraints.poll),
         ('forecasts', App.forecasts.poll),
         ('imbalance', App.imbalance.poll),
+        ('gas', App.gas.poll),
     ]
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]

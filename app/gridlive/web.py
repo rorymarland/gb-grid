@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .gas import gas_generation, home_gas_rate, view as gas_view
 from .constraints import view as constraints_view
 from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
@@ -32,6 +33,7 @@ class App:
     review = None
     forecasts = None
     imbalance = None
+    gas = None
     boundaries = (b'', '')
 
 
@@ -55,6 +57,7 @@ PAGES = [
     ('frequency', '/frequency', 'Frequency', 'frequency.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
     ('constraints', '/constraints', 'Constraints', 'constraints.html'),
+    ('gas', '/gas', 'Gas', 'gas.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
@@ -75,6 +78,7 @@ PAGE_META = {
     'home': ('now', 'Your electricity and gas: use, carbon and cost'),
     'frequency': ('system', 'Live frequency, inertia and the response held'),
     'balancing': ('system', 'Who NESO is paying to turn up or down'),
+    'gas': ('system', 'Where Britain’s gas comes from and goes, and how much is in the pipes'),
     'constraints': ('system', 'Where the network runs out of room, and the wind turned down'),
     'outages': ('system', 'Spare capacity, offline units and grid notices'),
     'timeline': ('time', 'Notable moments, kept for a year'),
@@ -116,7 +120,8 @@ CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
     'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
-    '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
+    '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Gas flows, linepack, allocations and prices from '
+    '<a href="https://data.nationalgas.com/" rel="noopener">National Gas Transmission’s open data</a>. Station locations '
     'from '
     '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>, the government’s <a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract" rel="noopener">Renewable Energy Planning Database</a> (Open Government Licence v3.0) and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
     'station photos from Wikimedia Commons, credited with each; map outlines from <a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>.</p>\n'
@@ -419,6 +424,11 @@ class Handler(BaseHTTPRequestHandler):
                     etag = '"' + hashlib.sha1(body).hexdigest()[:16] + '"'
                     cache = 'public, max-age=31536000, immutable' if 'v=' in parts.query else 'max-age=86400'
                     self.respond(200, body, content_type, send_body, etag=etag, cache=cache)
+            elif parts.path == '/api/gas':
+                now = time.time()
+                body = gas_view(App.store, now, gas_generation(App.store),
+                                home_gas_rate(App.store, now) if App.home and App.home.enabled else None) if App.gas else {'ready': False}
+                self.respond_json(body, send_body)
             elif parts.path == '/api/forecasts':
                 self.respond_json(App.forecasts.page(time.time()) if App.forecasts else {'kinds': []}, send_body)
             elif parts.path == '/api/review':

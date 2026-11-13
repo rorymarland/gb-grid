@@ -13,7 +13,7 @@ import { renderParts } from '/static/js/summary.js';
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
 /* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
-var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,outlook,outages,records';
+var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,gas,outlook,outages,records';
 /* The year in review joins the default slides from mid-December to the end of January */
 (function () {
   var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
@@ -53,7 +53,7 @@ function whenPhrase(t) {
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
   regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
-  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900], review: ['/api/review', 3600]
+  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900], review: ['/api/review', 3600], gas: ['/api/gas', 300]
 };
 var data = {}, polls = {};
 function startFeed(name) {
@@ -453,6 +453,43 @@ function buildConstraints(body, take) {
   };
 }
 
+/* ---------- gas ---------- */
+
+function buildGas(body, take) {
+  var gauge = h('div', { cls: 'gauge-box' }), list = h('div', { cls: 'side' });
+  body.appendChild(h('div', { cls: 'split even' }, [gauge, list]));
+  var NAMES = { norway: 'Norway, through Langeled', lng: 'LNG, by ship', northsea: 'North Sea fields', continent: 'The continent', storage: 'Storage', other: 'Other' };
+  var PHRASE = { norway: 'Norway through Langeled', lng: 'LNG shipped in', northsea: 'the North Sea fields', continent: 'the continent', storage: 'storage', other: 'elsewhere' };
+  function mcm(v) { return v >= 100 ? Math.round(v) : v.toFixed(1); }
+  return {
+    ready: function () { return Boolean(data.gas && data.gas.ready); },
+    render: function () {
+      var d = data.gas;
+      if (!d || !d.ready) return;
+      var power = 0;
+      d.uses.forEach(function (u) { if (u[0] === 'power') power = u[1]; });
+      var open = d.today.linepack_open, change = typeof open === 'number' ? d.linepack - open : null;
+      clear(gauge);
+      gauge.appendChild(h('p', { cls: 'big' }, [mcm(d.demand), h('small', { text: 'mcm/d of gas being used' })]));
+      gauge.appendChild(h('p', { cls: 'pill', text: 'Linepack ' + mcm(d.linepack) + ' mcm' + (change === null ? '' : Math.abs(change) < 0.5 ? ', level since 05:00' :
+        (change > 0 ? ', up ' : ', down ') + mcm(Math.abs(change)) + ' since 05:00') }));
+      gauge.appendChild(h('p', { cls: 'foot-note', text: 'Million cubic metres a day, from National Gas, as at ' + G.hm(d.t) + '. Linepack is the gas in the pipes.' }));
+      clear(list);
+      list.appendChild(h('h3', { text: 'Where it’s coming from' }));
+      var supply = d.sources.reduce(function (a, x) { return a + x[1]; }, 0);
+      d.sources.slice().sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5).forEach(function (x) {
+        list.appendChild(h('div', { cls: 'row' }, [h('span', { text: NAMES[x[0]] || x[0] }), h('b', { text: pct(x[1] / supply) }), h('span', { cls: 'muted', text: mcm(x[1]) + ' mcm/d' })]));
+      });
+      list.appendChild(h('div', { cls: 'stats cn-stats' }, [
+        h('div', null, [h('b', { text: pct(power / d.demand) }), h('span', { text: 'of it to power stations, ' + mcm(power) + ' mcm/d' })]),
+        d.sap ? h('div', null, [h('b', { text: d.sap[1].toFixed(2) + 'p' }), h('span', { text: 'wholesale gas per kWh, the latest settled day' })]) : null
+      ]));
+      var top = d.sources.slice().sort(function (a, b) { return b[1] - a[1]; })[0];
+      take.textContent = top ? 'The most gas is coming from ' + (PHRASE[top[0]] || top[0]) + ', ' + pct(top[1] / supply) + ' of what’s coming in.' : '';
+    }
+  };
+}
+
 /* ---------- spare capacity and outages ---------- */
 
 function buildOutages(body, take) {
@@ -665,6 +702,7 @@ var BUILDERS = {
   regions: ['Carbon intensity by region', ['regions'], buildRegions],
   balancing: ['Balancing the grid', ['balancing'], buildBalancing],
   constraints: ['Constraints', ['constraints'], buildConstraints],
+  gas: ['Gas', ['gas'], buildGas],
   review: ['The year in review', ['review'], buildReview],
   outlook: ['The next 48 hours', [], buildOutlook],
   outages: ['Spare capacity and outages', ['outages'], buildOutages],
