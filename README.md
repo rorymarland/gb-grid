@@ -22,6 +22,7 @@ standard library inside.
 | Outages | `/outages` | Spare capacity, offline units and grid notices |
 | Timeline | `/timeline` | Notable moments, kept for a year, linked to the map and History |
 | History | `/history` | The mix, carbon and price since 2009, with records |
+| Forecasts | `/forecasts` | How close NESO's wind, demand, carbon and solar forecasts came, and whether they're getting better |
 | Year in review | `/review` | The grid's year and your home's, saved for good once the year is over |
 | What if? | `/sandbox` | Trip a power station and watch the first minute and the next hour |
 | Glossary | `/glossary` | Every term the dashboard uses, in plain English |
@@ -193,6 +194,21 @@ background on first start; see `LONG_HISTORY` below.
 
 ![The history page](docs/history.png)
 
+### Forecasts
+
+How good NESO's forecasts are. The latest day of each against what
+happened; a scorecard of typical misses and leans for the last 30 days
+against a year earlier, with the worst day of the last year; and each
+month's typical miss since the records began. Wind and demand, the day
+before, come from NESO's own records back to 2018 and 2021; wind is scored
+against what wind farms made plus what they were paid to turn down, so a
+constraint isn't counted as a miss. NESO doesn't publish its day-before
+carbon intensity and solar forecasts with what followed, so the dashboard
+keeps them: each half hour's forecast as it stood at noon the day before,
+scored once the half hour is over.
+
+![The forecasts page](docs/forecasts.png)
+
 ### Year in review
 
 A calendar year on one page, worth keeping: carbon intensity every year
@@ -320,7 +336,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -535,6 +551,11 @@ Allowlist `api.neso.energy` to fix it.
   line is marked as suspect. The History page shows NESO's figures as
   published. The record since 2009 is read again for the last 400 days once
   a week, so NESO's revisions arrive.
+- **Forecast misses:** the typical miss is the mean absolute error, the lean
+  the mean signed error (forecast minus outcome). Wind's is shown as a share
+  of the wind farms' capacity, from NESO's own forecast record; demand's as
+  a share of demand. A day-before forecast kept by the dashboard only counts
+  if it was taken within six hours of noon the day before.
 - **Northern Ireland** is part of the all-island grid with Ireland rather than
   the GB grid, so it only appears through the Moyle interconnector.
 
@@ -562,6 +583,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
 | `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
 | `/api/sandbox?at=` | Starting figures for the sandbox: response held at that moment and the inertia fit |
+| `/api/forecasts` | Each forecast's latest day, last 30 days, a year earlier, months since its record began and worst days |
 | `/api/review?year=2026` | The year in review: the grid's year (figures, the year before, months, highs and lows, constraints, moments, every year since 2009) and your home's (`null` without Octopus). Without `year`, the year just finished until mid-January, then this one |
 | `/api/home` | Your home: live reading, today's half hours, the last 30 days, months and timing (`{"enabled": false}` when Octopus isn't set up) |
 | `/api/status` | 200 when generation data is fresh, otherwise 503 (handy for uptime monitors) |
@@ -593,7 +615,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `review`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |

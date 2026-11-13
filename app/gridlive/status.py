@@ -31,6 +31,7 @@ SOURCE_LABELS = {
     'events': 'Timeline (built from the other feeds)',
     'home': 'Your home (Octopus Energy)',
     'constraints': 'Constraints (NESO boundary flows, costs and wind turned down)',
+    'forecasts': 'Forecast scorecard (NESO forecast records, and day-ahead forecasts kept here)',
 }
 
 

@@ -16,7 +16,7 @@ import struct
 import time as _clock
 import urllib.parse
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, sys.argv[2] if len(sys.argv) > 2 else '.')
@@ -325,11 +325,59 @@ def fy_range(rid):
     return datetime(year, 4, 1).date(), datetime(year + 1, 4, 1).date()
 
 
+FC_WIND, FC_DEMAND, FC_CARBON = '7524ec65-f782-4258-aaf8-5b926c17b966', '08e41551-80f8-4e28-a416-ea473a695db9', '0e5fde43-2de7-4fb4-833d-c7bca3b658b0'
+
+
+def forecast_records(rid, sql):
+    """NESO's forecast records: day-ahead wind (since April 2018) and demand (since April 2021),
+    and the carbon intensity forecast with its actual (since 2018). Each forecast misses by a
+    known, smooth amount, so the scorecard's figures can be checked."""
+    limit = int(re.search(r'LIMIT (\d+)', sql).group(1))
+    now = _clock.time()
+    out = []
+    if rid == FC_CARBON:
+        after = re.search(r'"datetime" > \'([0-9T:-]+)\'', sql).group(1)
+        t = max(parse(after) + 1800, int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp()))
+        t -= t % 1800
+        while t < now - 1800 and len(out) < limit:
+            act = carbon(t)
+            out.append({'datetime': datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+                        'forecast': round(act * (1 + 0.06 * math.sin(t / 7000.0))), 'actual': round(act)})
+            t += 1800
+        return out
+    first = date(2018, 4, 17) if rid == FC_WIND else date(2021, 4, 1)
+    day = max(first, date.fromisoformat(re.search(r'"Date" >= \'([0-9-]+)\'', sql).group(1)))
+    last = datetime.fromtimestamp(now, timezone.utc).date() + timedelta(days=1 if rid == FC_WIND else 0)
+    while day <= last and len(out) < limit:
+        for sp in range(1, settlement_periods_mock(day) + 1):
+            t = settlement_start(day, sp)
+            if rid == FC_DEMAND and t > now - 3600:
+                break
+            if rid == FC_WIND:
+                act = history_row(t)['WIND']
+                out.append({'Date': day.isoformat(), 'Settlement_period': sp, 'Capacity': round(11000 + 1700 * (day.year - 2018)),
+                            'Incentive_forecast': round(act * (1 + 0.2 * math.sin(t / 30000.0)))})
+            else:
+                act = demand_mw(t) * 1.1
+                out.append({'Date': day.isoformat(), 'Settlement_Period': sp, 'Demand_Forecast': round(act * (1 + 0.03 * math.sin(t / 20000.0))),
+                            'Demand_Outturn': round(act)})
+        day += timedelta(days=1)
+    return out[:limit]
+
+
+def settlement_periods_mock(day):
+    return (settlement_start(day + timedelta(days=1), 1) - settlement_start(day, 1)) // 1800
+
+
 def neso_sql(sql):
     table = re.search(r'FROM "([\w-]+)"', sql)
     if not table:
         return None
     rid = table.group(1)
+    if 'NOT NULL' in sql.upper():
+        return 'firewall'        # NESO's firewall refuses these with an HTML page
+    if rid in (FC_WIND, FC_DEMAND, FC_CARBON):
+        return forecast_records(rid, sql)
     dates = re.findall(r'(>=|<) \'([0-9T:-]+)\'', sql)
     lower = next((v for op, v in dates if op == '>='), None)
     upper = next((v for op, v in dates if op == '<'), None)
@@ -1071,6 +1119,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {'success': True, 'result': {'resources': resources}})
         if path == '/neso/api/3/action/datastore_search_sql' and 'hgm' not in q.get('sql', ''):
             records = neso_sql(q.get('sql', ''))
+            if records == 'firewall':
+                body = b'<!DOCTYPE html><html><body>Access denied</body></html>'
+                self.send_response(403)
+                self.send_header('Content-Type', 'text/html')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if records == 'forbidden':
                 return self.send(403, {'success': False, 'error': {'message': "Access denied: {'permissions': ['Not authorized to call function']}"}})
             if records is not None:

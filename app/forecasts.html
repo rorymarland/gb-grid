@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Forecasts – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/forecasts.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>Forecasts</h1>
+    <p class="lede">How close NESO’s forecasts came to what happened. Wind and demand are forecast the day before; NESO publishes those forecasts with what followed, back to 2018 and 2021. For carbon intensity and solar, the dashboard keeps the day-before forecast itself and scores it once the day is over.</p>
+  </section>
+
+  <p class="fc-waiting" id="waiting">Fetching NESO’s forecast records. The first time, eight years of them take a minute or two.</p>
+
+  <div id="content" hidden>
+    <section class="panel" aria-labelledby="day-title">
+      <div class="panel-head"><h2 id="day-title">The latest day</h2></div>
+      <p class="sub">Each forecast against what happened, half hour by half hour, for the latest whole day with an outcome. For wind, what happened is what the wind farms made plus what NESO paid them not to make, so a constraint doesn’t count as a miss; it comes from NESO’s generation history, which runs a few days behind.</p>
+      <div class="fc-days" id="days"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="score-title">
+      <div class="panel-head"><h2 id="score-title">The scorecard</h2></div>
+      <p class="sub">The typical miss is the average gap between forecast and outcome, either way. The lean is the average of the gaps with their sign, so a forecast that’s too high as often as too low leans hardly at all.</p>
+      <div class="fc-table-wrap">
+        <table class="data fc-score">
+          <thead><tr>
+            <th scope="col">Forecast</th>
+            <th scope="col" class="num">Typical miss, last 30 days</th>
+            <th scope="col" class="num">Lean</th>
+            <th scope="col" class="num fc-hide-sm">A year earlier</th>
+            <th scope="col" class="num fc-hide-sm">Worst day, last year</th>
+          </tr></thead>
+          <tbody id="score"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="long-title">
+      <div class="panel-head"><h2 id="long-title">Getting better?</h2></div>
+      <p class="sub">Each month’s typical miss since the record began. Wind’s is a share of the wind farms’ capacity, as there’s more of it every year; demand’s is a share of demand.</p>
+      <div class="fc-longs" id="longs"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="own-title" id="own-panel">
+      <div class="panel-head"><h2 id="own-title">Kept by the dashboard</h2></div>
+      <p class="sub">NESO doesn’t publish its day-before forecasts of carbon intensity or solar with what followed, so the dashboard keeps them: each half hour’s forecast as it stood at noon the day before, scored when the half hour is over.</p>
+      <ul class="fc-own" id="own"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>Wind is NESO’s day-ahead forecast for wind farms connected to the transmission network, the one its incentives are measured on. It forecasts what the wind will let them make, so it’s scored against what they generated (from NESO’s historic generation mix) plus what NESO paid them to turn down (from its record of accepted bids). Without that, every constrained windy day would look like a forecast that was too high. Misses are shown as a share of the wind farms’ capacity, which has more than doubled since 2018.</p>
+        <p>Demand is NESO’s day-ahead forecast of national demand, against the outturn NESO publishes with it.</p>
+        <p>Carbon intensity, half an hour ahead, is NESO’s last forecast before each half hour against its own later estimate of what the intensity was. It’s a test of the model rather than of the weather, so the misses are small; the day-before forecast the dashboard keeps is the harder test.</p>
+        <p>Solar is NESO’s forecast for solar panels on local networks, against Sheffield Solar’s estimate of all of Britain’s solar, so it includes a little that the forecast doesn’t cover.</p>
+        <p id="source">Data: NESO’s Historic Day Ahead Wind Forecasts, Day Ahead Half Hourly Demand Forecast Performance, National Carbon Intensity Forecast, Wind BOA Volumes and historic generation mix, under the NESO Open Data Licence; Sheffield Solar’s PV_Live.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/forecasts.js}}"></script>
+</body>
+</html>

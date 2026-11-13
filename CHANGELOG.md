@@ -4,6 +4,27 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.9.0 (unreleased)
+
+- **Forecasts** (`/forecasts`): how good NESO's forecasts are. The latest
+  day of each against what happened; a scorecard of the typical miss and
+  lean over the last 30 days against a year earlier, with the worst day of
+  the last year; and each month's typical miss since the records began.
+  Wind (the day before, since 2018), demand (the day before, since 2021) and
+  carbon intensity (half an hour ahead, since 2018) come from NESO's own
+  records, downloaded once (about 50 requests and two minutes) and then
+  checked every 6 hours. Wind is scored against what wind farms made plus
+  what NESO paid them to turn down, back to 2018, so constraints don't count
+  as misses: that alone takes this year's typical miss from 5.8% of capacity
+  to 4.2%.
+- **Forecasts kept by the dashboard:** NESO doesn't publish its day-before
+  carbon intensity and solar forecasts with what followed, so from this
+  version the dashboard keeps them, as they stand at noon the day before,
+  and scores them once the half hour is over. The scores fill in over the
+  following month.
+- NESO's firewall refuses SQL queries containing `IS NOT NULL`; the mock
+  now refuses them too, so the tests catch one.
+
 ## 1.8.0 (2026-11-13)
 
 - **Year in review** (`/review`): a calendar year on one page, worth
