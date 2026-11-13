@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from .config import REGION_ID
 from .reference import INDEX_LEVELS, MIX_FUELS, PES_REGIONS, REGION_NAMES
+from .imbalance import day_rows as imbalance_rows, day_summary as imbalance_summary
 from .timeutil import floor_to, settlement_periods, settlement_start
 from .units import settlement_period_at, short_unit_id
 from .outages import LINK_NAMES, margin_level
@@ -138,6 +139,9 @@ class SystemViews:
             'series': series, 'columns': ['t', 'bid_mwh', 'offer_mwh', 'bid_paid', 'offer_paid', 'wind_bid_mwh', 'wind_bid_paid'],
             'today': summary, 'top': ranked[:15], 'paid_units': len(ranked),
             'constraints': [{'d': c[0], 'cost': c[1], 'volume': c[2], 'parts': c[3]} for c in (self.bal.constraints if self.bal else [])],
+            # Imbalance prices and NESO's trades outside the Balancing Mechanism, yesterday and today
+            'imbalance': {('today' if d == day else 'yesterday'): {'rows': imbalance_rows(self.store, d), 'summary': imbalance_summary(self.store, d)}
+                          for d in days},
             'generated': int(now),
         }
 

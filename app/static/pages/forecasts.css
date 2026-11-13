@@ -11,6 +11,7 @@
 .fc-day figcaption span { font-size: 13px; color: var(--muted); }
 .fc-day-score { margin: 4px 0 8px; font-size: 13.5px; color: var(--ink-2); }
 .fc-day-score strong { font-size: 20px; font-weight: 640; color: var(--ink); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.fc-day-note { margin: -4px 0 8px; min-height: 1.45em; font-size: 13px; color: var(--muted); }
 .fc-day-chart { min-height: 190px; }
 .fc-fc { fill: none; stroke: var(--fc-fc); stroke-width: 2; stroke-dasharray: 5 3; stroke-linejoin: round; }
 .fc-act { fill: none; stroke: var(--fc-act); stroke-width: 2; stroke-linejoin: round; }

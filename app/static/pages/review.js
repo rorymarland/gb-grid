@@ -168,6 +168,12 @@ function renderFigures(g, year) {
       'where in the two years before the two agreed to within a few per cent. It looks like an error in NESO’s historic data, which NESO says it revises as it cleans it. ' +
       'The dashboard reads the last year again every week, so these figures will change if NESO corrects them, and ' + year + ' isn’t saved for good until 1 April ' + (year + 1) + '.';
   } else check.hidden = true;
+  var warmth = byId('temp-note');
+  if (g.temp && num(g.temp[1])) {
+    var diff = Math.round((g.temp[0] - g.temp[1]) * 10) / 10;
+    warmth.textContent = (g.whole ? 'The year' : 'The year so far') + ' averaged ' + g.temp[0].toFixed(1) + '°C across Britain, ' +
+      (Math.abs(diff) < 0.2 ? 'about normal for the time of year.' : Math.abs(diff).toFixed(1) + '° ' + (diff > 0 ? 'warmer' : 'colder') + ' than normal, by Elexon’s reference temperatures.');
+  } else warmth.textContent = '';
   var coal = byId('coal-note');
   if (num(g.last_coal) && g.last_coal < g.from) coal.textContent = 'No coal all year. Britain’s last coal-fired electricity was on ' + longDate.format(at(g.last_coal)) + '.';
   else if (num(g.last_coal) && g.whole && g.history.length && g.figures.mix.coal > 0) coal.textContent = 'Coal still made ' + pct(g.figures.mix.coal, 1) + ' of the year’s electricity.';
@@ -222,6 +228,7 @@ function renderMonths(g) {
     var rows = FUEL_ORDER.slice().reverse().filter(function (k) { return (m.mix[k] || 0) > 0.0005; })
       .map(function (k) { return { cls: 'b-' + k, value: pct(m.mix[k]), label: FUEL_NAMES[k].toLowerCase() }; });
     rows.push({ sep: true }, { value: m.ci + ' g/kWh', label: 'carbon intensity' + (g.ci_check && g.ci_check.odd.indexOf(m.m) >= 0 ? ', looks too high' : '') }, { value: twh(m.twh) + ' TWh', label: 'used' });
+    if (m.temp) rows.push({ value: m.temp[0].toFixed(1) + '°C', label: 'average' + (num(m.temp[1]) ? ', normal ' + m.temp[1].toFixed(1) + '°C' : '') });
     if (num(m.price)) rows.push({ value: '£' + m.price.toFixed(2), label: 'per MWh, average' });
     tip.show(MONTHS_LONG[i] + (m.whole ? '' : ', so far'), rows, (padL + (i + 0.5) * slot) * b.width / width, 40);
   });

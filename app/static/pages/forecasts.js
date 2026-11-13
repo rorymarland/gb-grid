@@ -24,6 +24,12 @@ function measure(k, sc) {
   if (k.measure === 'pct') return pct(sc.pct) + ' of demand';
   return amount(sc.mae, k.unit);
 }
+/* "6.3°C, 3.0° below normal" */
+function tempText(tp) {
+  if (!tp || !num(tp[0])) return '';
+  var diff = num(tp[1]) ? Math.round((tp[0] - tp[1]) * 10) / 10 : null;
+  return tp[0].toFixed(1) + '°C' + (diff === null ? '' : Math.abs(diff) < 0.5 ? ', about normal' : ', ' + Math.abs(diff).toFixed(1) + '° ' + (diff < 0 ? 'below' : 'above') + ' normal');
+}
 function measureValue(k, sc) { return !sc ? null : k.measure === 'cap' ? sc.cap_pct : k.measure === 'pct' ? sc.pct : sc.mae; }
 function lean(k, sc) {
   if (!sc) return '–';
@@ -87,6 +93,8 @@ function renderDays(d) {
     host.appendChild(h('figure', { cls: 'fc-day' }, [
       h('figcaption', null, [h('b', { text: k.title }), h('span', { text: dayFmt.format(fromIso(k.day.d)) })]),
       h('p', { cls: 'fc-day-score' }, [h('strong', { text: measure(k, sc) }), h('span', { text: ' typical miss, ' + (leaning === 'Even' ? 'no lean' : leaning) })]),
+      // A line for every card, so the charts line up whether or not there's a temperature
+      h('p', { cls: 'fc-day-note', text: k.day.temp ? 'Temperature ' + tempText(k.day.temp) : '' }),
       chart
     ]));
     charts.push([chart, k]);
@@ -117,7 +125,7 @@ function renderScore(d) {
       h('td', { cls: 'num' }, [h('b', { text: measure(k, now30) }), k.measure !== 'abs' ? h('small', { text: amount(now30 && now30.mae, k.unit) }) : null]),
       h('td', { cls: 'num', text: lean(k, now30) }),
       h('td', { cls: 'num fc-hide-sm' }, then ? [measure(k, then), h('small', { text: change === null ? '' : Math.abs(change) < 0.03 ? 'About the same now' : (change < 0 ? 'Better now, by ' : 'Worse now, by ') + Math.round(Math.abs(change) * 100) + '%' })] : ['–']),
-      h('td', { cls: 'num fc-hide-sm' }, worst ? [shortDay.format(fromIso(worst.d)), h('small', { text: amount(worst.mae, k.unit) + ' typical miss, ' + (worst.bias > 0 ? 'too high' : 'too low') })] : ['–'])
+      h('td', { cls: 'num fc-hide-sm' }, worst ? [shortDay.format(fromIso(worst.d)), h('small', { text: amount(worst.mae, k.unit) + ' typical miss, ' + (worst.bias > 0 ? 'too high' : 'too low') + (worst.temp ? '; ' + tempText(worst.temp) : '') })] : ['–'])
     ]));
   });
 }

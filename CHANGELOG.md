@@ -4,6 +4,23 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.10.0 (unreleased)
+
+- **The imbalance price** on Balancing: each half hour's system price against
+  the market price, for today and yesterday, with the day's average,
+  highest and lowest, and a chart of whether the system was short or long
+  and by how much. From Elexon, every 15 minutes; a week is kept.
+- **Trades outside the Balancing Mechanism:** NESO's other balancing costs,
+  mostly trades across the interconnectors (Elexon's DISBSAD), are added to
+  each day's total on Balancing and to each half hour's tooltip. On
+  12 November they came to £722,000 net.
+- **Temperature:** Elexon's daily temperature for Britain, against normal
+  for the date, back to April 2021 when its record starts. Forecasts shows
+  it with the demand forecast's latest and worst days, and the year in
+  review gives each month's and the year's.
+- Balancing's volume chart now gives its unit (MWh) on the axis.
+- Glossary: imbalance price, and short and long.
+
 ## 1.9.0 (2026-11-13)
 
 - **Forecasts** (`/forecasts`): how good NESO's forecasts are. The latest

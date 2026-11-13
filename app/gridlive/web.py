@@ -31,6 +31,7 @@ class App:
     constraints = None
     review = None
     forecasts = None
+    imbalance = None
     boundaries = (b'', '')
 
 

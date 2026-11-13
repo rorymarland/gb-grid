@@ -35,6 +35,7 @@ jobs:
           python test/test_constraints.py
           python test/test_review.py
           python test/test_forecasts.py
+          python test/test_imbalance.py
           node test/test_sim.mjs
           node test/test_osgrid.mjs
           python tools/osgb.py

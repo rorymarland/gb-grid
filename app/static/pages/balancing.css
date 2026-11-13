@@ -41,3 +41,21 @@
   .tile:nth-child(n + 3) { border-top: 1px solid var(--hair); }
 }
 @media (max-width: 480px) { .tile { padding: 14px 12px 12px; } .tile .v { font-size: 24px; } }
+
+/* The imbalance price */
+.bal-h3 { font-size: 15px; font-weight: 620; margin: 30px 0 4px; }
+.bal-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 28px; margin: 8px 0 14px; max-width: 760px; }
+.bal-figures dt { font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+.bal-figures dd { margin: 0; font-size: 24px; font-weight: 620; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
+.bal-figures dd small { font-size: 13.5px; font-weight: 500; color: var(--ink-2); margin-left: 5px; letter-spacing: 0; }
+.bal-figures dd .more { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-top: 2px; }
+.imb-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
+.imb-market { fill: none; stroke: var(--c-imports); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.sw.line { width: 16px; height: 3px; border-radius: 2px; }
+.sw.imb-sw, .tip .key.imb-sw { background: var(--ink); }
+.sw.imb-market-sw, .tip .key.imb-market-sw { background: var(--c-imports); }
+@media (max-width: 560px) {
+  .bal-figures { gap: 14px 16px; }
+  .bal-figures dd { font-size: 20px; }
+  .bal-figures dd small { display: block; margin: 2px 0 0; }
+}

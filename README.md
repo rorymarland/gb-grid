@@ -142,8 +142,10 @@ moment) and the response NESO held at the time.
 ### Balancing
 
 Who the grid operator is paying to switch off or turn up right now, what each
-half hour of balancing cost today and yesterday, the units paid the most, and
-daily constraint costs.
+half hour of balancing cost today and yesterday, including NESO's trades
+outside the Balancing Mechanism (mostly across the interconnectors), the
+imbalance price each half hour against the market price, whether the system
+was short or long, the units paid the most, and daily constraint costs.
 
 ![The balancing page](docs/balancing.png)
 
@@ -336,7 +338,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -551,6 +553,15 @@ Allowlist `api.neso.energy` to fix it.
   line is marked as suspect. The History page shows NESO's figures as
   published. The record since 2009 is read again for the last 400 days once
   a week, so NESO's revisions arrive.
+- **Imbalance prices** are Elexon's system prices for each half hour (one
+  price since 2015, so the buy and sell prices are the same), with the net
+  imbalance volume: above zero the system was short and NESO bought energy,
+  below zero long and it sold. Trades outside the Balancing Mechanism are
+  Elexon's DISBSAD, added up each half hour: what NESO paid for energy it
+  bought and received for energy it sold.
+- **Temperature** is Elexon's daily average for Britain, with its reference
+  normal for the date; its record starts in April 2021. It's shown with
+  demand on the Forecasts page, and by month in the year in review.
 - **Forecast misses:** the typical miss is the mean absolute error, the lean
   the mean signed error (forecast minus outcome). Wind's is shown as a share
   of the wind farms' capacity, from NESO's own forecast record; demand's as
@@ -571,7 +582,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/photo?id=N` | The station's photo (from Wikimedia Commons, cached by the server) |
 | `/api/replay` | The last seven days of the map in 10-minute frames |
 | `/api/regions` | Every region's carbon intensity, mix and solar, 24 hours back to 48 ahead |
-| `/api/balancing` | Live instructions, half-hourly costs, top payments and constraint costs |
+| `/api/balancing` | Live instructions, half-hourly costs, top payments, constraint costs, and imbalance prices and trades for today and yesterday |
 | `/api/constraints?group=SCOTEX` | Today's and tomorrow's boundary flows against their limits, one group's half hours for the chart (`group=`), each group's last 30 and 365 days, constraint costs by reason, and wind turned down by day and wind farm |
 | `/boundaries.json` | The ETYS transmission boundaries as map paths |
 | `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |

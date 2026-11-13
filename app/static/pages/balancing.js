@@ -97,9 +97,12 @@ function renderDay() {
   var filled = rows.filter(function (r) { return r[1] !== null; });
   var up = 0, down = 0, paid = 0, wind = 0, windPaid = 0;
   filled.forEach(function (r) { down -= r[1]; up += r[2]; paid += r[3] + r[4]; wind -= r[5]; windPaid += r[6]; });
-  byId('day-sub').textContent = filled.length ? (state.day === 'today' ? 'So far today' : 'Yesterday') + ': ' + mwh(up) + ' turned up and ' + mwh(down) + ' turned down (' + mwh(wind) + ' of it wind), costing ' + G.money(paid) + ' in total.'
+  var trades = ((d.imbalance || {})[state.day] || {}).summary;
+  trades = trades && trades.trades;
+  byId('day-sub').textContent = filled.length ? (state.day === 'today' ? 'So far today' : 'Yesterday') + ': ' + mwh(up) + ' turned up and ' + mwh(down) + ' turned down (' + mwh(wind) + ' of it wind), costing ' + G.money(paid) + ' in total' +
+      (trades && trades.actions ? ', plus ' + (trades.net < 0 ? 'a net ' + G.money(-trades.net) + ' received' : 'a net ' + G.money(trades.net)) + ' on ' + G.plural(trades.actions, 'trade', 'trades') + ' outside the Balancing Mechanism, mostly across the interconnectors.' : '.')
     : 'Waiting for Elexon’s figures for ' + state.day + '.';
-  var width = Math.max(300, host.clientWidth || 900), height = 230, padL = 48, padR = 8, padT = 10, padB = 22;
+  var width = Math.max(300, host.clientWidth || 900), height = 230, padL = 72, padR = 8, padT = 10, padB = 22;
   var hi = 1, lo = -1;
   rows.forEach(function (r) { if (r[2] !== null) { hi = Math.max(hi, r[2]); lo = Math.min(lo, r[1]); } });
   var step = G.niceStep(hi - lo, 4);
@@ -109,7 +112,7 @@ function renderDay() {
   var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': 'Volumes turned up and down each half hour' });
   for (var v = lo; v <= hi + 0.01; v += step) {
     svg.appendChild(s('line', { 'class': v === 0 ? 'zero-line' : 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
-    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (y(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: (Math.abs(v) >= 1000 ? (v / 1000) + 'k' : String(v)) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (y(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: G.int(v) + ' MWh' }));
   }
   var tip = G.makeTip(host);
   rows.forEach(function (r, i) {
@@ -195,13 +198,108 @@ function renderConstraints() {
   host.insertBefore(svg, host.firstChild);
 }
 
+/* ---------- the imbalance price ---------- */
+
+function price(v) { return num(v) ? (v < 0 ? '−£' : '£') + Math.abs(v).toFixed(2) : '–'; }
+
+function renderImbalance() {
+  var block = (state.data.imbalance || {})[state.day];
+  var host = clear(byId('imb-chart')), nivHost = clear(byId('niv-chart')), figs = clear(byId('imb-figures')), legend = clear(byId('imb-legend'));
+  var sm = block && block.summary, rows = block ? block.rows : [];
+  var priced = rows.filter(function (r) { return num(r[1]); });
+  if (!priced.length) {
+    byId('imb-sub').textContent = 'Waiting for Elexon’s imbalance prices for ' + state.day + '. Each half hour’s appears about half an hour after it ends.';
+    return;
+  }
+  byId('imb-sub').textContent = (state.day === 'today' ? 'So far today' : 'Yesterday') + ', the system was short of energy in ' + G.plural(sm.short, 'half hour', 'half hours') +
+    ' and long in ' + sm.long + '. ' + (num(sm.spread) ? 'Imbalances settled at ' + price(Math.abs(sm.spread)) + ' a MWh ' + (sm.spread >= 0 ? 'above' : 'below') + ' the market price on average.' : '');
+  function figure(label, value, unit, note) {
+    figs.appendChild(h('div', null, [h('dt', { text: label }), h('dd', null, [value, unit ? h('small', { text: unit }) : null, note ? h('span', { cls: 'more', text: note }) : null])]));
+  }
+  figure('Average', price(sm.mean), 'per MWh', num(sm.market_mean) ? 'Market price ' + price(sm.market_mean) : null);
+  figure('Highest', price(sm.high[1]), 'per MWh', G.hm(sm.high[0]) + ' to ' + G.hm(sm.high[0] + 1800));
+  figure('Lowest', price(sm.low[1]), 'per MWh', G.hm(sm.low[0]) + ' to ' + G.hm(sm.low[0] + 1800));
+
+  // Prices: the imbalance price, stepped, against the market price
+  var width = Math.max(300, host.clientWidth || 900), height = 200, padL = 72, padR = 8, padT = 10, padB = 8;
+  var n = rows.length, bw = (width - padL - padR) / n;
+  var values = [];
+  rows.forEach(function (r) { if (num(r[1])) values.push(r[1]); if (num(r[3])) values.push(r[3]); });
+  var lo = Math.min(0, Math.min.apply(null, values)), top = Math.max.apply(null, values.concat([1]));
+  var step = G.niceStep(top - lo, 4), hi = Math.ceil(top / step) * step;
+  lo = Math.floor(lo / step) * step;
+  var y = function (v) { return padT + (hi - v) / (hi - lo) * (height - padT - padB); };
+  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': 'Imbalance price and market price each half hour' });
+  for (var v = lo; v <= hi + 0.01; v += step) {
+    svg.appendChild(s('line', { 'class': v === 0 ? 'zero-line' : 'grid-line', x1: padL, x2: width - padR, y1: y(v).toFixed(1), y2: y(v).toFixed(1) }));
+    svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (y(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: price(v).replace('.00', '') + '/MWh' }));
+  }
+  var line = '', market = '';
+  rows.forEach(function (r, i) {
+    var x0 = padL + i * bw, x1 = x0 + bw;
+    if (num(r[1])) line += (line && num(rows[i - 1] && rows[i - 1][1]) ? 'L' + x0.toFixed(1) + ' ' + y(r[1]).toFixed(1) : 'M' + x0.toFixed(1) + ' ' + y(r[1]).toFixed(1)) + 'H' + x1.toFixed(1);
+    if (num(r[3])) market += (market && num(rows[i - 1] && rows[i - 1][3]) ? 'L' : 'M') + ((x0 + x1) / 2).toFixed(1) + ' ' + y(r[3]).toFixed(1);
+  });
+  svg.appendChild(s('path', { 'class': 'imb-market', d: market }));
+  svg.appendChild(s('path', { 'class': 'imb-line', d: line }));
+
+  // Net imbalance: short above the line, long below
+  var nh = 110, nTop = 1;
+  rows.forEach(function (r) { if (num(r[2])) nTop = Math.max(nTop, Math.abs(r[2])); });
+  var nStep = G.niceStep(2 * nTop, 2), nHi = Math.ceil(nTop / nStep) * nStep;
+  var ny = function (v) { return 8 + (nHi - v) / (2 * nHi) * (nh - 30); };
+  var nsvg = s('svg', { viewBox: '0 0 ' + width + ' ' + nh, height: nh, role: 'img', 'aria-label': 'Whether the system was short or long each half hour' });
+  [-nHi, 0, nHi].forEach(function (v) {
+    nsvg.appendChild(s('line', { 'class': v === 0 ? 'zero-line' : 'grid-line', x1: padL, x2: width - padR, y1: ny(v).toFixed(1), y2: ny(v).toFixed(1) }));
+    nsvg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: (ny(v) + 3.5).toFixed(1), 'text-anchor': 'end', text: (v > 0 ? '+' : v < 0 ? '−' : '') + G.int(Math.abs(v)) + ' MWh' }));
+  });
+  rows.forEach(function (r, i) {
+    var x = padL + i * bw;
+    if (G.hm(r[0]).slice(3) === '00' && +G.hm(r[0]).slice(0, 2) % 3 === 0) nsvg.appendChild(s('text', { 'class': 'axis-text', x: (x + bw / 2).toFixed(1), y: nh - 5, 'text-anchor': 'middle', text: G.hm(r[0]) }));
+    if (!num(r[2]) || !r[2]) return;
+    var top0 = r[2] > 0 ? ny(r[2]) : ny(0), hgt = Math.max(1, Math.abs(ny(r[2]) - ny(0)));
+    nsvg.appendChild(s('rect', { 'class': r[2] > 0 ? 'bar-up' : 'bar-down', x: x.toFixed(1), y: top0.toFixed(1), width: Math.max(1, bw - 1.5).toFixed(1), height: hgt.toFixed(1), rx: 1.5 }));
+  });
+  if (state.day === 'today') {
+    var nowI = Math.floor((Date.now() / 1000 - rows[0][0]) / 1800);
+    if (nowI >= 0 && nowI < n) {
+      var nx = (padL + nowI * bw).toFixed(1);
+      svg.appendChild(s('line', { 'class': 'now-mark', x1: nx, x2: nx, y1: padT, y2: height - padB }));
+      nsvg.appendChild(s('line', { 'class': 'now-mark', x1: nx, x2: nx, y1: 8, y2: nh - 22 }));
+    }
+  }
+  host.appendChild(svg);
+  nivHost.appendChild(nsvg);
+  var tip = G.makeTip(host);
+  function move(e, el) {
+    var b = el.getBoundingClientRect(), i = Math.floor(((e.clientX - b.left) * width / b.width - padL) / bw);
+    if (i < 0 || i >= n || !num(rows[i][1])) { tip.hide(); return; }
+    var r = rows[i];
+    tip.show(G.hm(r[0]) + ' to ' + G.hm(r[0] + 1800), [
+      { cls: 'imb-sw', value: price(r[1]), label: 'imbalance price, per MWh' },
+      { cls: 'imb-market-sw', value: price(r[3]), label: 'market price, per MWh' },
+      { sep: true },
+      { color: r[2] > 0 ? 'var(--up)' : 'var(--down)', value: G.int(Math.abs(r[2] || 0)) + ' MWh', label: r[2] > 0 ? 'short: NESO bought' : r[2] < 0 ? 'long: NESO sold' : 'balanced' },
+      num(r[4]) && r[4] ? { value: G.money(Math.abs(r[4])), label: r[4] > 0 ? 'net paid for trades' : 'net received from trades' } : null
+    ].filter(Boolean), (padL + (i + 0.5) * bw) * b.width / width, 40);
+  }
+  [svg, nsvg].forEach(function (el) {
+    el.addEventListener('pointermove', function (e) { move(e, el); });
+    el.addEventListener('pointerleave', function () { tip.hide(); });
+  });
+  legend.appendChild(h('li', null, [h('i', { cls: 'sw line imb-sw' }), 'Imbalance price']));
+  legend.appendChild(h('li', null, [h('i', { cls: 'sw line imb-market-sw' }), 'Market price']));
+  legend.appendChild(h('li', null, [h('i', { cls: 'sw', style: 'background:var(--up)' }), 'System short (MWh)']));
+  legend.appendChild(h('li', null, [h('i', { cls: 'sw', style: 'background:var(--down)' }), 'System long (MWh)']));
+}
+
 function renderAll() {
   if (!state.data) return;
   // Nothing instructed (most of the time): one line instead of an empty map and table
   var none = !state.data.now.units.length;
   byId('none-now').hidden = !none;
   byId('bal-grid').hidden = none;
-  renderLede(); renderTiles(); renderList(); renderMap(); renderDay(); renderTop(); renderConstraints();
+  renderLede(); renderTiles(); renderList(); renderMap(); renderDay(); renderImbalance(); renderTop(); renderConstraints();
 }
 
 function updateHeader() {
@@ -217,7 +315,7 @@ Array.prototype.forEach.call(document.querySelectorAll('#day-toggle button'), fu
   button.addEventListener('click', function () {
     state.day = button.getAttribute('data-day');
     Array.prototype.forEach.call(document.querySelectorAll('#day-toggle button'), function (b) { b.setAttribute('aria-pressed', String(b === button)); });
-    if (state.data) renderDay();
+    if (state.data) { renderDay(); renderImbalance(); }
   });
 });
 window.addEventListener('gb:theme', renderAll);

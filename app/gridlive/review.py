@@ -104,6 +104,17 @@ def ci_check(store, year, months):
             'excess': round(sum(m['ratio'] for m in months if m['m'] in odd) / len(odd) - 1, 3) if odd else None}
 
 
+def mean_temperature(store, first, last):
+    """[average temperature, average normal] over the days between two dates, when Elexon's record
+    has at least nine in ten of them; otherwise None."""
+    row = store.query('SELECT AVG(temp), AVG(normal), COUNT(*), COUNT(normal) FROM temp WHERE d >= ? AND d <= ?',
+                      (first.isoformat(), last.isoformat()))[0]
+    days = (last - first).days + 1
+    if not row[2] or row[2] < 0.9 * days:
+        return None
+    return [round(row[0], 1), round(row[1], 1) if row[3] == row[2] else None]
+
+
 def covered(store, start, end):
     """The end of the last whole UK day of history inside [start, end), or None."""
     last = store.scalar('SELECT MAX(t) FROM lh WHERE t >= ? AND t < ?', (start, end))
@@ -177,10 +188,13 @@ def grid_year(store, year, records=None):
             break
         f = mix_figures(store, m_start, min(m_end, stop))
         if f:
+            first_day, last_day = date(year, m, 1), uk_day(min(m_end, stop) - 1)
             months.append({'m': m, 't': m_start, 'whole': stop >= m_end, 'twh': f['twh'], 'mix': f['mix'], 'zero': f['zero'],
-                           'ci': f['ci'], 'price': f['price'], 'wind_twh': f['fuel_twh']['wind']})
+                           'ci': f['ci'], 'price': f['price'], 'wind_twh': f['fuel_twh']['wind'],
+                           'temp': mean_temperature(store, first_day, last_day)})
 
     check = ci_check(store, year, months)
+    year_temp = mean_temperature(store, date(year, 1, 1), uk_day(stop - 1))
 
     # Wind turned down and constraint costs (from the Constraints page's data, when it has the year)
     d0, d1 = date(year, 1, 1).isoformat(), uk_day(stop - 1).isoformat()
@@ -225,7 +239,7 @@ def grid_year(store, year, records=None):
     first_event = store.scalar('SELECT MIN(t) FROM ev')
     return {
         'from': start, 'to': stop, 'days': days, 'whole': stop >= end,
-        'figures': this, 'before': before, 'months': months, 'history': history, 'ci_check': check,
+        'figures': this, 'before': before, 'months': months, 'history': history, 'ci_check': check, 'temp': year_temp,
         'bests': year_bests(store, start, stop, records),
         'constraints': constraints,
         'last_coal': last_coal,

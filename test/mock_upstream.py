@@ -365,6 +365,48 @@ def forecast_records(rid, sql):
     return out[:limit]
 
 
+def mid_price(t):
+    """The market index price, as the mock's market-index endpoint gives it."""
+    return round(70 + 35 * math.sin(math.pi * (hour_of_day(t) - 7) / 13) + 8 * math.sin(t / 50000.0), 2)
+
+
+def imbalance(t):
+    """(imbalance price, net imbalance MWh): short (above zero) settles above the market price, long below."""
+    niv = round(300 * math.sin(t / 9000.0) + 80 * math.sin(t / 2100.0), 1)
+    return round(mid_price(t) + niv * 0.12, 2), niv
+
+
+def disbsad(t):
+    """NESO's trades for the half hour starting at t: an interconnector sale every half hour, a purchase
+    when the system is short, and an empty placeholder row as Elexon publishes them."""
+    day, sp = settlement_day_period(t)
+    base = {'dataset': 'DISBSAD', 'settlementDate': day.isoformat(), 'settlementPeriod': sp, 'soFlag': True, 'storFlag': False}
+    rows = [dict(base, id=1, cost=-1500.0, volume=-30.0, partyId='EDF Trading', assetId='IFG-EDFT1', isTendered=True, service='System')]
+    if imbalance(t)[1] > 0:
+        rows.append(dict(base, id=2, cost=16800.0, volume=120.0, partyId='Shell Energy Europe Limited', assetId='SEAB-1', isTendered=True, service='System'))
+    rows.append(dict(base, id=3, cost=0.0, volume=0.0, partyId=None, assetId=None, isTendered=None, service=None))
+    return rows
+
+
+def settlement_day_period(t):
+    """The UK settlement date and period a half hour starting at t falls in."""
+    from zoneinfo import ZoneInfo
+    day = datetime.fromtimestamp(t, ZoneInfo('Europe/London')).date()
+    return day, (t - settlement_start(day, 1)) // 1800 + 1
+
+
+TEMP_START = date(2024, 1, 1)     # the mock's temperature record starts here, so the backfill has an end to find
+
+
+def temperature(d):
+    """A day's temperature: a seasonal normal, with the day a little either side of it."""
+    normal = 10.5 - 6.0 * math.cos(2 * math.pi * (d.timetuple().tm_yday - 20) / 365.25)
+    temp = normal + 3.0 * math.sin(d.toordinal() / 5.0)
+    return {'measurementDate': d.isoformat(), 'publishTime': d.isoformat() + 'T16:45:00Z', 'temperature': round(temp, 1),
+            'temperatureReferenceAverage': round(normal, 1), 'temperatureReferenceHigh': round(normal + 2.4, 1),
+            'temperatureReferenceLow': round(normal - 2.6, 1)}
+
+
 def settlement_periods_mock(day):
     return (settlement_start(day + timedelta(days=1), 1) - settlement_start(day, 1)) // 1800
 
@@ -853,12 +895,44 @@ class Handler(BaseHTTPRequestHandler):
                 out.append({'measurementTime': iso(t), 'frequency': round(hz, 3)})
                 t += 15
             return self.send(200, out)
+        if path.startswith('/bmrs/api/v1/balancing/settlement/system-prices/'):
+            day = date.fromisoformat(path.rsplit('/', 1)[1])
+            rows = []
+            for sp in range(1, settlement_periods_mock(day) + 1):
+                t = settlement_start(day, sp)
+                if t + 1800 + 600 > _clock.time():
+                    break
+                price, niv = imbalance(t)
+                rows.append({'settlementDate': day.isoformat(), 'settlementPeriod': sp, 'startTime': iso(t), 'systemSellPrice': price,
+                             'systemBuyPrice': price, 'netImbalanceVolume': niv, 'priceDerivationCode': 'P'})
+            return self.send(200, {'metadata': {'datasets': ['DISEBSP']}, 'data': rows})
+        if path == '/bmrs/api/v1/datasets/DISBSAD':
+            start, end = parse(q['from']), parse(q['to'])
+            if end - start > 24 * 3600:          # as Elexon: a day at a time
+                return self.send(400, {'status': 400, 'errors': {'': ['The date range must not exceed 1 day']}})
+            rows = []
+            t = start - start % 1800
+            while t < min(end, _clock.time() - 1800):
+                rows.extend(disbsad(t))
+                t += 1800
+            return self.send(200, {'data': rows})
+        if path == '/bmrs/api/v1/temperature':
+            first, last = date.fromisoformat(q['from']), date.fromisoformat(q['to'])
+            if (last - first).days > 366:
+                return self.send(400, {'status': 400, 'errors': {'': ['The date range between From and To inclusive must not exceed 367 days']}})
+            rows = []
+            d = last
+            while d >= first:
+                if TEMP_START <= d <= datetime.fromtimestamp(_clock.time(), timezone.utc).date():
+                    rows.append(temperature(d))
+                d -= timedelta(days=1)
+            return self.send(200, {'metadata': {'datasets': ['TEMP']}, 'data': rows})
         if path == '/bmrs/api/v1/balancing/pricing/market-index':
             start, end = parse(q['from']), parse(q['to'])
             out = []
             t = start - start % 1800
             while t < end - 1800:
-                price = round(70 + 35 * math.sin(math.pi * (hour_of_day(t) - 7) / 13) + 8 * math.sin(t / 50000.0), 2)
+                price = mid_price(t)
                 out.append({'startTime': iso(t), 'dataProvider': 'APXMIDP', 'settlementDate': '2026-11-04',
                             'settlementPeriod': 1, 'price': price, 'volume': 900.5})
                 out.append({'startTime': iso(t), 'dataProvider': 'N2EXMIDP', 'settlementDate': '2026-11-04',

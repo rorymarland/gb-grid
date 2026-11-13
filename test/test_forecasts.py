@@ -145,6 +145,12 @@ d = page['demand']
 check('page: demand months since 2021', d['months'][0]['m'] == '2021-04' and d['year_ago'] is not None, d['months'][:1])
 check('page: demand typical miss near 3% x 2/pi', 0.015 < d['d30']['pct'] < 0.024, d['d30'])
 check('page: own forecasts waiting', page['ci']['n'] == 0 and page['solar']['n'] == 0)
+# The demand forecast's latest and worst days carry the temperature, where Elexon's record has it
+live.write('INSERT INTO temp (d, temp, normal, high, low) VALUES (?, ?, ?, ?, ?)', [(d['day']['d'], 3.2, 6.0, 8.0, 4.0), (d['worst'][0]['d'], 15.0, 9.5, 12.0, 7.0)], history=False)
+d2 = {k['key']: k for k in fc.view(live, time.time())['kinds']}['demand']
+check('page: demand day temperature', d2['day']['temp'] == [3.2, 6.0] or d2['day']['temp'] == (3.2, 6.0), d2['day'].get('temp'))
+check('page: worst day temperature', tuple(d2['worst'][0]['temp']) == (15.0, 9.5), d2['worst'][0])
+check('page: wind has no temperature', 'temp' not in {k['key']: k for k in fc.view(live, time.time())['kinds']}['wind']['day'])
 check('page: cached', job.page(time.time()) is job.page(time.time()))
 
 httpd.shutdown()

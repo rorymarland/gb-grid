@@ -17,6 +17,7 @@ from . import fetch
 from .constraints import file_end, resources
 from .config import NESO, log
 from .fetch import FetchError, as_float
+from .imbalance import temperatures
 from .timeutil import local_epoch, parse_time, settlement_start, uk_clock, uk_day, uk_midnight_utc
 
 WIND_RESOURCE = '7524ec65-f782-4258-aaf8-5b926c17b966'     # Historic Day Ahead Wind Forecasts
@@ -244,6 +245,7 @@ KINDS = {
                't': 't', 'cols': 't, fc, act, NULL', 'from': 'FROM fci WHERE 1'},
 }
 ORDER = ['wind', 'demand', 'ci', 'solar', 'carbon']
+TEMPERATURE_KINDS = ('demand',)
 
 
 def rows(store, key, start, end):
@@ -328,5 +330,11 @@ def view(store, now):
             'worst': [{'d': d.isoformat(), 'mae': s['mae'], 'bias': s['bias']} for d, s in days[:5]],
             'best': {'d': days[-1][0].isoformat(), 'mae': days[-1][1]['mae']} if days else None,
         })
+        if key in TEMPERATURE_KINDS:
+            # The day's temperature against normal, which explains most of demand's bigger misses
+            temps = temperatures(store, last_day - timedelta(days=366), last_day)
+            item['day']['temp'] = temps.get(item['day']['d'])
+            for w in item['worst']:
+                w['temp'] = temps.get(w['d'])
         kinds.append(item)
     return {'now': int(now), 'kinds': kinds}

@@ -97,6 +97,7 @@ POLL = {
     'home': OCTOPUS_LIVE_SECONDS,
     'constraints': env_int('POLL_CONSTRAINTS_SECONDS', 3 * 3600, 1800, 86400),
     'forecasts': env_int('POLL_FORECASTS_SECONDS', 1800, 600, 7200),
+    'imbalance': env_int('POLL_IMBALANCE_SECONDS', 900, 300, 3600),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card
