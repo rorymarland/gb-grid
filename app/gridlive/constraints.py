@@ -367,7 +367,11 @@ def view(store, fleet, now, focus=None):
     def total(since):
         row = store.query('SELECT SUM(thermal + voltage + inertia + loss), COUNT(*) FROM cday WHERE d >= ?', (since,))
         return {'cost': round(row[0][0] or 0), 'days': row[0][1]} if row and row[0][1] else None
-    latest_cost = store.query('SELECT d, thermal + voltage + inertia + loss FROM cday ORDER BY d DESC LIMIT 1')
+    # NESO's newest day is sometimes a stub (£82 on a £10m day) until the full day is published:
+    # the latest day is the newest one costing at least a twentieth of the month's median
+    recent = store.query('SELECT d, thermal + voltage + inertia + loss FROM cday ORDER BY d DESC LIMIT 31')
+    typical = sorted(c for _, c in recent)[len(recent) // 2] if recent else 0
+    latest_cost = [row for row in recent if row[1] >= typical / 20][:1]
 
     # Wind turned down: each day, and by wind farm (BM units grouped into stations)
     wind_days = [[d, round(mwh)] for d, mwh in store.query(

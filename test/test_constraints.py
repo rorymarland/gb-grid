@@ -92,6 +92,10 @@ for k in range(25):
 store.write('INSERT INTO lh (t, wind) VALUES (?, ?)', lh, history=False)
 
 v = cn.view(store, None, NOW)
+stub = server.Store(tempfile.mkdtemp())
+stub.write('INSERT INTO cday (d, thermal, voltage, inertia, loss, thermal_mwh) VALUES (?, ?, ?, ?, ?, ?)',
+           [('2026-11-0%d' % k, 8e6, 1e6, 0.5e6, 0.5e6, 0) for k in range(1, 8)] + [('2026-11-08', 82, 0, 0, 0, 0)], history=False)
+check('view: a stub newest cost day is passed over', cn.view(stub, None, NOW)['costs']['latest'] == {'d': '2026-11-07', 'cost': 10000000})
 check('view: days', v['days']['today']['d'] == '2026-11-13' and v['days']['tomorrow']['d'] == '2026-11-14', v['days'])
 tomorrow = v['days']['tomorrow']['groups']
 check('view: tomorrow ranked by peak', [g['code'] for g in tomorrow] == ['SCOTEX', 'SSE_SP'], tomorrow)
