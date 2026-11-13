@@ -95,6 +95,7 @@ POLL = {
     'response': env_int('POLL_RESPONSE_SECONDS', 3600, 600, 86400),
     'events': env_int('POLL_EVENTS_SECONDS', 120, 30, 3600),
     'home': OCTOPUS_LIVE_SECONDS,
+    'constraints': env_int('POLL_CONSTRAINTS_SECONDS', 3 * 3600, 1800, 86400),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card

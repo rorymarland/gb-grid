@@ -13,7 +13,7 @@ import { renderParts } from '/static/js/summary.js';
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
 /* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
-var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,outlook,outages,records';
+var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,outlook,outages,records';
 var every = G.clamp(Number(params.get('every')) || 20, 5, 600);
 var nightSpec = (params.get('night') || '23-7').match(/^(\d{1,2})-(\d{1,2})$/);
 var nightFrom = nightSpec ? Number(nightSpec[1]) : null, nightTo = nightSpec ? Number(nightSpec[2]) : null;
@@ -47,7 +47,7 @@ function whenPhrase(t) {
 var FEEDS = {
   live: ['/api/live', 30], alerts: ['/api/alerts', 60], map: ['/api/map', 60], day: ['/api/history?range=24h', 300],
   regions: ['/api/regions', 300], balancing: ['/api/balancing', 60], outages: ['/api/outages', 120], summary: ['/api/longterm/summary', 1800],
-  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60]
+  story: ['/api/summary?day=today', 300], home: ['/api/home?from=display', 60], constraints: ['/api/constraints', 900]
 };
 var data = {}, polls = {};
 function startFeed(name) {
@@ -366,6 +366,44 @@ function buildOutlook(body, take) {
   };
 }
 
+/* ---------- constraints ---------- */
+
+function buildConstraints(body, take) {
+  var gauge = h('div', { cls: 'gauge-box cn-box' }), list = h('div', { cls: 'side' });
+  body.appendChild(h('div', { cls: 'split even' }, [gauge, list]));
+  function money(p) { return p >= 1e9 ? '£' + (p / 1e9).toFixed(2) + 'bn' : '£' + (p >= 1e8 ? Math.round(p / 1e6) : (p / 1e6).toFixed(1)) + 'm'; }
+  function hours(n) { return n === 1 ? 'half an hour' : (n / 2) + (n === 2 ? ' hour' : ' hours'); }
+  return {
+    ready: function () { var d = data.constraints; return Boolean(d && d.days && (d.days.today.groups.length || d.days.tomorrow.groups.length)); },
+    render: function () {
+      var d = data.constraints;
+      if (!d || !d.days) return;
+      var key = d.days.tomorrow.groups.length ? 'tomorrow' : 'today', groups = d.days[key].groups, top = groups[0];
+      if (!top) return;
+      var name = function (g) { return g.label || g.code; };
+      clear(gauge);
+      gauge.appendChild(h('p', { cls: 'big' }, [pct(top.peak), h('small', { text: 'of its limit' })]));
+      gauge.appendChild(h('p', { cls: 'pill' }, [h('i', { style: 'background:' + G.css(top.peak >= 1 ? '--bad' : top.peak >= 0.9 ? '--warn' : '--good') }),
+        name(top) + (top.boundary ? ' (' + top.boundary + ')' : '')]));
+      gauge.appendChild(h('p', { cls: 'foot-note', text: (top.over ? 'Forecast over its limit for ' + hours(top.over) + ' ' + key + '. ' : '') +
+        'The busiest boundary ' + key + ', from NESO’s forecast the day before.' }));
+      clear(list);
+      list.appendChild(h('h3', { text: key === 'tomorrow' ? 'Tomorrow’s busiest half hour' : 'Today’s busiest half hour' }));
+      groups.filter(function (g) { return g.peak >= 0.5; }).slice(0, 5).forEach(function (g) {
+        list.appendChild(h('div', { cls: 'row' }, [h('span', { text: (g.boundary ? g.boundary + ': ' : '') + name(g) }), h('b', { text: pct(g.peak) }),
+          h('span', { cls: 'muted', text: g.over ? 'over ' + hours(g.over) : 'within' })]));
+      });
+      var w = d.wind, c = d.costs;
+      list.appendChild(h('div', { cls: 'stats cn-stats' }, [
+        h('div', null, [h('b', { text: (w.mwh30 / 1000 >= 100 ? Math.round(w.mwh30 / 1000) : (w.mwh30 / 1000).toFixed(1)) + ' GWh' }), h('span', { text: 'wind turned down, last 30 days' })]),
+        c.d30 ? h('div', null, [h('b', { text: money(c.d30.cost) }), h('span', { text: 'constraint costs, last 30 days' })]) : null
+      ]));
+      take.textContent = top.peak >= 1 ? name(top) + ' is forecast to need ' + pct(top.peak) + ' of its limit ' + key + ', so wind farms will be paid to turn down.'
+        : 'Every boundary is forecast to stay within its limit ' + key + '.';
+    }
+  };
+}
+
 /* ---------- spare capacity and outages ---------- */
 
 function buildOutages(body, take) {
@@ -577,6 +615,7 @@ var BUILDERS = {
   map: ['Power stations', ['map'], buildMap],
   regions: ['Carbon intensity by region', ['regions'], buildRegions],
   balancing: ['Balancing the grid', ['balancing'], buildBalancing],
+  constraints: ['Constraints', ['constraints'], buildConstraints],
   outlook: ['The next 48 hours', [], buildOutlook],
   outages: ['Spare capacity and outages', ['outages'], buildOutages],
   records: ['Then and now', ['summary'], buildRecords]

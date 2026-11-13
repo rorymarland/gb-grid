@@ -112,6 +112,17 @@ class Store:
             CREATE TABLE IF NOT EXISTS home (fuel TEXT NOT NULL, t INTEGER NOT NULL, kwh REAL NOT NULL,
                 src TEXT NOT NULL, ci REAL, PRIMARY KEY (fuel, t)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS home_live (t INTEGER PRIMARY KEY, w REAL NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS bflow (grp TEXT NOT NULL, t INTEGER NOT NULL, flow INTEGER NOT NULL,
+                lim INTEGER NOT NULL, PRIMARY KEY (grp, t)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS bday (grp TEXT NOT NULL, d TEXT NOT NULL, peak REAL, mean REAL, near INTEGER,
+                over INTEGER, n INTEGER, lim INTEGER, maxflow INTEGER, PRIMARY KEY (grp, d)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS bcost (grp TEXT NOT NULL, d TEXT NOT NULL, cost REAL NOT NULL,
+                PRIMARY KEY (grp, d)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS cday (d TEXT PRIMARY KEY, thermal REAL, voltage REAL, inertia REAL, loss REAL,
+                thermal_mwh REAL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS wcurt (d TEXT NOT NULL, unit TEXT NOT NULL, name TEXT, mwh REAL NOT NULL,
+                PRIMARY KEY (d, unit)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS wcurt_hh (t INTEGER PRIMARY KEY, mwh REAL NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS tariff_rate (tariff TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
                 end INTEGER, p REAL NOT NULL, PRIMARY KEY (tariff, kind, start)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS home_rate (fuel TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,

@@ -6,6 +6,17 @@ releases that keep working with your existing settings and data.
 
 ## 1.7.0 (unreleased)
 
+- **Constraints** (`/constraints`), a new page on why Scottish wind gets
+  turned down. NESO's day-ahead forecast of each transmission boundary's
+  flow against its limit, today and tomorrow, with B4 and B6 coloured on a
+  map; a chart of any boundary's flow and limit for the last week and
+  tomorrow; the wind farms paid to turn down, by day and by farm, and what
+  share of wind's output that was; and constraint costs by reason and by
+  boundary for the last year. A year of history downloads on the first
+  start (a minute or two), then it checks every 3 hours
+  (`POLL_CONSTRAINTS_SECONDS`). All from NESO's open data: no key, and no
+  Octopus requests. There's a Constraints slide on the Display too; it's in
+  the default slide list, and a `views=` list can add `constraints`.
 - **Your home on the Display:** a new slide after Right now, with what your
   home is drawing, the last hour of readings, today so far, yesterday and the
   last 30 days. It's in the default slide list and drops out by itself when

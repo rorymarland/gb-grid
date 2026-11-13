@@ -30,6 +30,7 @@ SOURCE_LABELS = {
     'response': 'Inertia and frequency response (NESO)',
     'events': 'Timeline (built from the other feeds)',
     'home': 'Your home (Octopus Energy)',
+    'constraints': 'Constraints (NESO boundary flows, costs and wind turned down)',
 }
 
 

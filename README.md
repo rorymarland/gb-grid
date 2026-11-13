@@ -18,6 +18,7 @@ standard library inside.
 | Your home | `/home` | Your own electricity and gas from an Octopus smart meter, with carbon and cost (optional) |
 | Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
 | Balancing | `/balancing` | Who NESO is paying to turn up or down, and what it costs |
+| Constraints | `/constraints` | Where the network runs out of room, the wind turned down, and what it costs |
 | Outages | `/outages` | Spare capacity, offline units and grid notices |
 | Timeline | `/timeline` | Notable moments, kept for a year, linked to the map and History |
 | History | `/history` | The mix, carbon and price since 2009, with records |
@@ -144,6 +145,20 @@ daily constraint costs.
 
 ![The balancing page](docs/balancing.png)
 
+### Constraints
+
+Why Scottish wind gets turned down. NESO's day-ahead forecast of the flow
+across each transmission boundary against its limit, today and tomorrow,
+with B4 (the north of Scotland to the Central Belt) and B6 (Scotland to
+England) drawn on a map; any boundary's flow and limit, half hour by half
+hour, for the last week and tomorrow; the wind farms paid to turn down, day
+by day and farm by farm, and what share of wind's output that was; and what
+constraints cost each day, by reason and by boundary, for the last year.
+Everything comes from NESO's open data, with no key. It also has a slide on
+the Display.
+
+![The constraints page](docs/constraints.png)
+
 ### Outages
 
 Spare capacity over the next 12 hours, the big units that are offline and when
@@ -222,7 +237,7 @@ allows.
 | ![Display: Today on the grid](docs/display-story.png) | ![Display: the next 48 hours](docs/display-outlook.png) |
 
 Options go in the address:
-`/display?views=now,home,story,day,map,regions,balancing,outlook,outages,records`
+`/display?views=now,home,story,day,map,regions,balancing,constraints,outlook,outages,records`
 (which slides, in order; `home`, Your home, only shows when
 [Octopus is set up](#your-home-octopus-energy)), `every=20` (seconds per slide), `night=23-7` (dim
 hours, UK time, or `night=off`) and `theme=dark` or `theme=light`.
@@ -283,7 +298,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -481,6 +496,16 @@ Allowlist `api.neso.energy` to fix it.
   between 47% and 58% (33% to 38% for small open-cycle plant) and burn gas at
   the price you set, plus 0.184 tonnes of CO2 per MWh of gas at your carbon
   price.
+- **Boundary flows** are NESO's day-ahead forecasts of what would flow if
+  every unit ran as the market scheduled it; since April 2024 they leave out
+  NESO's own constraint actions, so above 100% is where NESO expects to step
+  in, not a flow that happened. NESO publishes groups by code without
+  descriptions; the page names the ones whose meaning is clear and only
+  links B4 and B6 to the map. **Wind turned down** is NESO's record of
+  accepted bids from wind farms, in MW for each half hour, so each half
+  hour's MWh is half the figure. Its share is the energy turned down over
+  what transmission-connected wind farms made plus that, for the latest 30
+  days NESO has both.
 - **Northern Ireland** is part of the all-island grid with Ireland rather than
   the GB grid, so it only appears through the Moyle interconnector.
 
@@ -497,6 +522,8 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/replay` | The last seven days of the map in 10-minute frames |
 | `/api/regions` | Every region's carbon intensity, mix and solar, 24 hours back to 48 ahead |
 | `/api/balancing` | Live instructions, half-hourly costs, top payments and constraint costs |
+| `/api/constraints?group=SCOTEX` | Today's and tomorrow's boundary flows against their limits, one group's half hours for the chart (`group=`), each group's last 30 and 365 days, constraint costs by reason, and wind turned down by day and wind farm |
+| `/boundaries.json` | The ETYS transmission boundaries as map paths |
 | `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |
 | `/api/alerts` | Grid notices in force and the margin summary (drives the banner) |
 | `/api/longterm?from=&to=` | Mix, carbon and price between two Unix times, averaged to suit the span |
@@ -536,7 +563,7 @@ Run the tests with `python3 test/test_units.py`, `python3 test/test_time.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `outages`, `longterm`, `notices`, `frequency`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -594,7 +621,7 @@ stations sharing coordinates). The tests run it.
 - Supported by National Energy SO Open Data
   ([licence](https://www.neso.energy/data-portal/neso-open-licence)): carbon
   intensity from the [NESO Carbon Intensity API](https://carbonintensity.org.uk/),
-  and embedded generation, region boundaries, constraint costs, the historic
+  and embedded generation, region boundaries, transmission boundaries, constraint flows, limits and costs, wind turned down, the historic
   generation mix, system inertia and frequency response auction results from
   the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).

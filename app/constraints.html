@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>Constraints – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/constraints.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>Constraints</h1>
+    <p class="lede">Most of Britain’s wind is in Scotland and the North Sea, and most of its demand is in England’s cities. When the lines in between can’t carry it all, NESO pays wind farms to turn down and power stations further south to turn up. This page shows where, how often, and what it costs.</p>
+  </section>
+
+  <p class="cn-waiting" id="waiting" hidden>Fetching NESO’s constraint data. The first time, a year of history takes a minute or two.</p>
+
+  <div id="content" hidden>
+    <section class="cn-outlook" aria-labelledby="outlook-title">
+      <div class="panel-head">
+        <h2 class="visually-hidden" id="outlook-title">The boundaries, today and tomorrow</h2>
+        <p class="cn-headline" id="headline"></p>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Day" id="day-toggle">
+            <button type="button" data-day="today" aria-pressed="false">Today</button>
+            <button type="button" data-day="tomorrow" aria-pressed="true">Tomorrow</button>
+          </div>
+        </div>
+      </div>
+      <div class="cn-cols">
+        <div class="cn-map-box">
+          <div class="cn-map" id="map" aria-label="Map of the transmission boundaries and the wind farms turned down this week" role="img"></div>
+          <ul class="cn-legend" id="map-legend"></ul>
+        </div>
+        <div class="cn-side">
+          <p class="sub" id="groups-sub"></p>
+          <div class="cn-groups" id="groups" role="group" aria-label="Choose a boundary to chart"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="flow-title">
+      <div class="panel-head"><h2 id="flow-title">Flow against the limit</h2></div>
+      <p class="sub" id="flow-sub"></p>
+      <div class="chart cn-chart" id="flow-chart"></div>
+      <ul class="cn-legend" id="flow-legend"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="wind-title">
+      <div class="panel-head"><h2 id="wind-title">Wind turned down</h2></div>
+      <p class="sub" id="wind-sub"></p>
+      <dl class="cn-figures" id="wind-figures"></dl>
+      <div class="chart cn-chart cn-bars" id="wind-chart"></div>
+      <h3 class="cn-h3">Wind farms turned down most, the last 30 days</h3>
+      <div class="cn-table-wrap">
+        <table class="data cn-farms">
+          <thead><tr><th scope="col">Wind farm</th><th scope="col" class="num">Turned down <span class="u">MWh</span></th><th scope="col" class="num cn-hide-sm">Capacity <span class="u">MW</span></th><th scope="col" class="num cn-hide-sm">Full-power hours</th></tr></thead>
+          <tbody id="farms"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="cost-title">
+      <div class="panel-head"><h2 id="cost-title">What constraints cost</h2></div>
+      <p class="sub" id="cost-sub"></p>
+      <dl class="cn-figures" id="cost-figures"></dl>
+      <div class="chart cn-chart cn-bars" id="cost-chart"></div>
+      <ul class="cn-legend" id="cost-legend"></ul>
+      <h3 class="cn-h3">By boundary</h3>
+      <div class="cn-table-wrap">
+        <table class="data cn-boundaries">
+          <thead><tr><th scope="col">Boundary</th><th scope="col" class="num">Last 30 days</th><th scope="col" class="num">Last 365 days</th><th scope="col" class="num cn-hide-sm">Over its limit, last 365 days</th></tr></thead>
+          <tbody id="boundaries"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>The transmission network is planned around <b>boundaries</b>: lines across the map where a set of circuits carries power from one part of the country to another. B4 separates the north of Scotland from the Central Belt; B6 runs along the border with England. Each has a limit, set by how much the circuits can carry safely if one of them fails.</p>
+        <p>The flows here are NESO’s forecasts, made the day before, of what would flow if every power station ran as the market scheduled it. Since April 2024 they leave out the actions NESO takes to manage constraints, so a flow above 100% means NESO expects to step in: paying wind farms on one side to turn down (their bids) and generators on the other side to turn up (their offers). The wind farms are paid for the subsidy and income they give up, which is why constraints cost so much on windy days.</p>
+        <p>NESO publishes each boundary group by a code. Where the meaning is clear, this page gives it a name; the others keep NESO’s code. Only B4 and B6 are drawn in colour on the map, as they’re the only boundaries whose groups match them certainly; the rest are drawn faintly for reference.</p>
+        <p>Wind turned down comes from NESO’s record of accepted bids from wind farms, which counts every reason for turning them down, though nearly all are constraints. Costs are NESO’s daily constraint costs, published a few days after the day.</p>
+        <p class="cn-source" id="source">Data: NESO’s Day Ahead Constraint Flows and Limits, Thermal Constraint Costs, Constraint Breakdown and Wind BOA Volumes, and the ETYS transmission boundaries, under the NESO Open Data Licence.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/constraints.js}}"></script>
+</body>
+</html>

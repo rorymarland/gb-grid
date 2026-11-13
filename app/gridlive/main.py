@@ -5,7 +5,7 @@ import os
 import signal
 import threading
 
-from .config import HOME_ENABLED, BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
+from .config import APP_DIR, HOME_ENABLED, BROWSER_REFRESH, DATA_DIR, GEO_PATH, HISTORY_DAYS, LOG_LEVEL, LONG_HISTORY, PHOTOS, POLL, PORT, REGIONS_PATH, REGION_ID, STATIONS_PATH, VERSION, WIKIDATA_PATH, log
 from .store import Store
 from .status import Status
 from .ingest import Ingest
@@ -20,6 +20,7 @@ from .events import Events
 from .notify import Notifier
 from .photos import Photos
 from .home import Home, run_home
+from .constraints import Constraints
 from .web import App, Handler, Server, UI, load_file
 
 
@@ -44,12 +45,14 @@ def main():
     notifier = Notifier(store)
     App.grid.notifier = notifier
     App.home = App.grid.home = Home(store, status)
+    App.constraints = App.grid.constraints = Constraints(store, fleet)
 
     def poll_events():
         changed = events.poll()
         notifier.poll()
         return changed
     App.geo = load_file(GEO_PATH, 'GEO_PATH', b'{"box":[0,0,1,1],"units":[],"labels":[]}')
+    App.boundaries = load_file(os.path.join(APP_DIR, 'boundaries.json'), 'the app folder', b'{"boundaries":[]}')
     App.regions = load_file(REGIONS_PATH, 'the app folder', b'{"box":[0,0,1,1],"bounds":[0,0,1,1],"regions":[]}')
     stop = threading.Event()
 
@@ -69,6 +72,7 @@ def main():
         ('outlook', outlook.poll),
         ('response', frequency.poll_neso),
         ('events', poll_events),
+        ('constraints', App.constraints.poll),
     ]
     if LONG_HISTORY:
         jobs += [('longhistory', longhistory.poll_mix), ('longprices', longhistory.poll_prices)]

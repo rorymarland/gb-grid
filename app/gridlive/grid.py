@@ -28,6 +28,7 @@ class Grid(LiveViews, MapViews, SystemViews, LongtermViews, SummaryViews, EventV
         self.outages = outages
         self.outlook = None
         self.home = None
+        self.constraints = None
         self.status = status
         self.fleet = fleet
         self.units = units

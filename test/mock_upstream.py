@@ -291,6 +291,106 @@ def balancing_rows(kind, side, day, period):
     return rows
 
 
+# ---- NESO constraint data: day-ahead flows, costs by group, wind turned down ----
+
+FLOW_GROUPS = [('SCOTEX', 5000, 0.62), ('SSE_SP', 3600, 0.45), ('SSHARN3', 5500, 0.55), ('FLOWSTH', 9000, 0.6),
+               ('SEIMP', 8000, 0.3), ('ESTEX', 4000, 0.2), ('SSE_SP2', 3400, 0.48)]
+BOA_UNITS = [('SGRWO-1', 'Seagreen 1', 180), ('SGRWO-2', 'Seagreen 2', 180), ('MOWWO-1', 'Moray West 1', 220),
+             ('DOREW-1', 'Dorenell 1', 88), ('CLDNW-1', 'Clyde North 1', 120), ('WTMSO-1', 'Westermost Rough', 206)]
+
+
+def london(t):
+    """UK clock time as NESO writes it: 2026-11-13T23:30:00."""
+    from zoneinfo import ZoneInfo
+    return datetime.fromtimestamp(t, ZoneInfo('Europe/London')).strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def from_london(text):
+    from zoneinfo import ZoneInfo
+    return int(datetime.strptime(text[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=ZoneInfo('Europe/London')).timestamp())
+
+
+def boa_mw(unit, cap, t):
+    """MW turned down: Scottish wind is turned down when the wind is strong, Westermost Rough rarely."""
+    excess = wind_total(t) - 10500
+    if excess <= 0:
+        return 0.0
+    share = 0.05 if unit.startswith('WTMSO') else 0.6
+    return round(min(cap, excess / 5500 * cap * share), 3)
+
+
+def fy_range(rid):
+    """The April-to-March year a resource id like 'wboa-2025' covers."""
+    year = int(rid.split('-')[-1])
+    return datetime(year, 4, 1).date(), datetime(year + 1, 4, 1).date()
+
+
+def neso_sql(sql):
+    table = re.search(r'FROM "([\w-]+)"', sql)
+    if not table:
+        return None
+    rid = table.group(1)
+    dates = re.findall(r'(>=|<) \'([0-9T:-]+)\'', sql)
+    lower = next((v for op, v in dates if op == '>='), None)
+    upper = next((v for op, v in dates if op == '<'), None)
+    if any(w in sql.upper() for w in ('GREATEST', 'CAST(', 'LEFT(', '::')):
+        return 'forbidden'
+    if rid == 'dacfl':
+        start = from_london(lower if 'T' in lower else lower + 'T00:00:00')
+        today = datetime.fromtimestamp(_clock.time(), timezone.utc).date()
+        end = uk_midnight_utc(today + timedelta(days=2))
+        if upper:
+            end = min(end, from_london(upper if 'T' in upper else upper + 'T00:00:00'))
+        start = max(start, int(_clock.time()) - 420 * 86400)
+        rows = []
+        for t in range(start - start % 1800, end, 1800):
+            for g, lim, share in FLOW_GROUPS:
+                flow = round(wind_total(t) * share * (1.4 if g == 'SCOTEX' else 1.0) - lim * 0.35)
+                rows.append({'g': g, 't': london(t), 'f': flow, 'l': lim + (300 if t % 86400 < 43200 else 0)})
+        limit = int(re.search(r'LIMIT (\d+)', sql).group(1))
+        offset = int((re.search(r'OFFSET (\d+)', sql) or [0, 0])[1]) if 'OFFSET' in sql else 0
+        return rows[offset:offset + limit]
+    if rid.startswith('tcc-'):
+        first, last = fy_range(rid)
+        d = max(first, datetime.strptime(lower, '%Y-%m-%d').date())
+        stop = min(last, datetime.fromtimestamp(_clock.time(), timezone.utc).date() - timedelta(days=4))
+        rows = []
+        while d < stop:
+            r = h01(d.isoformat())
+            for g, scale in (('SCOTEX', 2.4e6), ('SSE-SP', 6e5), ('SSHARN', 9e5), ('SEIMP', 1e5), ('SWALEX', 0)):
+                rows.append({'d': d.isoformat(), 'g': g, 'c': round(scale * r * r)})
+            d += timedelta(days=1)
+        return rows
+    if rid.startswith('cb-'):
+        records = constraint_records()
+        records = records[:120] if rid == 'cb-2026' else records[120:]
+        return [r for r in records if r['Date'] >= lower]
+    if rid.startswith('wboa-'):
+        first, last = fy_range(rid)
+        d = max(first, datetime.strptime(lower, '%Y-%m-%d').date())
+        stop = min(last, datetime.strptime(upper, '%Y-%m-%d').date() if upper else last,
+                   datetime.fromtimestamp(_clock.time(), timezone.utc).date() + timedelta(days=1))
+        per_unit, per_hh = {}, {}
+        # BOA_Volume is MW in each half hour: the dashboard's SQL halves it to get MWh
+        scale = 0.5 if '/ 2' in sql else 1.0
+        while d < stop:
+            for sp in range(1, 49):
+                t = settlement_start(d, sp)
+                if t > _clock.time():
+                    break
+                for unit, name, cap in BOA_UNITS:
+                    mw = boa_mw(unit, cap, t)
+                    if mw:
+                        key = (d.isoformat(), unit)
+                        per_unit.setdefault(key, [name, 0.0])[1] += mw * scale
+                        per_hh[(d.isoformat(), sp)] = per_hh.get((d.isoformat(), sp), 0.0) + mw * scale
+            d += timedelta(days=1)
+        if '"Generator_Name" u' in sql:
+            return [{'d': k[0], 'u': k[1], 'n': v[0], 'down': round(v[1], 3), 'up': 0} for k, v in per_unit.items()]
+        return [{'d': k[0], 'sp': k[1], 'down': round(v, 3)} for k, v in per_hh.items()]
+    return None
+
+
 def constraint_records():
     out = []
     day = datetime.fromtimestamp(_clock.time(), timezone.utc).date() - timedelta(days=8)
@@ -956,6 +1056,25 @@ class Handler(BaseHTTPRequestHandler):
                                     'clearingPrice': round(2 + 3 * abs(math.sin(block / 70000.0)), 2)})
             records.reverse()
             return self.send(200, {'success': True, 'result': {'records': records}})
+        if path == '/neso/api/3/action/package_show' and q.get('id') in ('day-ahead-constraint-flows-and-limits', 'thermal-constraint-costs',
+                                                                            'wind-bmu-boa-volumes'):
+            resources = {
+                'day-ahead-constraint-flows-and-limits': [{'id': 'dacfl', 'name': 'Day Ahead Constraint Flows and Limits', 'datastore_active': True},
+                                                          {'id': 'diag', 'name': 'Network Diagram Scotland', 'datastore_active': False}],
+                'thermal-constraint-costs': [{'id': 'tcc-old', 'name': 'Thermal Constraint Costs 20-21', 'datastore_active': False},
+                                             {'id': 'tcc-2025', 'name': 'Thermal Constraint Costs Data 25-26', 'datastore_active': True},
+                                             {'id': 'tcc-2026', 'name': 'Thermal Constraint Costs Data 26-27', 'datastore_active': True}],
+                'wind-bmu-boa-volumes': [{'id': 'wboa-2026', 'name': 'Wind BOA Volumes 2026/27', 'datastore_active': True},
+                                         {'id': 'wboa-2024', 'name': 'Wind BOA Volumes 2024/25', 'datastore_active': True},
+                                         {'id': 'wboa-2025', 'name': 'Wind BOA Volumes 2025/26', 'datastore_active': True}],
+            }[q['id']]
+            return self.send(200, {'success': True, 'result': {'resources': resources}})
+        if path == '/neso/api/3/action/datastore_search_sql' and 'hgm' not in q.get('sql', ''):
+            records = neso_sql(q.get('sql', ''))
+            if records == 'forbidden':
+                return self.send(403, {'success': False, 'error': {'message': "Access denied: {'permissions': ['Not authorized to call function']}"}})
+            if records is not None:
+                return self.send(200, {'success': True, 'result': {'records': records}})
         if path == '/neso/api/3/action/package_show' and q.get('id') == 'historic-generation-mix':
             return self.send(200, {'success': True, 'result': {'resources': [
                 {'id': 'hgm-csv', 'datastore_active': False}, {'id': 'hgm', 'datastore_active': True}]}})

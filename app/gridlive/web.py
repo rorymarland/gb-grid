@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .constraints import view as constraints_view
 from .config import ACCESS_LOG, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
 
@@ -27,6 +28,8 @@ class App:
     regions = (b'', '')
     photos = None
     home = None
+    constraints = None
+    boundaries = (b'', '')
 
 
 def load_file(path, variable, fallback):
@@ -48,6 +51,7 @@ PAGES = [
     ('home', '/home', 'Your home', 'home.html'),
     ('frequency', '/frequency', 'Frequency', 'frequency.html'),
     ('balancing', '/balancing', 'Balancing', 'balancing.html'),
+    ('constraints', '/constraints', 'Constraints', 'constraints.html'),
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
@@ -66,6 +70,7 @@ PAGE_META = {
     'home': ('now', 'Your electricity and gas: use, carbon and cost'),
     'frequency': ('system', 'Live frequency, inertia and the response held'),
     'balancing': ('system', 'Who NESO is paying to turn up or down'),
+    'constraints': ('system', 'Where the network runs out of room, and the wind turned down'),
     'outages': ('system', 'Spare capacity, offline units and grid notices'),
     'timeline': ('time', 'Notable moments, kept for a year'),
     'history': ('time', 'The mix, carbon and price since 2009'),
@@ -103,7 +108,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'region boundaries, constraint costs, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. Station locations '
     'from '
     '<a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>, the government’s <a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-quarterly-extract" rel="noopener">Renewable Energy Planning Database</a> (Open Government Licence v3.0) and the <a href="https://github.com/OSUKED/Power-Station-Dictionary" rel="noopener">Power Station Dictionary</a>; '
@@ -371,6 +376,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(App.grid.replay(), send_body)
             elif parts.path == '/api/alerts':
                 self.respond_json(App.grid.alerts(), send_body)
+            elif parts.path == '/boundaries.json':
+                body, etag = App.boundaries
+                self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
+            elif parts.path == '/api/constraints':
+                focus = query.get('group', [''])[0].upper()[:20] or None
+                self.respond_json(constraints_view(App.store, App.grid.fleet, time.time(), focus) if App.constraints
+                                  else {'days': None}, send_body)
             elif parts.path == '/geo.json':
                 body, etag = App.geo
                 self.respond(200, body, 'application/json; charset=utf-8', send_body, etag=etag, cache='max-age=3600')
