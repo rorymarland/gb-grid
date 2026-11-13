@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.11.0 (unreleased)
+## 1.11.0 (2026-11-13)
 
 - **Gas** (`/gas`): Britain's gas system, from National Gas's open data with
   no key. What's coming in now and from where (Norway through Langeled, the
