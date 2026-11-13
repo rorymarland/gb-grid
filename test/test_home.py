@@ -194,6 +194,45 @@ for off in (offset, offset + 1800):
     expected += sum(values) / len(values)
 check('baseline as Octopus works it out', abs(other['baseline'] - expected) < 0.001 and other['baseline_complete'], (other['baseline'], expected))
 
+# Octopus's rules, with readings made up by hand: a session on Tuesday 25 August 2026
+s2, h2 = make()
+day = server.date(2026, 8, 25)
+start = server.uk_midnight_utc(day) + 17 * 3600              # 17:00 to 18:00 BST
+rows = []
+d = day
+for _ in range(30):
+    d -= server.timedelta(days=1)
+    for off, kwh in ((17 * 3600, 0.40), (17 * 3600 + 1800, 0.60)):
+        rows.append(('elec', server.uk_midnight_utc(d) + off, kwh if d.weekday() < 5 else 0.9, 'meter', 100.0))
+s2.write(server.UPSERT_HOME, rows, history=False)
+slots, complete = h2._baseline(start, start + 3600, set())
+check('baseline per half hour from 10 weekdays', complete and [round(x, 3) for x in slots] == [0.4, 0.6], (slots, complete))
+# Used 0.30 then 0.75: 1.05 kWh against a 1.00 baseline overall, but the first half hour earns
+s2.write(server.UPSERT_HOME, [('elec', start, 0.30, 'meter', 100.0), ('elec', start + 1800, 0.75, 'meter', 100.0)], history=False)
+h2.sessions = {'at': 0, 'joined_campaign': True, 'can_join': True, 'region': 'N', 'joined': {},
+               'events': [{'id': 9, 'start': start, 'end': start + 3600, 'reward': 1000, 'type': 'TURN_DOWN', 'regions': []},
+                          {'id': 10, 'start': start - 7 * 86400, 'end': start - 7 * 86400 + 3600, 'reward': 500, 'type': 'TURN_UP', 'regions': []}]}
+past = {e['id']: e for e in h2._sessions(start + 2 * 86400)['past']}
+check('each half hour counts on its own', past[9]['saved'] == 0.1 and past[9]['estimate'] == 100 and past[9]['used'] == 1.05, past[9])
+# The power-up a week earlier is a session day, so it's left out of the baseline
+check('power-up earns for using more than usual', past[10]['kind'] == 'up' and past[10]['saved'] >= 0, past[10])
+slots_skip, _ = h2._baseline(start, start + 3600, {day - server.timedelta(days=7)})
+check('session days left out of the baseline', slots_skip == slots)
+# A bank holiday is left out of a weekday baseline: Easter Monday 6 April 2026
+easter_tue = server.date(2026, 4, 7)
+e_start = server.uk_midnight_utc(easter_tue) + 17 * 3600
+rows = []
+d = easter_tue
+for _ in range(20):
+    d -= server.timedelta(days=1)
+    kwh = 5.0 if d == server.date(2026, 4, 6) or d == server.date(2026, 4, 3) else 0.5
+    rows.append(('elec', server.uk_midnight_utc(d) + 17 * 3600, kwh, 'meter', 100.0))
+s2.write(server.UPSERT_HOME, rows, history=False)
+slots_bh, _ = h2._baseline(e_start, e_start + 1800, set())
+check('bank holidays left out of weekday baselines', slots_bh == [0.5], slots_bh)
+check('bank holiday sessions use weekend days', h2._baseline(server.uk_midnight_utc(server.date(2026, 4, 6)) + 17 * 3600,
+      server.uk_midnight_utc(server.date(2026, 4, 6)) + 17 * 3600 + 1800, set())[0] is not None)
+
 # Octoplus failing doesn't make the feed look broken
 mock.FAIL.add('octopus-backend')
 home.next['sessions'] = 0

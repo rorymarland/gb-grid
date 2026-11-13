@@ -1,6 +1,8 @@
 """Time helpers. Everything internal is UTC epoch seconds; settlement periods follow UK clock time."""
 
+import time
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 
 
 # --------------------------------------------------------------------------
@@ -26,6 +28,7 @@ def parse_time(value):
     return int(parsed.timestamp())
 
 
+@lru_cache(maxsize=None)
 def _last_sunday(year, month):
     if month == 12:
         last = date(year, 12, 31)
@@ -34,6 +37,7 @@ def _last_sunday(year, month):
     return last - timedelta(days=(last.weekday() + 1) % 7)
 
 
+@lru_cache(maxsize=8192)
 def uk_midnight_utc(day):
     """UTC epoch of local (Europe/London) midnight at the start of `day`.
 
@@ -77,23 +81,81 @@ def floor_to(t, step):
     return int(t) - int(t) % step
 
 
+@lru_cache(maxsize=None)
+def _bst_bounds(year):
+    """UTC epochs when BST starts and ends in `year` (01:00 UTC on the last Sundays of March and October)."""
+    start, end = _last_sunday(year, 3), _last_sunday(year, 10)
+    return (int(datetime(start.year, start.month, start.day, 1, tzinfo=timezone.utc).timestamp()),
+            int(datetime(end.year, end.month, end.day, 1, tzinfo=timezone.utc).timestamp()))
+
+
 def uk_offset(t):
     """Seconds Europe/London is ahead of UTC at epoch t (BST starts and ends at 01:00 UTC)."""
-    year = datetime.fromtimestamp(t, timezone.utc).year
-    start = _last_sunday(year, 3)
-    end = _last_sunday(year, 10)
-    starts = int(datetime(start.year, start.month, start.day, 1, tzinfo=timezone.utc).timestamp())
-    ends = int(datetime(end.year, end.month, end.day, 1, tzinfo=timezone.utc).timestamp())
+    starts, ends = _bst_bounds(time.gmtime(t).tm_year)
     return 3600 if starts <= t < ends else 0
+
+
+EPOCH_DAY = date(1970, 1, 1)
+
+
+def uk_day(t):
+    """The local (Europe/London) date at UTC epoch t: uk_clock's date, without formatting the time."""
+    return EPOCH_DAY + timedelta(days=int((t + uk_offset(t)) // 86400))
 
 
 def uk_clock(t):
     """(local date, 'HH:MM') in Europe/London for UTC epoch t."""
-    local = datetime.fromtimestamp(t + uk_offset(t), timezone.utc)
-    return local.date(), local.strftime('%H:%M')
+    local = int(t + uk_offset(t))
+    minutes = local % 86400 // 60
+    return EPOCH_DAY + timedelta(days=local // 86400), '%02d:%02d' % (minutes // 60, minutes % 60)
 
 
 def local_epoch(day, hours, minutes):
     """UTC epoch of a Europe/London wall-clock time (the earlier one when ambiguous)."""
     base = int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp()) + int(hours) * 3600 + int(minutes) * 60
     return base - 3600 if uk_offset(base - 3600) else base
+
+
+def _easter(year):
+    """Easter Sunday (the anonymous Gregorian algorithm)."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7  # noqa: E741
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    return date(year, month, (h + l - 7 * m + 114) % 31 + 1)
+
+
+@lru_cache(maxsize=None)
+def bank_holidays(year):
+    """England and Wales bank holidays by the usual rules, with weekend substitutes.
+    One-off holidays (a coronation, say) aren't included."""
+    def first_monday(month):
+        d = date(year, month, 1)
+        return d + timedelta(days=(7 - d.weekday()) % 7)
+
+    def last_monday(month):
+        d = date(year, month + 1, 1) - timedelta(days=1) if month < 12 else date(year, 12, 31)
+        return d - timedelta(days=d.weekday())
+
+    days = set()
+    new_year = date(year, 1, 1)
+    days.add(new_year + timedelta(days={5: 2, 6: 1}.get(new_year.weekday(), 0)))
+    easter = _easter(year)
+    days.update({easter - timedelta(days=2), easter + timedelta(days=1)})
+    # Early May is moved for VE Day anniversaries now and then; this keeps the usual rule
+    days.update({first_monday(5), last_monday(5), last_monday(8)})
+    christmas, boxing = date(year, 12, 25), date(year, 12, 26)
+    if christmas.weekday() == 5:      # Saturday: Monday and Tuesday
+        days.update({date(year, 12, 27), date(year, 12, 28)})
+    elif christmas.weekday() == 6:    # Sunday: Monday (Boxing Day) and Tuesday
+        days.update({boxing, date(year, 12, 27)})
+    elif christmas.weekday() == 4:    # Friday: Boxing Day on Monday
+        days.update({christmas, date(year, 12, 28)})
+    else:
+        days.update({christmas, boxing})
+    return frozenset(days)

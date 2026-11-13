@@ -17,7 +17,7 @@ from bisect import bisect_right
 from datetime import timedelta
 
 from .config import log
-from .timeutil import iso, parse_time, uk_clock, uk_midnight_utc
+from .timeutil import iso, parse_time, uk_clock, uk_day, uk_midnight_utc
 
 DAY = 86400
 WINDOW_DAYS = 365
@@ -151,17 +151,19 @@ def compare(home, products, region, now):
     codes = {tariff_code(fuel, p, region) for key, _, fuels, *_ in FAMILIES for _, p in products.get(key, []) for fuel in fuels}
     tables = load_tables(home.store, codes)
 
-    def month_of(t):
-        d = uk_clock(t)[0]
-        return d.strftime('%Y-%m')
-
     out = {'from': uk_clock(start)[0].isoformat(), 'to': (today - timedelta(days=1)).isoformat(), 'region': region, 'fuels': {}}
     for fuel in ('elec', 'gas'):
         slots = rows[fuel]
         if not slots:
             continue
-        days = sorted({uk_midnight_utc(uk_clock(t)[0]) for t, _ in slots})
-        months = sorted({month_of(t) for t, _ in slots})
+        # Each half hour's local day and month, worked out once for every tariff
+        slot_days = [uk_day(t) for t, _ in slots]
+        months = sorted({d.strftime('%Y-%m') for d in set(slot_days)})
+        month_index = {m: i for i, m in enumerate(months)}
+        slot_month = [month_index['%04d-%02d' % (d.year, d.month)] for d in slot_days]
+        day_list = sorted(set(slot_days))
+        days = [uk_midnight_utc(d) for d in day_list]
+        day_month = [month_index['%04d-%02d' % (d.year, d.month)] for d in day_list]
         kwh = sum(k for _, k in slots)
         options = [('yours', 'Your tariffs', 'What you paid for this use, at your tariffs’ unit rates and standing charges.',
                     lambda t, kind, f=fuel: yours_tables[(f, kind)].at(t))]
@@ -188,26 +190,26 @@ def compare(home, products, region, now):
                 options.append((key, label, note, lookup))
         results = []
         for key, label, note, price in options:
-            total, priced, by_month, unit_cost, standing_cost = 0.0, 0, {m: 0.0 for m in months}, 0.0, 0.0
-            for t, k in slots:
+            total, priced, by_month, unit_cost, standing_cost = 0.0, 0, [0.0] * len(months), 0.0, 0.0
+            for (t, k), m in zip(slots, slot_month):
                 p = price(t, 'unit')
                 if p is None:
                     continue
                 priced += 1
                 unit_cost += k * p
-                by_month[month_of(t)] += k * p
-            for d in days:
+                by_month[m] += k * p
+            for d, m in zip(days, day_month):
                 p = price(d, 'standing')
                 if p is not None:
                     standing_cost += p
-                    by_month[month_of(d)] += p
+                    by_month[m] += p
             total = unit_cost + standing_cost
             complete = priced >= len(slots) * 0.99
             results.append({'key': key, 'name': label, 'note': note, 'complete': complete,
                             'cost': round(total, 1) if complete else None,
                             'unit': round(unit_cost / kwh, 2) if complete and kwh else None,
                             'standing': round(standing_cost, 1) if complete else None,
-                            'months': [round(by_month[m], 1) for m in months] if complete else None})
+                            'months': [round(v, 1) for v in by_month] if complete else None})
         base = results[0]['cost']
         for r in results:
             r['diff'] = None if r['cost'] is None or base is None else round(r['cost'] - base, 1)

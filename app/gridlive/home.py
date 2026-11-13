@@ -34,7 +34,7 @@ from .config import (GAS_CALORIFIC_VALUE, GAS_KG_PER_KWH, HOME_ENABLED, OCTOPUS_
                      OCTOPUS_LIVE_SECONDS, log)
 from .fetch import FetchError
 from .store import UPSERT_HOME
-from .timeutil import floor_to, iso, parse_time, settlement_periods, uk_clock, uk_midnight_utc
+from .timeutil import bank_holidays, floor_to, iso, parse_time, settlement_periods, uk_clock, uk_midnight_utc
 
 IDLE_SECONDS = 300            # live readings while nobody has the page open
 VIEWING = 150                 # the page counts as open this long after it last asked
@@ -419,7 +419,8 @@ class Home:
             if not info:
                 continue
             have = self.store.scalar("SELECT MAX(t) FROM home WHERE fuel = ? AND src = 'meter'", (fuel,))
-            start = int(have) - 2 * 86400 if have else floor_to(now - BACKFILL_DAYS * 86400, 1800)
+            # A week back: smart meter readings sometimes arrive days late, and this fills them in
+            start = int(have) - 7 * 86400 if have else floor_to(now - BACKFILL_DAYS * 86400, 1800)
             q = lambda value: urllib.parse.quote(value, safe='')  # noqa: E731
             path = ('/v1/electricity-meter-points/%s/meters/%s/consumption/' % (q(info['mpan']), q(info['serial']))
                     if fuel == 'elec' else
@@ -685,18 +686,25 @@ class Home:
         return result
 
     def _baseline(self, start, end, skip_days):
-        """Octopus's baseline for a Saving Session: the same half hours averaged over the
-        previous 10 weekdays (4 weekend days for a weekend session), skipping session days."""
+        """Octopus's baseline for a session, half hour by half hour: the same half hours
+        averaged over the previous 10 weekdays, leaving out session days and bank holidays;
+        for a weekend or bank holiday session, the previous 4 weekend days.
+        Returns ([baseline kWh per half hour], complete)."""
+        def holiday(d):
+            return d.weekday() >= 5 or d in bank_holidays(d.year)
+
         day = uk_clock(start)[0]
         day_start = uk_midnight_utc(day)
         offsets = list(range(int(floor_to(start, 1800)) - day_start, int(end) - day_start, 1800))
-        weekend, need, dates, d = day.weekday() >= 5, 4 if day.weekday() >= 5 else 10, [], day
+        weekend = holiday(day)
+        need, dates, d = 4 if weekend else 10, [], day
         for _ in range(70):
             d -= timedelta(days=1)
-            if (d.weekday() >= 5) == weekend and d not in skip_days:
+            if (d.weekday() >= 5 if weekend else not holiday(d)) and d not in skip_days:
                 dates.append(d)
                 if len(dates) == need:
                     break
+        # On a clock-change day, the same clock time is matched on each earlier day
         wanted = {uk_midnight_utc(x) + off: off for x in dates for off in offsets}
         if not wanted:
             return None, False
@@ -707,9 +715,9 @@ class Home:
                 found.setdefault(wanted[t], []).append(kwh)
         if not found:
             return None, False
-        total = sum(sum(v) / len(v) for v in found.values())
-        complete = len(found) == len(offsets) and all(len(v) == len(dates) for v in found.values()) and len(dates) == need
-        return total, complete
+        slots = [sum(found[off]) / len(found[off]) if off in found else None for off in offsets]
+        complete = all(off in found and len(found[off]) == need for off in offsets) and len(dates) == need
+        return slots, complete
 
     def _sessions(self, now):
         with self.lock:
@@ -721,9 +729,12 @@ class Home:
         if not s:
             return out
         out['joined_campaign'], out['can_join'] = s['joined_campaign'], s['can_join']
-        region = s['region']
+        # Region IDs come as '_N' or 'N' in different parts of the API; compare the letters,
+        # falling back to the region in the tariff code
+        letter = lambda value: str(value or '').strip().lstrip('_').upper()  # noqa: E731
+        region = letter(s['region']) or (self.region or '')
         events = [dict(e) for e in s['events'] if e['type'] in ('TURN_DOWN', 'TURN_UP')
-                  and (not e['regions'] or region is None or region in e['regions'])]
+                  and (not e['regions'] or not region or region in {letter(r) for r in e['regions']})]
         known = {e['id'] for e in events}
         for eid, j in s['joined'].items():
             if eid not in known and j['type'] in ('TURN_DOWN', 'TURN_UP'):
@@ -735,18 +746,21 @@ class Home:
             joined = s['joined'].get(e['id'])
             item = {'id': e['id'], 'start': e['start'], 'end': e['end'], 'kind': 'down' if e['type'] == 'TURN_DOWN' else 'up',
                     'reward': e['reward'], 'joined': joined is not None, 'given': joined['given'] if joined else None}
-            if item['kind'] == 'down':
-                baseline, complete = self._baseline(e['start'], e['end'], skip)
-                item['baseline'] = None if baseline is None else round(baseline, 3)
-                item['baseline_complete'] = complete
+            slots, complete = self._baseline(e['start'], e['end'], skip)
+            item['baseline'] = None if not slots or None in slots else round(sum(slots), 3)
+            item['baseline_complete'] = complete
             if e['start'] <= now:
-                row = self.store.query("SELECT SUM(kwh), COUNT(*) FROM home WHERE fuel = 'elec' AND t >= ? AND t < ?",
-                                       (floor_to(e['start'], 1800), e['end']))
-                used, n = (row[0] if row else (None, 0))
-                item['used'] = None if not n else round(used, 3)
-                if item['kind'] == 'down' and item.get('baseline') is not None and item['used'] is not None:
-                    item['saved'] = round(max(0.0, item['baseline'] - item['used']), 3)
-                    item['estimate'] = round(item['saved'] * (item['reward'] or 0))
+                first = floor_to(e['start'], 1800)
+                used = dict(self.store.query("SELECT t, kwh FROM home WHERE fuel = 'elec' AND t >= ? AND t < ?", (first, e['end'])))
+                item['used'] = round(sum(used.values()), 3) if used else None
+                if item['baseline'] is not None and used:
+                    # Each half hour counts on its own: a power-down earns for use below that half
+                    # hour's baseline, a power-up for use above it
+                    sign = 1 if item['kind'] == 'down' else -1
+                    earned = sum(max(0.0, sign * (b - used[first + i * 1800]))
+                                 for i, b in enumerate(slots) if first + i * 1800 in used)
+                    item['saved'] = round(earned, 3)
+                    item['estimate'] = round(earned * (item['reward'] or 0))
             if e['end'] <= now:
                 out['past'].append(item)
             elif e['start'] <= now:

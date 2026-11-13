@@ -531,7 +531,10 @@ function renderSessions(d) {
         var elapsed = Math.min(1, Math.max(0, (d.now - e.start) / (e.end - e.start)));
         lines.push('So far: ' + fixed(e.used, 2) + ' kWh, against about ' + fixed(e.baseline * elapsed, 2) + ' kWh by this point.');
       }
-    } else lines.push('A power-up: electricity is cheap or free, so it’s a good time to use more.');
+    } else {
+      lines.push('A power-up: points for every kWh you use above your usual amount' +
+        (num(e.baseline) ? ' (' + (e.baseline_complete ? '' : 'about ') + fixed(e.baseline, 2) + ' kWh)' : '') + ', so it’s a good time to run the washing machine or charge things.');
+    }
     if (!e.joined && e.kind === 'down') lines.push('You haven’t joined this one yet: join in the Octopus app.');
     next.appendChild(h('div', { cls: 'hm-session' + (active ? ' active' : '') }, [
       h('p', { cls: 'when' }, [h('b', { text: (active ? 'On now, until ' + hm(e.end) : G.when(e.start, d.now) + ' to ' + hm(e.end)) }),
@@ -554,11 +557,11 @@ function renderSessions(d) {
       h('th', { scope: 'row' }, [dayFmt.format(new Date(e.start * 1000)), h('small', { text: hm(e.start) + ' to ' + hm(e.end) + (e.kind === 'up' ? ', power-up' : '') })]),
       h('td', { cls: 'num', text: num(e.baseline) ? fixed(e.baseline, 2) : '–' }),
       h('td', { cls: 'num', text: num(e.used) ? fixed(e.used, 2) : '–' }),
-      h('td', { cls: 'num', text: num(e.saved) ? fixed(e.saved, 2) : '–' }),
+      h('td', { cls: 'num', text: num(e.saved) ? (e.kind === 'up' ? '+' : '') + fixed(e.saved, 2) : '–' }),
       h('td', { cls: 'num', text: pts })
     ]));
   });
-  byId('sessions-note').textContent = 'Baselines follow Octopus’s method: your use in the same half hours, averaged over the previous 10 weekdays (4 weekend days for a weekend session), skipping other session days. Points marked “about” are this page’s estimate until Octopus confirms them, usually a few days later.';
+  byId('sessions-note').textContent = 'Baselines follow Octopus’s method: your use in the same half hours, averaged over the previous 10 weekdays, leaving out session days and bank holidays (England and Wales); weekend and bank holiday sessions use the previous 4 weekend days. Each half hour counts on its own, so a half hour below its baseline earns points even if the session as a whole didn’t. For power-ups, the figure in the Saved column is how much more than usual you used. Points marked “about” are this page’s estimate until Octopus confirms them, usually a few days later.';
 }
 
 /* ---------- the page ---------- */

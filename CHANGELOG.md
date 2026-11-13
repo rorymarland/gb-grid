@@ -27,6 +27,21 @@ releases that keep working with your existing settings and data.
   gave, or an estimate until it does). `--test-octopus` checks these too.
 - Tariff prices for your own tariff are now fetched without the key, as
   they're public; only meter readings and your account's data use it.
+- **Fixed:** Saving Session results now follow Octopus's rules: each half
+  hour is scored on its own (a half hour below its baseline earns points
+  even if the session as a whole didn't), bank holidays are left out of
+  weekday baselines, and power-ups show how much more than usual you used.
+- **Fixed:** Saving Sessions for your region could have been hidden if
+  Octopus wrote the region two different ways.
+- **Fixed:** meter readings that arrive more than two days late are now
+  picked up (it looks back a week).
+- **Security:** if an upstream server redirected to a different host, the
+  request's credentials (your Octopus key or token, or an ntfy token) went
+  with it, because Python's HTTP client forwards them. They're now dropped
+  on any redirect to another host or from https to http.
+- **Faster:** working out UK clock time is about ten times quicker, so the
+  tariff comparison takes a quarter of a second rather than nearly three,
+  and Your home's figures half as long.
 - **Fixed:** the last 30 days chart's axis now gives its unit (kg or kWh, as
   well as £), and so does today's.
 

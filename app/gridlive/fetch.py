@@ -20,6 +20,24 @@ class FetchError(Exception):
     pass
 
 
+class _KeepCredentialsHome(urllib.request.HTTPRedirectHandler):
+    """Follow redirects, but never carry credentials (an API key, a token) to a
+    different host, or from https to http. urllib would otherwise forward the
+    Authorization header wherever a redirect points."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None:
+            old, target = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
+            if old.netloc.lower() != target.netloc.lower() or (old.scheme == 'https' and target.scheme != 'https'):
+                for name in ('Authorization', 'Cookie', 'Proxy-authorization'):
+                    new.remove_header(name)
+        return new
+
+
+OPENER = urllib.request.build_opener(_KeepCredentialsHome)
+
+
 def http_get(url, accept='application/json', timeout=30, extra_headers=None, data=None):
     """GET a URL (or POST `data`). Returns (status, body_bytes, headers). 304 is returned, not raised.
 
@@ -31,7 +49,7 @@ def http_get(url, accept='application/json', timeout=30, extra_headers=None, dat
     host = urllib.parse.urlsplit(url).netloc.rsplit('@', 1)[-1]
     request = urllib.request.Request(url, headers=headers, data=data, method='POST' if data is not None else 'GET')
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with OPENER.open(request, timeout=timeout) as response:
             body = response.read()
             if response.headers.get('Content-Encoding', '').lower() == 'gzip':
                 body = gzip.decompress(body)

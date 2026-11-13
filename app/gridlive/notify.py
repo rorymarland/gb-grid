@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+from .fetch import OPENER as fetch_opener
 from .config import (NOTIFY_KINDS, NOTIFY_LEVEL, NOTIFY_NTFY_TOKEN, NOTIFY_NTFY_URL, NOTIFY_QUIET_HOURS, NOTIFY_WEBHOOK_URL,
                      PUBLIC_URL, USER_AGENT, log)
 from .events import DAILY, KINDS, MAJOR, NOTABLE
@@ -58,7 +59,7 @@ def post_json(url, payload, headers=None):
     body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(url, data=body, method='POST', headers=dict(
         {'Content-Type': 'application/json; charset=utf-8', 'User-Agent': USER_AGENT}, **(headers or {})))
-    with urllib.request.urlopen(request, timeout=15) as response:
+    with fetch_opener.open(request, timeout=15) as response:   # never carries credentials to another host
         response.read(4096)
         return response.status
 
