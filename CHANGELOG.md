@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.15.0 (unreleased)
+## 1.15.0 (2026-11-15)
 
 - **Find a power station** on the Map: type a few letters of its name and
   pick it (arrow keys and Enter work) to zoom to it and open its card, even
