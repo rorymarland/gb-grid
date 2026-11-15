@@ -4,6 +4,34 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.18.0 (unreleased)
+
+- **What's being built,** a new page under Over time, from NESO's TEC
+  register: every project with an agreement to connect, built or queuing. How
+  much is connected and queuing by kind and stage (with a switch to leave out
+  scoping), when it's due year by year, the largest projects due in the next
+  12 months, how much has a Gate 2 offer, and how the queue moves with each
+  version NESO publishes. Checked every six hours (`POLL_PIPELINE_SECONDS`);
+  the register itself is read only when NESO changes it.
+- **Inertia** on the Frequency page: NESO paused its inertia figures in July
+  2026, so the panel was left waiting. It now shows an estimate for now from
+  the generation mix, a fit of NESO's own figures that's tested on the 120
+  days it isn't fitted to (about 7% out on average) and only shown if it's
+  within 10%, with the last two days. A new panel shows **inertia since
+  2017**, each month's average and lowest, and the lowest half hours. All of
+  NESO's figures since April 2017 are now kept (about ten requests once, then
+  one an hour to check), in their own table rather than for 90 days.
+- **Storm shutdowns** on the Weather page: the hours in the week ahead when
+  the wind at any of the dozen wind points is forecast near or over 25 m/s,
+  where turbines stop to protect themselves, with the capacity nearby. The
+  Map's wind arrows turn amber at 22 m/s and red at 25 m/s, and the
+  Display's weather slide warns when it's within two days. No extra requests.
+- The What if? page fits its inertia line to the latest year of NESO's
+  figures.
+- Glossary: Transmission Entry Capacity, Gate 1 and Gate 2, cut-out speed.
+- `/api/pipeline` is new; `/api/weather` gains `storms`; `/api/frequency`'s
+  `inertia` is now `{published, estimate, no_estimate}`.
+
 ## 1.17.0 (2026-11-15)
 
 - **Wind on the map:** an arrow at each of the dozen points among the wind

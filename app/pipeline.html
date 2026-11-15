@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<!--#head-->
+<title>What’s being built – GB grid</title>
+<link rel="stylesheet" href="{{static:pages/pipeline.css}}">
+</head>
+<body>
+<!--#header-->
+<main class="wrap" id="main">
+  <section class="page-head">
+    <h1>What’s being built</h1>
+    <p class="lede">Every power station, battery and wind farm with an agreement to connect to the transmission network, from NESO’s TEC register: how much is already connected, how much is queuing, how far along it is and when it’s due.</p>
+  </section>
+
+  <p class="pl-waiting" id="waiting">Fetching NESO’s TEC register.</p>
+
+  <div id="content" hidden>
+    <section class="pl-now" aria-labelledby="now-title">
+      <h2 class="visually-hidden" id="now-title">In short</h2>
+      <dl class="pl-figures" id="figures"></dl>
+    </section>
+
+    <section class="panel" aria-labelledby="kind-title">
+      <div class="panel-head">
+        <h2 id="kind-title">What’s in the queue</h2>
+        <div class="controls">
+          <div class="toggle" role="group" aria-label="Which projects" id="stage-pick">
+            <button type="button" data-scoping="1" aria-pressed="true">Every stage</button>
+            <button type="button" data-scoping="0" aria-pressed="false">Past scoping</button>
+          </div>
+        </div>
+      </div>
+      <p class="sub" id="kind-sub"></p>
+      <ul class="pl-key" id="key"></ul>
+      <div class="pl-kinds" id="kinds"></div>
+      <details class="pl-table-wrap">
+        <summary>As a table</summary>
+        <div class="table-scroll"><table class="pl-table" id="kind-table"></table></div>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="year-title">
+      <div class="panel-head"><h2 id="year-title">When it’s due</h2></div>
+      <p class="sub" id="year-sub"></p>
+      <div class="chart pl-years" id="years"></div>
+      <p class="pl-note" id="year-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="soon-title">
+      <div class="panel-head"><h2 id="soon-title">Due in the next 12 months</h2></div>
+      <p class="sub" id="soon-sub"></p>
+      <div class="table-scroll"><table class="pl-soon" id="soon"></table></div>
+    </section>
+
+    <div class="two">
+      <section class="panel" aria-labelledby="gate-title">
+        <div class="panel-head"><h2 id="gate-title">Gate 1 and Gate 2</h2></div>
+        <p class="sub">In 2025 NESO re-ordered the queue. Projects that showed they were ready, and fitted the plan for clean power, could get a <b>Gate 2</b> offer: a confirmed date, connection point and place in the queue. The rest got <b>Gate 1</b> offers, with no confirmed date.</p>
+        <div id="gates"></div>
+      </section>
+      <section class="panel" aria-labelledby="trend-title">
+        <div class="panel-head"><h2 id="trend-title">How the queue has moved</h2></div>
+        <p class="sub">The queue’s total each time NESO updates the register, from when this dashboard first read it.</p>
+        <div id="trend"></div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="how-title">
+      <div class="panel-head"><h2 id="how-title">How this works</h2></div>
+      <div class="explain">
+        <p>NESO keeps a register of every agreement to use the transmission network to export power: its <b>Transmission Entry Capacity</b>. Each project has a row with the capacity it has connected now, the change it has agreed (for a new project, all of it), the date that change takes effect, and its stage: <b>scoping</b>, <b>awaiting consents</b>, <b>consents approved</b>, <b>under construction or commissioning</b>, or <b>built</b>. Projects on distribution networks big enough to affect the transmission network have “embedded” agreements and are included.</p>
+        <p>The dashboard reads the whole register when NESO publishes a new version, about twice a week, and checks for one every six hours. Projects are grouped by the plant types NESO lists: storage alongside solar or wind counts with the solar or wind, and two or more kinds of generation at one site count as mixed. Capacity is what the project may export, in megawatts; a battery’s is its power, not how long it can run.</p>
+        <p>The queue is far bigger than Britain needs: many projects will never be built, and some dates have already passed. Scoping projects are the least certain. Dates are the ones in the register, which often move.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot"><!--#credits--></footer>
+</main>
+<script type="module" src="{{static:pages/pipeline.js}}"></script>
+</body>
+</html>

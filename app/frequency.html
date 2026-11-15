@@ -42,7 +42,7 @@
   <div class="two">
     <section class="panel" aria-labelledby="inertia-title">
       <div class="panel-head"><h2 id="inertia-title">Inertia</h2></div>
-      <p class="sub">NESO’s estimate of the energy stored in the grid’s spinning machines, in gigavolt-ampere seconds. More inertia means frequency falls more slowly after a trip, giving response services time to act.</p>
+      <p class="sub">The energy stored in the grid’s spinning machines, in gigavolt-ampere seconds. More inertia means frequency falls more slowly after a trip, giving response services time to act.</p>
       <div id="inertia"></div>
     </section>
     <section class="panel" aria-labelledby="held-title">
@@ -51,6 +51,14 @@
       <div id="held"></div>
     </section>
   </div>
+
+  <section class="panel" aria-labelledby="ihist-title" id="ihist-panel" hidden>
+    <div class="panel-head"><h2 id="ihist-title">Inertia since 2017</h2></div>
+    <p class="sub" id="ihist-sub"></p>
+    <ul class="legend i-legend" id="ihist-key"></ul>
+    <div class="chart i-hist" id="ihist"></div>
+    <div class="i-low" id="ilow"></div>
+  </section>
 
   <section class="panel" aria-labelledby="events-title" id="events-panel">
     <div class="panel-head"><h2 id="events-title">Frequency events</h2></div>

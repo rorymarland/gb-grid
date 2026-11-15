@@ -41,11 +41,14 @@ class SandboxViews:
     """Mixed into Grid."""
 
     def inertia_fit(self):
-        version = (self.store.scalar("SELECT MAX(t) FROM hh WHERE k = 'inertia'"), self.store.scalar('SELECT MAX(t) FROM lh'))
+        version = (self.store.scalar('SELECT MAX(t) FROM inertia'), self.store.scalar('SELECT COUNT(*) FROM inertia'),
+                   self.store.scalar('SELECT MAX(t) FROM lh'))
         return self.cached(('inertia-fit',), version, self._build_inertia_fit)
 
     def _build_inertia_fit(self):
-        rows = self.store.query("SELECT lh.t, (%s) / 1000.0, hh.v FROM lh JOIN hh ON hh.k = 'inertia' AND hh.t = lh.t" % SYNC_LH)
+        # The latest year of NESO's figures: the grid has changed too much since 2017 for one line through it all
+        rows = self.store.query('SELECT lh.t, (%s) / 1000.0, i.v FROM lh JOIN inertia i ON i.t = lh.t '
+                                'WHERE i.t > (SELECT MAX(t) FROM inertia) - 365 * 86400' % SYNC_LH)
         points = [(r[1], r[2]) for r in rows if r[1] is not None and r[2] is not None and r[2] > 0]
         fit = fit_line(points)
         # Only trust a fit that is physically sensible
@@ -60,7 +63,7 @@ class SandboxViews:
         if not held:   # fall back to the latest block we know of
             last = self.store.scalar('SELECT MAX(start) FROM resp WHERE start <= ?', (t,))
             held = response_at(self.store, last) if last else {}
-        latest = self.store.query("SELECT t, v FROM hh WHERE k = 'inertia' ORDER BY t DESC LIMIT 1")
+        latest = self.store.query('SELECT t, v FROM inertia ORDER BY t DESC LIMIT 1')
         return {
             't': int(t), 'held': held, 'fit': self.inertia_fit(),
             'published_inertia': {'t': latest[0][0], 'gvas': round(latest[0][1])} if latest else None,

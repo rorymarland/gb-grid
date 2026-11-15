@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .gas import gas_generation, home_gas_rate, view as gas_view
 from .neighbours import week as neighbours_week
 from .weather import view as weather_view
+from .pipeline import view as pipeline_view
 from .constraints import view as constraints_view
 from .config import ACCESS_LOG, ENTSOE_API_KEY, HOME_ENABLED, APP_DIR, MAP_UI_PATH, STATIC_DIR, UI_PATH, UI_RELOAD, VERSION, log
 
@@ -64,6 +65,7 @@ PAGES = [
     ('outages', '/outages', 'Outages', 'outages.html'),
     ('timeline', '/timeline', 'Timeline', 'timeline.html'),
     ('history', '/history', 'History', 'history.html'),
+    ('pipeline', '/pipeline', 'What’s being built', 'pipeline.html'),
     ('review', '/review', 'Year in review', 'review.html'),
     ('forecasts', '/forecasts', 'Forecasts', 'forecasts.html'),
     ('sandbox', '/sandbox', 'What if?', 'sandbox.html'),
@@ -87,6 +89,7 @@ PAGE_META = {
     'outages': ('system', 'Spare capacity, offline units and grid notices'),
     'timeline': ('time', 'Notable moments, kept for a year'),
     'history': ('time', 'The mix, carbon and price since 2009'),
+    'pipeline': ('time', 'The power stations, batteries and links queuing to connect'),
     'review': ('time', 'The grid’s year and your home’s, worth keeping'),
     'forecasts': ('time', 'How good NESO’s forecasts were, and are getting'),
     'sandbox': ('explore', 'Trip a power station and see what happens'),
@@ -123,7 +126,7 @@ NESO_CREDIT = ('Supported by National Energy SO Open Data '
 CREDITS_HTML = (
     '<p class="credit">' + ELEXON_CREDIT + ' ' + NESO_CREDIT + ' Carbon intensity from the '
     '<a href="https://carbonintensity.org.uk/" rel="noopener">NESO Carbon Intensity API</a>; embedded wind and solar '
-    'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
+    'region boundaries, transmission boundaries, constraint flows and costs, wind turned down, inertia, the TEC register, frequency response results and the generation mix since 2009 from the <a href="https://www.neso.energy/data-portal" rel="noopener">NESO Data Portal</a>. Solar estimates from '
     '<a href="https://www.solar.sheffield.ac.uk/pvlive/" rel="noopener">Sheffield Solar PV_Live</a>. French carbon intensity from RTE’s éCO2mix through <a href="https://odre.opendatasoft.com/" rel="noopener">Open Data Réseaux Énergies</a> (Licence Ouverte v2.0); Danish from the <a href="https://www.energidataservice.dk/" rel="noopener">Energi Data Service</a>, under the conditions for use of Danish public-sector data. '
     'Weather data by <a href="https://open-meteo.com/" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>). '
     'Gas flows, linepack, allocations and prices from '
@@ -435,6 +438,8 @@ class Handler(BaseHTTPRequestHandler):
                 body = gas_view(App.store, now, gas_generation(App.store),
                                 home_gas_rate(App.store, now) if App.home and App.home.enabled else None) if App.gas else {'ready': False}
                 self.respond_json(body, send_body)
+            elif parts.path == '/api/pipeline':
+                self.respond_json(pipeline_view(App.store, time.time()), send_body)
             elif parts.path == '/api/weather':
                 self.respond_json(weather_view(App.store, time.time(), App.grid.live() if App.grid else None), send_body)
             elif parts.path == '/api/neighbours':

@@ -148,7 +148,16 @@ class Store:
             CREATE TABLE IF NOT EXISTS review (year INTEGER PRIMARY KEY, made INTEGER NOT NULL, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS home_rate (fuel TEXT NOT NULL, kind TEXT NOT NULL, start INTEGER NOT NULL,
                 end INTEGER, p REAL NOT NULL, PRIMARY KEY (fuel, kind, start)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS inertia (t INTEGER PRIMARY KEY, v REAL NOT NULL, mkt REAL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS tec (num TEXT PRIMARY KEY, name TEXT, customer TEXT, site TEXT, host TEXT, agreement TEXT,
+                status TEXT, plant TEXT, kind TEXT, connected REAL, change REAL, total REAL, eff TEXT, gate TEXT) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS tec_hist (d TEXT NOT NULL, status TEXT NOT NULL, kind TEXT NOT NULL, mw REAL NOT NULL,
+                n INTEGER NOT NULL, PRIMARY KEY (d, status, kind)) WITHOUT ROWID;
         ''')
+        # 1.18.0: inertia moved out of hh into its own table, kept in full
+        if not self.db.execute('SELECT 1 FROM inertia LIMIT 1').fetchone():
+            self.db.execute("INSERT OR IGNORE INTO inertia (t, v, mkt) SELECT a.t, a.v, b.v FROM hh a "
+                            "LEFT JOIN hh b ON b.k = 'inertia_mkt' AND b.t = a.t WHERE a.k = 'inertia'")
 
     def write(self, sql, rows, history=True):
         """Upsert rows; returns the number of rows that actually changed."""
@@ -211,9 +220,8 @@ class Store:
         with self.lock:
             before = self.db.total_changes
             self.db.execute('DELETE FROM gen WHERE t < ?', (cutoff,))
-            # NESO publishes inertia some days after the fact, so it is kept longer
-            self.db.execute("DELETE FROM hh WHERE t < ? AND k NOT IN ('inertia', 'inertia_mkt')", (cutoff,))
-            self.db.execute("DELETE FROM hh WHERE t < ? AND k IN ('inertia', 'inertia_mkt')", (time.time() - 90 * 86400,))
+            # (inertia has its own table now; any left in hh from before 1.18.0 goes with the rest)
+            self.db.execute('DELETE FROM hh WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM ci WHERE t < ?', (cutoff,))
             self.db.execute('DELETE FROM freq WHERE t < ?', (time.time() - FREQUENCY_DAYS * 86400,))
             self.db.execute('DELETE FROM resp WHERE end < ?', (time.time() - 10 * 86400,))

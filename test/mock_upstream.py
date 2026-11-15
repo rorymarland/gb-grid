@@ -94,6 +94,85 @@ def history_row(t):
             'SOLAR': round(solar), 'STORAGE': round(storage), 'GENERATION': round(generation), 'CARBON_INTENSITY': round(ci)}
 
 
+# NESO's inertia: one resource a financial year from 2017-2018, paused this many days ago
+INERTIA_PAUSED_DAYS = 112
+INERTIA_ASKED = []
+INERTIA_NOTES = ['This dataset contains an estimate of the outturn inertia. NOTE: Updates to the System Inertia dataset have been temporarily paused while we review and validate the most appropriate data available.']
+_inertia_cache = {}
+
+
+def inertia_mock(t):
+    """GVA·s for a half hour: mostly the spinning plant in history_row, as NESO's figures are."""
+    row = history_row(t)
+    sync = (row['GAS'] + row['COAL'] + row['NUCLEAR'] + row['BIOMASS'] + row['HYDRO'] + row['STORAGE']) / 1000.0
+    return round(32 + 6.2 * sync - 0.8 * row['IMPORTS'] / 1000.0 + 6 * math.sin(t / 7000.0))
+
+
+def inertia_end():
+    """The UK day after NESO's last figure."""
+    return datetime.fromtimestamp(_clock.time() - INERTIA_PAUSED_DAYS * 86400, timezone.utc).date()
+
+
+def inertia_resources():
+    today = datetime.fromtimestamp(_clock.time(), timezone.utc).date()
+    last_fy = today.year if today.month >= 4 else today.year - 1
+    out = []
+    for fy in range(2017, last_fy + 1):
+        current = fy == last_fy
+        out.append({'id': 'in-%d' % fy, 'name': 'GB System Inertia - %d-%d' % (fy, fy + 1), 'datastore_active': True,
+                    'created': '%d-04-10T09:00:00' % fy,
+                    'last_modified': (inertia_end().isoformat() + 'T14:01:47') if current or inertia_end() < date(fy + 1, 4, 1)
+                    else '%d-04-11T07:51:13' % (fy + 1)})
+    out.insert(3, {'id': 'in-cost', 'name': 'GB System Inertia Costs', 'datastore_active': True, 'last_modified': '2026-01-01T00:00:00'})
+    return out
+
+
+def inertia_records(fy):
+    """A financial year of half hours, as NESO lays them out: 2017 to 2020 with midnight on the date."""
+    end = min(date(fy + 1, 4, 1), inertia_end())
+    key = (fy, end)
+    if key not in _inertia_cache:
+        records, day = [], date(fy, 4, 1)
+        while day < end:
+            periods = int((uk_midnight_utc(day + timedelta(days=1)) - uk_midnight_utc(day)) // 1800)
+            for sp in range(1, periods + 1):
+                v = inertia_mock(settlement_start(day, sp))
+                records.append({'_id': len(records) + 1, 'Settlement Date': day.isoformat() + ('T00:00:00' if fy < 2021 else ''),
+                                'Settlement Period': sp, 'Outturn Inertia': v, 'Market Provided Inertia': v - 9})
+            day += timedelta(days=1)
+        _inertia_cache[key] = records
+    return _inertia_cache[key]
+
+
+# NESO's TEC register: a few hundred projects, built and queuing
+TEC_VERSION = ['2026-11-13T16:45:18.918641']
+TEC_ASKED = []
+TEC_TYPES = ['Energy Storage System', 'Energy Storage System;PV Array (Photo Voltaic/solar)', 'Wind Onshore', 'Wind Offshore',
+             'Energy Storage System;Wind Onshore', 'CCGT (Combined Cycle Gas Turbine)', 'Energy Storage System;PV Array (Photo Voltaic/solar);Wind Onshore',
+             'Demand;Energy Storage System', 'Hydro', 'Pump Storage', 'Reactive Compensation', 'Nuclear', 'Biomass', 'OCGT (Open Cycle Gas Turbine)']
+TEC_STATUS = ['Scoping', 'Scoping', 'Scoping', 'Awaiting Consents', 'Consents Approved', 'Under Construction/Commissioning', 'Built', 'Built']
+
+
+def tec_records():
+    """Projects whose dates run from a year ago to 2039, sized by kind, deterministic."""
+    today = datetime.fromtimestamp(_clock.time(), timezone.utc).date()
+    out = []
+    for i in range(400):
+        kind = TEC_TYPES[(i * 3) % len(TEC_TYPES)]
+        status = TEC_STATUS[(i * 5) % len(TEC_STATUS)]
+        size = {'Wind Offshore': 1200, 'Nuclear': 1600, 'CCGT (Combined Cycle Gas Turbine)': 900, 'Pump Storage': 600}.get(kind, 50 + (i * 37) % 450)
+        built = status == 'Built'
+        eff = None if i % 23 == 0 else (today + timedelta(days=(i * 97) % 4900 - 365)).isoformat()
+        out.append({'_id': i + 1, 'Project Name': 'Mock %s project %d' % (kind.split(' ')[0].split(';')[0], i),
+                    'Customer Name': 'MOCK ENERGY %d LIMITED' % (i % 40), 'Connection Site': 'Mock %d 400kV Substation' % (i % 60),
+                    'Stage': None, 'MW Connected': float(size if built else 0), 'MW Increase / Decrease': float(0 if built and i % 3 else (size if not built else 100)),
+                    'Cumulative Total Capacity (MW)': float(size if built else size), 'MW Effective From': eff,
+                    'Project Status': status, 'Agreement Type': 'Embedded' if i % 6 == 0 else 'Direct Connection',
+                    'HOST TO': ['NGET', 'SPT', 'SHET', 'OFTO'][i % 4], 'Plant Type': kind, 'Project ID': 'a0l%06d' % i,
+                    'Project Number': 'PRO-%06d' % i, 'Gate': None if built or i % 4 == 0 else (2 if i % 9 == 0 else 1)})
+    return out
+
+
 def fuels(t):
     wind_tx = wind_total(t) * 0.82
     emb_wind = wind_total(t) * 0.18
@@ -474,13 +553,21 @@ def mock_national_demand(t):
     return demand_mw(t) * 1.1 * (1 + 0.025 * cold) * (0.9 if weekend else 1.0)
 
 
+def storm_wind(t, lat, lon):
+    """A deep low once a week, crossing Scotland and the North Sea from the west over about a day:
+    up to 29 m/s in the far north, so a few points pass 25 m/s and more come close."""
+    week = 7 * 86400
+    centre = round((t - 3.6 * 86400) / week) * week + 3.6 * 86400 + (lon + 5) * 3600
+    return 29 * math.exp(-((t - centre) / 36000.0) ** 2) * min(1.0, max(0.0, (lat - 51.5) / 6.5))
+
+
 def weather_value(var, t, lat, lon):
     """Open-Meteo's value for a variable at hour t and a point: wind at 100 m follows the mock's wind
     output, sunshine its solar, and temperature runs through the day and the week."""
     season = math.cos(2 * math.pi * (t % 31557600) / 31557600)
     if var == 'wind_speed_100m':
         gust = 0.55 + 0.45 * math.sin(t / 41000.0) + 0.25 * math.sin(t / 9000.0 + 1.3) + 0.2 * season
-        return round(max(0.5, 3 + 9 * gust + 0.3 * (lat - 54)), 2)
+        return round(max(0.5, 3 + 9 * gust + 0.3 * (lat - 54), storm_wind(t, lat, lon)), 2)
     if var == 'wind_direction_100m':      # where it blows from: veering slowly round the south-west
         return round((235 + 55 * math.sin(t / 52000.0) + 8 * (lat - 54)) % 360)
     if var == 'temperature_2m':
@@ -694,6 +781,9 @@ def neso_sql(sql):
     upper = next((v for op, v in dates if op == '<'), None)
     if any(w in sql.upper() for w in ('GREATEST', 'CAST(', 'LEFT(', '::')):
         return 'forbidden'
+    if rid.startswith('in-'):
+        INERTIA_ASKED.append(rid + ' sql')
+        return [r for r in inertia_records(int(rid[3:])) if r['Settlement Date'][:10] >= lower][:int(re.search(r'LIMIT (\d+)', sql).group(1))]
     if rid == 'dacfl':
         start = from_london(lower if 'T' in lower else lower + 'T00:00:00')
         today = datetime.fromtimestamp(_clock.time(), timezone.utc).date()
@@ -1423,24 +1513,23 @@ class Handler(BaseHTTPRequestHandler):
                     lines.append('%s,%d,25000,%s,26000,23000,%d,6600,%d,17000,0,0,0,0,0,0,0,0,0,0,0,0,0' % (
                         date_text, period, flag, emb_wind, sol))
             return self.send(200, '\n'.join(lines) + '\n', 'text/csv')
-        if path == '/neso/api/3/action/package_show' and q.get('id') == 'system-inertia':
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'transmission-entry-capacity-tec-register':
             return self.send(200, {'success': True, 'result': {'resources': [
-                {'id': 'in-2025', 'name': 'GB System Inertia - 2025-2026', 'datastore_active': True},
-                {'id': 'in-cost', 'name': 'GB System Inertia Costs 2026', 'datastore_active': True},
-                {'id': 'in-2026', 'name': 'GB System Inertia - 2026-2027', 'datastore_active': True}]}})
-        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id') == 'in-2026':
-            now = _clock.time()
-            records = []
-            day = datetime.fromtimestamp(now - 8 * 86400, timezone.utc).date()
-            while day < datetime.fromtimestamp(now - 86400, timezone.utc).date():
-                for sp in range(1, 49):
-                    t = datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp() + (sp - 1) * 1800
-                    outturn = 175 - 35 * math.sin(math.pi * (hour_of_day(t) - 4) / 12) + 15 * math.sin(t / 90000.0)
-                    records.append({'_id': len(records) + 1, 'Settlement Date': day.isoformat(), 'Settlement Period': sp,
-                                    'Outturn Inertia': round(outturn), 'Market Provided Inertia': round(outturn - 12)})
-                day += timedelta(days=1)
-            records.reverse()
-            return self.send(200, {'success': True, 'result': {'records': records[:int(q.get('limit', 100))]}})
+                {'id': 'tec-csv', 'name': 'TEC Register CSV', 'datastore_active': False},
+                {'id': 'tec', 'name': 'TEC Register', 'datastore_active': True, 'last_modified': TEC_VERSION[0]}]}})
+        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id') == 'tec':
+            TEC_ASKED.append(q.get('limit'))
+            records = tec_records()
+            return self.send(200, {'success': True, 'result': {'records': records[:int(q.get('limit', 100))], 'total': len(records)}})
+        if path == '/neso/api/3/action/package_show' and q.get('id') == 'system-inertia':
+            return self.send(200, {'success': True, 'result': {'resources': inertia_resources(), 'notes': INERTIA_NOTES[0]}})
+        if path == '/neso/api/3/action/datastore_search' and q.get('resource_id', '').startswith('in-') and q['resource_id'] != 'in-cost':
+            records = inertia_records(int(q['resource_id'][3:]))
+            if 'desc' in q.get('sort', ''):
+                records = records[::-1]
+            offset, limit = int(q.get('offset', 0)), int(q.get('limit', 100))
+            INERTIA_ASKED.append(q['resource_id'])
+            return self.send(200, {'success': True, 'result': {'records': records[offset:offset + limit], 'total': len(records)}})
         if path == '/neso/api/3/action/package_show' and q.get('id') == 'eac-auction-results':
             return self.send(200, {'success': True, 'result': {'resources': [
                 {'id': 'eac-daily', 'name': 'NESO Response-Reserve Daily Results Summary', 'datastore_active': True},

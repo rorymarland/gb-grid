@@ -60,3 +60,13 @@
   .wx-figures { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .wx-figures dd { font-size: 24px; }
 }
+
+/* Storm shutdowns: amber close to the cut-out speed, red over it (status colours, always with words) */
+.wx-storm-head { margin: 12px 0 0; font-size: 15px; font-weight: 560; max-width: 80ch; }
+.wx-storm-key { margin-bottom: 8px; }
+.wx-storms { position: relative; }
+.wx-storms svg { display: block; width: 100%; }
+.wx-storm-name { font-size: 13px; fill: var(--ink); }
+.wx-storm-near { fill: var(--warn); background: var(--warn); }
+.wx-storm-over { fill: var(--bad); background: var(--bad); }
+.sw.wx-storm-near, .sw.wx-storm-over { border-radius: 2px; }

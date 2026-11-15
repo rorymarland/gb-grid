@@ -107,6 +107,7 @@ POLL = {
     'neighbours': env_int('POLL_NEIGHBOURS_SECONDS', 900, 600, 3600),
     'weather': env_int('POLL_WEATHER_SECONDS', 3600, 1800, 21600),
     'entsoe': env_int('POLL_ENTSOE_SECONDS', 900, 600, 3600),
+    'pipeline': env_int('POLL_PIPELINE_SECONDS', 6 * 3600, 3600, 86400),
 }
 LONG_HISTORY = env_str('LONG_HISTORY', 'true').lower() not in ('0', 'false', 'no', 'off')
 REGION_ID = env_int('CARBON_REGION_ID', 0, 0, 17)  # 0 disables the regional card

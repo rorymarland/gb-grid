@@ -27,7 +27,7 @@ SOURCE_LABELS = {
     'longhistory': 'Long-term history (NESO historic generation mix)',
     'longprices': 'Long-term prices (Elexon market index since 2018)',
     'outlook': 'Outlook (Elexon demand and wind forecasts)',
-    'response': 'Inertia and frequency response (NESO)',
+    'response': 'Inertia since 2017 and frequency response (NESO)',
     'events': 'Timeline (built from the other feeds)',
     'home': 'Your home (Octopus Energy)',
     'constraints': 'Constraints (NESO boundary flows, costs and wind turned down)',
@@ -35,6 +35,7 @@ SOURCE_LABELS = {
     'entsoe': 'Neighbours’ generation mix (ENTSO-E)',
     'weather': 'Weather (Open-Meteo: wind at hub height, temperature and sunshine)',
     'neighbours': 'Neighbours’ carbon intensity (RTE for France, Energinet for Denmark)',
+    'pipeline': 'What’s being built (NESO TEC register)',
     'imbalance': 'Imbalance prices, trades and temperature (Elexon)',
     'forecasts': 'Forecast scorecard (NESO forecast records, and day-ahead forecasts kept here)',
 }

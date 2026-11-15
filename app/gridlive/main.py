@@ -27,6 +27,7 @@ from .imbalance import Imbalance
 from .gas import Gas
 from .neighbours import Neighbours
 from .weather import Weather
+from .pipeline import Pipeline
 from .entsoe import Entsoe
 from .web import App, Handler, Server, UI, load_file
 
@@ -89,6 +90,7 @@ def main():
         ('gas', App.gas.poll),
         ('neighbours', Neighbours(store).poll),
         ('weather', Weather(store, fleet).poll),
+        ('pipeline', Pipeline(store).poll),
     ]
     if ENTSOE_API_KEY:
         jobs.append(('entsoe', Entsoe(store).poll))

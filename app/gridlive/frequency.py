@@ -4,14 +4,12 @@ and spotting frequency events in the 15-second readings."""
 import re
 import statistics
 import time
-from datetime import date
-from urllib.parse import quote
 
-from . import fetch
+from . import fetch, inertia
 from .config import ELEXON, NESO, log
 from .fetch import FetchError, as_float
-from .store import UPSERT_FREQ, UPSERT_HH, UPSERT_RESP
-from .timeutil import iso_minute, parse_time, settlement_start
+from .store import UPSERT_FREQ, UPSERT_RESP
+from .timeutil import iso_minute, parse_time
 
 
 # --------------------------------------------------------------------------
@@ -70,7 +68,6 @@ def newest_resource(package, wanted=None):
 class FrequencyData:
     def __init__(self, store):
         self.store = store
-        self.inertia_resource = None
         self.response_resource = None
 
     # ---- 15-second readings -------------------------------------------------
@@ -109,40 +106,7 @@ class FrequencyData:
     # ---- NESO: system inertia, half-hourly, published after the day ---------
 
     def poll_inertia(self):
-        resource = newest_resource('system-inertia', lambda n: 'inertia' in n.lower() and 'cost' not in n.lower())
-        # Sort by date rather than row id: the rows aren't always stored in date order
-        sql = 'SELECT * FROM "%s" ORDER BY "Settlement Date" DESC, "Settlement Period" DESC LIMIT 700' % resource['id']
-        try:
-            data = fetch.get_json(NESO + '/api/3/action/datastore_search_sql?sql=' + quote(sql), timeout=60).get('result') or {}
-        except FetchError:
-            data = fetch.get_json(NESO + '/api/3/action/datastore_search?resource_id=%s&limit=700&sort=_id%%20desc'
-                                  % resource['id'], timeout=60).get('result') or {}
-        rows = []
-        for record in data.get('records') or []:
-            keys = {k.lower().replace(' ', '').replace('_', ''): v for k, v in record.items()}
-            try:
-                day = str(keys.get('settlementdate') or '')[:10]
-                period = int(keys.get('settlementperiod'))
-            except (TypeError, ValueError):
-                continue
-            outturn, market = as_float(keys.get('outturninertia')), as_float(keys.get('marketprovidedinertia'))
-            if not day or outturn is None:
-                continue
-            try:
-                t = settlement_start(date.fromisoformat(day), period)
-            except ValueError:
-                continue
-            rows.append(('inertia', t, outturn))
-            if market is not None:
-                rows.append(('inertia_mkt', t, market))
-        if not rows:
-            raise FetchError('The inertia data was empty')
-        latest = max(r[1] for r in rows)
-        if resource['id'] != self.inertia_resource:
-            self.inertia_resource = resource['id']
-            log.info('[response] inertia from "%s": %d half hours, latest %s', resource.get('name'), len(rows) // 2 or len(rows),
-                     iso_minute(latest))
-        self.store.write(UPSERT_HH, rows, history=False)
+        inertia.poll(self.store)
 
     # ---- NESO: response and reserve held, from the daily auction results ---
 
@@ -191,10 +155,7 @@ def response_at(store, t):
     return held
 
 
-def inertia_at(store, t):
-    period = int(t // 1800) * 1800
-    v = store.scalar("SELECT v FROM hh WHERE k = 'inertia' AND t = ?", (period,))
-    return None if v is None else round(v)
+inertia_at = inertia.inertia_at
 
 
 # --------------------------------------------------------------------------

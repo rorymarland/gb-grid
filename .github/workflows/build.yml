@@ -40,6 +40,8 @@ jobs:
           python test/test_neighbours.py
           python test/test_entsoe.py
           python test/test_weather.py
+          python test/test_inertia.py
+          python test/test_pipeline.py
           node test/test_sim.mjs
           node test/test_osgrid.mjs
           python tools/osgb.py

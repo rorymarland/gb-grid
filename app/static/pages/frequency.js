@@ -200,29 +200,105 @@ function renderHistogram() {
 
 /* ---- inertia and response ------------------------------------------------- */
 
-function renderInertia() {
-  var d = state.data.inertia, host = clear(byId('inertia'));
-  if (!d) { host.appendChild(h('p', { cls: 'empty', text: 'Waiting for NESO’s inertia figures, which are published after the day.' })); return; }
-  host.appendChild(h('div', { cls: 'big small' }, [h('b', { text: G.int(d.gvas) }), h('span', { cls: 'unit', text: 'GVA·s' }),
-    h('p', { text: (Date.now() / 1000 - d.t > 3 * 86400
-      ? 'NESO publishes these estimates in batches, often months after the fact. The latest is ' + G.date(d.t) + ' at ' + G.hm(d.t) + '; over the week to then it ranged from '
-      : 'Latest published half hour: ' + G.when(d.t) + '. Over the week to then it ranged from ') + G.int(d.low) + ' to ' + G.int(d.high) + ' GVA·s.' })]));
-  var se = d.series, W = Math.max(280, host.clientWidth || 480), H = 120, padL = 36, padB = 20, padT = 6;
-  var lo = Math.floor(d.low / 20) * 20, hi = Math.ceil(d.high / 20) * 20 || 1;
-  var t0 = se.t[0], t1 = se.t[se.t.length - 1];
-  var x = function (t) { return padL + (t - t0) / Math.max(1, t1 - t0) * (W - padL - 6); };
+function lineChart(host, series, opts) {
+  /* series: [{t: [...], v: [...], cls}], all on one GVA·s scale */
+  var W = Math.max(280, host.clientWidth || 480), H = opts.height || 120, padL = 40, padR = 6, padB = 20, padT = 6;
+  var all = [];
+  series.forEach(function (se) { se.v.forEach(function (v) { if (num(v)) all.push(v); }); });
+  var lo = Math.floor(Math.min.apply(null, all) / 20) * 20, hi = Math.ceil(Math.max.apply(null, all) / 20) * 20;
+  if (opts.zero) lo = 0;
+  if (hi <= lo) hi = lo + 20;
+  var t0 = Math.min.apply(null, series.map(function (se) { return se.t[0]; })), t1 = Math.max.apply(null, series.map(function (se) { return se.t[se.t.length - 1]; }));
+  var x = function (t) { return padL + (t - t0) / Math.max(1, t1 - t0) * (W - padL - padR); };
   var y = function (v) { return padT + (hi - v) / Math.max(1, hi - lo) * (H - padT - padB); };
-  var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img', 'aria-label': 'Inertia over the last week, between ' + d.low + ' and ' + d.high + ' GVA·s' });
-  [lo, (lo + hi) / 2, hi].forEach(function (v) {
-    svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: W - 6, y1: y(v), y2: y(v) }));
+  var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img', 'aria-label': opts.label });
+  var step = niceStepLocal(hi - lo);
+  for (var v = lo; v <= hi + 1e-9; v += step) {
+    svg.appendChild(s('line', { 'class': 'grid-line', x1: padL, x2: W - padR, y1: y(v), y2: y(v) }));
     svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 6, y: y(v) + 3.5, 'text-anchor': 'end', text: Math.round(v) }));
+  }
+  opts.ticks(t0, t1).forEach(function (tk) { svg.appendChild(s('text', { 'class': 'axis-text', x: x(tk[0]), y: H - 5, 'text-anchor': 'middle', text: tk[1] })); });
+  series.forEach(function (se) { svg.appendChild(s('path', { 'class': se.cls, d: path(se.t, se.v, x, y) })); });
+  return { svg: svg, x: x, y: y, W: W, H: H, t0: t0, t1: t1, padL: padL, padR: padR };
+}
+function niceStepLocal(span) { return span > 200 ? 100 : span > 80 ? 40 : 20; }
+function dayTicks(t0, t1) {
+  var out = [];
+  for (var t = Math.ceil(t0 / 86400) * 86400; t <= t1; t += 86400) out.push([t, G.day(t).replace(/^(\w+) (\d+) (\w+)$/, '$2 $3')]);
+  return out.length > 8 ? out.filter(function (_, i) { return i % 2 === 0; }) : out;
+}
+
+function renderInertia() {
+  var d = state.data.inertia, host = byId('inertia');
+  renderInertiaHistory(d);
+  var width = host.clientWidth;
+  if (!G.changed('inertia-now', [d && d.estimate, d && d.published && d.published.t, d && d.no_estimate, width])) return;
+  clear(host);
+  if (!d) { host.appendChild(h('p', { cls: 'empty', text: 'Waiting for NESO’s inertia figures.' })); return; }
+  var pub = d.published, est = d.estimate;
+  var since = pub ? (pub.paused ? 'NESO has paused its own figures while it reviews them; its latest is for ' : 'NESO’s latest figure is for ') + G.date(pub.t) + ' at ' + G.hm(pub.t) + '.' : '';
+  if (est) {
+    host.appendChild(h('div', { cls: 'big small' }, [h('b', { text: G.int(est.gvas) }), h('span', { cls: 'unit', text: 'GVA·s, estimated' }),
+      h('p', { text: 'Estimated from the generation mix at ' + G.hm(est.t) + '. ' + (pub && pub.stale ? since : '') })]));
+    var c = lineChart(host, [{ t: est.series.t, v: est.series.v, cls: 'i-line i-est' }], { label: 'Estimated inertia over the last two days', ticks: dayTicks });
+    host.appendChild(h('div', { cls: 'chart' }, [c.svg]));
+    var note = [G.term('inertia', 'Inertia'), ' is highest when gas, nuclear and biomass plants are running and lowest on windy, sunny nights with plenty of imports. ',
+      'The estimate is a straight-line fit of NESO’s figures on the mix of generation. Tested on the ' + Math.round((est.test_to - est.test_from) / 86400 / 30) + ' months to ' + G.date(est.test_to - 1800) +
+      ', which it wasn’t fitted to, it was out by ' + est.mae.toFixed(0) + ' GVA·s on average (' + est.mape.toFixed(0) + '%), and by ' + est.p90 + ' or less nine times in ten' +
+      (Math.abs(est.bias) >= 2 ? ', tending to run ' + Math.abs(est.bias).toFixed(0) + (est.bias > 0 ? ' high' : ' low') : '') + '.'];
+    host.appendChild(h('p', { cls: 'note' }, note));
+    return;
+  }
+  if (!pub) { host.appendChild(h('p', { cls: 'empty', text: 'Waiting for NESO’s inertia figures.' })); return; }
+  host.appendChild(h('div', { cls: 'big small' }, [h('b', { text: G.int(pub.gvas) }), h('span', { cls: 'unit', text: 'GVA·s' }),
+    h('p', { text: (pub.stale ? since + ' ' : 'Latest published half hour: ' + G.when(pub.t) + '. ') + 'Over the week to then it ranged from ' + G.int(pub.low) + ' to ' + G.int(pub.high) + ' GVA·s.' })]));
+  var w = lineChart(host, [{ t: pub.week.t, v: pub.week.v, cls: 'i-line' }], { label: 'Inertia over NESO’s latest week, between ' + pub.low + ' and ' + pub.high + ' GVA·s', ticks: dayTicks });
+  host.appendChild(h('div', { cls: 'chart' }, [w.svg]));
+  var more = [G.term('inertia', 'Inertia'), ' is highest when gas, nuclear and biomass plants are running and lowest on windy, sunny nights with plenty of imports.'];
+  if (num(pub.market)) more.push(' Without NESO’s own actions to keep enough spinning, it would have been ' + G.int(pub.market) + ' GVA·s.');
+  if (d.no_estimate) more.push(' There’s no estimate for now: ' + d.no_estimate + '.');
+  host.appendChild(h('p', { cls: 'note' }, more));
+}
+
+function renderInertiaHistory(d) {
+  var panel = byId('ihist-panel'), pub = d && d.published, host = byId('ihist');
+  panel.hidden = !(pub && pub.monthly && pub.monthly.length > 1);
+  if (panel.hidden || !G.changed('inertia-history', [pub.t, pub.monthly.length, pub.paused, host.clientWidth])) return;
+  var m = pub.monthly;
+  byId('ihist-sub').textContent = 'NESO’s half-hourly figures from ' + G.date(pub.first) + ' to ' + G.date(pub.t) + ', each month’s average and its lowest half hour. ' +
+    'Over the latest year of them it averaged ' + pub.year.mean + ' GVA·s' + (num(pub.year.market_mean) ? ', and ' + pub.year.market_mean + ' before NESO’s actions to keep more spinning' : '') + '.' +
+    (pub.paused ? ' NESO has paused the dataset while it reviews it, so the figures stop there; they’ll carry on here when it restarts.' : '');
+  var key = clear(byId('ihist-key'));
+  key.appendChild(h('li', null, [h('i', { cls: 'sw line i-mean-sw', 'aria-hidden': 'true' }), 'Monthly average']));
+  key.appendChild(h('li', null, [h('i', { cls: 'sw line i-min-sw', 'aria-hidden': 'true' }), 'Lowest half hour in the month']));
+  clear(host);
+  var ts = m.map(function (r) { return r[0] + 15 * 86400; });
+  var c = lineChart(host, [{ t: ts, v: m.map(function (r) { return r[1]; }), cls: 'i-line' }, { t: ts, v: m.map(function (r) { return r[2]; }), cls: 'i-line i-min' }],
+    { height: 220, zero: true, label: 'Monthly average and lowest inertia since ' + G.date(pub.first), ticks: function (t0, t1) {
+      var out = [], y0 = new Date(t0 * 1000).getUTCFullYear() + 1, y1 = new Date(t1 * 1000).getUTCFullYear();
+      for (var yr = y0; yr <= y1; yr++) out.push([Date.UTC(yr, 0, 1) / 1000, String(yr)]);
+      return host.clientWidth < 520 ? out.filter(function (_, i) { return i % 2 === 0; }) : out;
+    } });
+  var cross = s('line', { 'class': 'xhair', y1: 6, y2: c.H - 20, visibility: 'hidden' });
+  c.svg.appendChild(cross);
+  host.appendChild(c.svg);
+  var tip = G.makeTip(host);
+  c.svg.addEventListener('pointermove', function (e) {
+    var b = c.svg.getBoundingClientRect(), at = c.t0 + ((e.clientX - b.left) * c.W / b.width - c.padL) / (c.W - c.padL - c.padR) * (c.t1 - c.t0);
+    var best = 0;
+    ts.forEach(function (t, i) { if (Math.abs(t - at) < Math.abs(ts[best] - at)) best = i; });
+    var r = m[best], cx = c.x(ts[best]);
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    var month = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'Europe/London' }).format(new Date(ts[best] * 1000));
+    tip.show(month, [{ cls: 'i-mean-sw', value: G.int(r[1]) + ' GVA·s', label: 'average' }, { cls: 'i-min-sw', value: G.int(r[2]) + ' GVA·s', label: 'lowest half hour' },
+      { value: G.int(r[3]) + ' GVA·s', label: 'highest' }].concat(num(r[4]) ? [{ value: G.int(r[4]) + ' GVA·s', label: 'average before NESO’s actions' }] : []), cx * b.width / c.W, 40);
   });
-  for (var t = Math.ceil(t0 / 86400) * 86400; t <= t1; t += 86400) svg.appendChild(s('text', { 'class': 'axis-text', x: x(t), y: H - 5, 'text-anchor': 'middle', text: G.day(t).replace(/^(\w+) (\d+) (\w+)$/, '$2 $3') }));
-  svg.appendChild(s('path', { 'class': 'i-line', d: path(se.t, se.v, x, y) }));
-  host.appendChild(h('div', { cls: 'chart' }, [svg]));
-  var note = [G.term('inertia', 'Inertia'), ' is highest when gas, nuclear and biomass plants are running and lowest on windy, sunny nights with plenty of imports.'];
-  if (num(d.market)) note.push(' Without NESO’s own actions to keep enough spinning, it would have been ' + G.int(d.market) + ' GVA·s.');
-  host.appendChild(h('p', { cls: 'note' }, note));
+  c.svg.addEventListener('pointerleave', function () { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
+  var low = clear(byId('ilow'));
+  low.appendChild(h('h3', { text: 'The lowest half hours, one a day' }));
+  var list = h('ol', { cls: 'i-lows' });
+  pub.lowest.forEach(function (r) { list.appendChild(h('li', null, [h('b', { text: G.int(r.gvas) + ' GVA·s' }), ' ' + G.date(r.t) + ', ' + G.hm(r.t)])); });
+  low.appendChild(list);
 }
 
 function renderHeld() {

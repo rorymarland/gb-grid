@@ -14,16 +14,17 @@ standard library inside.
 |---|---|---|
 | Overview | `/` | What Britain is using now, where it comes from, today in plain English and the next 48 hours |
 | Map and Stations | `/map`, `/stations` | Every power station and interconnector, live, with a seven-day time machine |
-| Weather | `/weather` | Wind at hub height, temperature and sunshine for Britain, the week ahead, and how wind farms, demand and solar answer them |
+| Weather | `/weather` | Wind at hub height, temperature and sunshine for Britain, the week ahead, storms that could stop wind farms, and how wind farms, demand and solar answer them |
 | Regions | `/regions` | Carbon intensity across NESO's 14 regions, a day back to two days ahead, and Britain against France and Denmark over the week |
 | Your home | `/home` | Your own electricity and gas from an Octopus smart meter, with carbon and cost (optional) |
-| Frequency | `/frequency` | Live frequency, inertia, the response NESO holds, and sudden dips |
+| Frequency | `/frequency` | Live frequency, inertia now (estimated) and since 2017, the response NESO holds, and sudden dips |
 | Balancing | `/balancing` | Who NESO is paying to turn up or down, and what it costs |
 | Constraints | `/constraints` | Where the network runs out of room, the wind turned down, and what it costs |
 | Gas | `/gas` | Where Britain's gas comes from and goes, how much is in the pipes, and the wholesale price |
 | Outages | `/outages` | Spare capacity, offline units and grid notices |
 | Timeline | `/timeline` | Notable moments, kept for a year, linked to the map and History |
 | History | `/history` | The mix, carbon and price since 2009, with records |
+| What's being built | `/pipeline` | Every project queuing to connect, from NESO's TEC register: by kind, stage and year, and what's due in the next 12 months |
 | Forecasts | `/forecasts` | How close NESO's wind, demand, carbon and solar forecasts came, and whether they're getting better |
 | Year in review | `/review` | The grid's year and your home's, saved for good once the year is over |
 | What if? | `/sandbox` | Trip a power station and watch the first minute and the next hour |
@@ -143,6 +144,17 @@ adds on a working day, and solar output against sunshine. Three requests an
 hour (wind direction comes in the same request as wind speed, for the Map's
 arrows); the first run also fetches the last 92 days.
 
+**Storm shutdowns:** turbines stop to protect themselves when the wind
+averages more than about 25 m/s for ten minutes. The page marks every hour in
+the week ahead when any of the dozen wind points is forecast at 22 m/s or more
+(amber, close) or 25 m/s or more (red, turbines likely stopping), with the
+capacity of the wind farms nearest each point, and says when the most capacity
+is in winds over 25 m/s. The Map's wind arrows turn the same colours, and the
+Display's weather slide gives a warning when that's within two days. It uses
+the same forecast, so no extra requests. A forecast for one point each hour
+can't catch every gust, and some newer turbines ease off gradually rather
+than stopping, so treat it as a warning, not a count.
+
 ![The weather page](docs/weather.png)
 
 ### Your home (optional)
@@ -183,8 +195,19 @@ a week of Elexon's 15-second readings. Below that: how steady it's been today
 and how the readings spread around 50 Hz, NESO's estimate of the grid's
 inertia, and how much fast frequency response (Dynamic Containment,
 Moderation and Regulation) and quick reserve NESO is holding for the current
-four-hour block. NESO publishes its inertia estimates in batches, often
-months after the fact, so that panel shows the latest week available.
+four-hour block.
+
+**Inertia** comes from NESO's half-hourly figures, kept in full from April
+2017. NESO paused the dataset in July 2026 while it reviews it, so the panel
+shows an estimate for now instead: a straight-line fit of NESO's figures on
+the generation mix (gas, nuclear, biomass, hydro, pumped storage, wind, solar
+and imports), applied to the live mix every five minutes, with the last two
+days drawn dashed. The fit is tested on NESO's last 120 days of figures,
+which it isn't fitted to, and the page says how far out it was (about 7% on
+average, against NESO's real figures); if that's ever worse than 10%, no
+estimate is shown. Below, **inertia since 2017**: each month's average and
+lowest half hour, and the five lowest half hours, one a day. When NESO starts
+publishing again, its figures carry on automatically.
 
 Sudden falls and rises are picked out as **frequency events**, usually a power
 station or interconnector tripping. Each one shows the minutes around it, how
@@ -263,6 +286,21 @@ any Unix time), and older moments open History zoomed to that week
 
 The same moments can be pushed to your phone or another system as they
 happen: see [Notifications](#notifications).
+
+### What's being built
+
+NESO's Transmission Entry Capacity (TEC) register: every project with an
+agreement to send power into the transmission network, built or not. How
+much is connected and queuing by kind (batteries, solar, offshore and
+onshore wind, gas, nuclear and so on) and stage (scoping, awaiting consents,
+consented, under construction), with a switch to leave out scoping; when
+it's due, year by year; the largest projects due in the next 12 months; how
+much of the queue has a Gate 2 offer after NESO's 2025 reform; and how the
+queue's total moves each time NESO updates the register. One request every
+six hours to check for a new version (about twice a week), and one more to
+read it when there is.
+
+![The what's being built page](docs/pipeline.png)
 
 ### History
 
@@ -417,7 +455,7 @@ default; [`.env.example`](.env.example) explains each in more detail.
 | `GAS_CALORIFIC_VALUE` | `39.5` | For gas meters that report cubic metres: the calorific value on your bill, in MJ/m³ |
 | `GAS_KG_CO2_PER_KWH` | `0.183` | Carbon factor for burning gas |
 | `PUBLIC_URL` | (none) | This site's address, such as `http://nas.local:8080`, so notifications link to the event |
-| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity; `POLL_WEATHER_SECONDS`, every hour, for the weather; `POLL_ENTSOE_SECONDS`, every 15 minutes, for ENTSO-E) |
+| `POLL_*_SECONDS` | varies | How often each upstream source is polled (`POLL_CONSTRAINTS_SECONDS`, every 3 hours by default, for the Constraints page; `POLL_FORECASTS_SECONDS`, every 30 minutes, for the forecasts the dashboard keeps, with NESO's records checked every 6 hours; `POLL_IMBALANCE_SECONDS`, every 15 minutes, for imbalance prices, trades and temperature; `POLL_GAS_SECONDS`, every 5 minutes, for National Gas's flows; `POLL_NEIGHBOURS_SECONDS`, every 15 minutes, for France's and Denmark's carbon intensity; `POLL_WEATHER_SECONDS`, every hour, for the weather; `POLL_ENTSOE_SECONDS`, every 15 minutes, for ENTSO-E; `POLL_PIPELINE_SECONDS`, every 6 hours, for the TEC register; inertia is checked with the response results, `POLL_RESPONSE_SECONDS`, every hour) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` logs every poll |
 | `ACCESS_LOG` | `false` | Log every HTTP request |
 
@@ -651,8 +689,9 @@ Allowlist `api.neso.energy` to fix it.
   what was held instead, from NESO's daily auction results.
 - **The sandbox's inertia** is estimated from the synchronous generation
   running (nuclear, gas, biomass, hydro and pumped storage): a straight line
-  fitted to NESO's published inertia against the historic mix once enough of
-  both overlap, and about 6.5 GVA·s per GW plus 30 GVA·s until then. Its
+  fitted to NESO's published inertia against the historic mix over the latest
+  year of NESO's figures, and about 6.5 GVA·s per GW plus 30 GVA·s until
+  there are enough. Its
   running costs are typical values, not bids: gas plants get an efficiency
   between 47% and 58% (33% to 38% for small open-cycle plant) and burn gas at
   the price you set, plus 0.184 tonnes of CO2 per MWh of gas at your carbon
@@ -706,7 +745,8 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/balancing` | Live instructions, half-hourly costs, top payments, constraint costs, and imbalance prices and trades for today and yesterday |
 | `/api/constraints?group=SCOTEX` | Today's and tomorrow's boundary flows against their limits, one group's half hours for the chart (`group=`), each group's last 30 and 365 days, constraint costs by reason, and wind turned down by day and wind farm |
 | `/api/gas` | Gas now: supply by source, use by category and every entry point; the gas day's flows and linepack with National Gas's predicted close and demand forecast; power stations' gas against gas-fired generation; and a year of daily allocations (GWh) and the System Average Price |
-| `/api/weather` | Wind at hub height, temperature and sunshine for Britain now and hour by hour from two days back to a week ahead, the grid now, and the last 90 days of wind farms against wind, demand against temperature and solar against sunshine |
+| `/api/weather` | Wind at hub height, temperature and sunshine for Britain now and hour by hour from two days back to a week ahead, the grid now, the last 90 days of wind farms against wind, demand against temperature and solar against sunshine, and `storms`: spells near or over 25 m/s at each wind point in the week ahead |
+| `/api/pipeline` | NESO's TEC register summed: connected and queuing by kind and stage, by year, the largest projects due in the next 12 months, Gate 1 and 2, and the queue at each version |
 | `/api/neighbours` | Britain's, France's and western Denmark's carbon intensity for the last week, by half hour, with means over the half hours all three have, and each neighbour's figure now (live or typical) |
 | `/boundaries.json` | The ETYS transmission boundaries as map paths |
 | `/api/outages` | Margin forecast, offline units, nuclear fleet, upcoming outages and notices |
@@ -715,7 +755,7 @@ Allowlist `api.neso.energy` to fix it.
 | `/api/longterm/summary` | Records, the year-apart comparison and yearly mix |
 | `/api/outlook` | Demand, wind, solar and carbon forecasts for the next 48 hours |
 | `/api/summary?day=today` | Today on the grid (or `yesterday`), as text parts with glossary terms marked |
-| `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia, response held and recent frequency events; `&event=<id>` adds one event in full |
+| `/api/frequency?range=1h` | Frequency readings (`1h`, `6h`, `24h`, or `7d` in five-minute buckets), today's figures, inertia (`published`: NESO's latest, the week to then, monthly since 2017 and the lowest half hours; `estimate`: now and the last two days, with its tested error), response held and recent frequency events; `&event=<id>` adds one event in full |
 | `/api/events?days=30` | The timeline, newest first, with counts by kind; `&kind=frequency,outage` to filter |
 | `/api/sandbox?at=` | Starting figures for the sandbox: response held at that moment and the inertia fit |
 | `/api/forecasts` | Each forecast's latest day, last 30 days, a year earlier, months since its record began and worst days |
@@ -756,7 +796,7 @@ feed's own (`test/test_constraints.py`, `test_review.py`, `test_forecasts.py`,
 | Where | What |
 |---|---|
 | `app/server.py` | Starts the dashboard |
-| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours` with `entsoe`, `weather`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
+| `app/gridlive/` | The server: `config`, `fetch` and `store`; one module per feed (`ingest`, `units`, `balancing`, `constraints`, `gas`, `neighbours` with `entsoe`, `weather`, `pipeline`, `inertia`, `review`, `forecasts`, `outages`, `longterm`, `notices`, `frequency`, and `home` with `octopus`, `home_sessions` and `home_views`); `events` for the timeline's detectors; the API payloads (`grid` and `views_*`, including `views_summary` for Today on the grid and `views_events` for the timeline and frequency); the HTTP server (`web`) |
 | `app/*.html` | Short page shells; the server fills in the shared head, header and credits |
 | `app/static/js/` | Shared ES modules: `gb.js` (DOM, formatting, tooltips, polling, theme, menus, search and warning banner), `glossary.js` (the terms and their popovers), `summary.js`, `gridsim.js` and `meritorder.js` (the sandbox's models), `charts.js`, `stationmap.js`, `stationcard.js` and `osgrid.js` (the station card and its OS grid references), `regionmap.js`, `outlook.js` |
 | `app/static/pages/` | Each page's own script and styles |
@@ -815,7 +855,7 @@ stations sharing coordinates). The tests run it.
   ([licence](https://www.neso.energy/data-portal/neso-open-licence)): carbon
   intensity from the [NESO Carbon Intensity API](https://carbonintensity.org.uk/),
   and embedded generation, region boundaries, transmission boundaries, constraint flows, limits and costs, wind turned down, the historic
-  generation mix, system inertia and frequency response auction results from
+  generation mix, system inertia, the TEC register and frequency response auction results from
   the [NESO Data Portal](https://www.neso.energy/data-portal).
 - Solar estimates from [Sheffield Solar PV_Live](https://www.solar.sheffield.ac.uk/pvlive/).
 - Gas flows, linepack, allocations and prices from National Gas Transmission's

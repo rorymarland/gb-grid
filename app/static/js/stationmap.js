@@ -474,11 +474,16 @@ export function createStationMap(opts) {
       var node = (M.windNodes = M.windNodes || {})[p.n];
       if (!node) {
         node = M.windNodes[p.n] = { arrow: s('path', { 'class': 'wind-arrow' }), label: s('text', { 'class': 'wind-label' }) };
-        M.gWind.appendChild(node.arrow);
+        // Arrows under every label, so a long arrow never crosses another's speed
+        M.gWind.insertBefore(node.arrow, M.gWind.firstChild);
         M.gWind.appendChild(node.label);
       }
       node.p = p;
-      node.label.textContent = Math.round(p.v) + ' m/s';
+      // At about 25 m/s turbines stop to protect themselves; close to it, some may
+      var level = p.v >= 25 ? ' storm' : p.v >= 22 ? ' near-storm' : '';
+      node.arrow.setAttribute('class', 'wind-arrow' + level);
+      node.label.setAttribute('class', 'wind-label' + level);
+      node.label.textContent = Math.round(p.v) + ' m/s' + (p.v >= 25 ? ', turbines stopping' : '');
       return node;
     });
     Object.keys(M.windNodes || {}).forEach(function (n) {

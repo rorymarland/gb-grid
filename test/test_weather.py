@@ -170,6 +170,46 @@ check('arrows: nothing for an hour not fetched', wx.wind_points(fresh, at + 30 *
 v = wx.view(fresh, time.time())
 check('view: a week ahead from the mock', v['ready'] and len(v['week']) >= 9 * 24 - 2, len(v['week']))
 
+check('storms: no capacity stored without a station list', fresh.get_meta('wind_point_mw') is None)
+
+# ---- storm shutdowns, by hand -----------------------------------------------------------
+storm = server.Store(tempfile.mkdtemp())
+H = 1_794_000_000 - 1_794_000_000 % 3600
+now_s = H + 1200
+storm.write('INSERT INTO wxp (p, t, v, d) VALUES (?, ?, ?, ?)', [
+    ('Moray Firth', H - 7200, 21.0, 250), ('Moray Firth', H - 3600, 23.0, 250), ('Moray Firth', H, 26.0, 250),
+    ('Moray Firth', H + 3600, 27.5, 250), ('Moray Firth', H + 7200, 24.0, 250), ('Moray Firth', H + 3 * 3600, 21.0, 250),
+    ('Moray Firth', H + 5 * 3600, 22.0, 250), ('Moray Firth', H + 6 * 3600, 22.5, 250),
+    ('Hornsea', H + 30 * 3600, 23.0, 250), ('Wales', H - 5 * 3600, 26.0, 250), ('Atlantis', H, 40.0, 250),
+    ('Hornsea', H + 8 * 86400, 30.0, 250)], history=False)
+cap = {'Moray Firth': 2000.0, 'Hornsea': 5000.0}
+st = wx.storms(storm, now_s, cap)
+sp = st['spells']
+check('storms: three spells, in order', [(x['n'], x['start'], x['end']) for x in sp] == [('Moray Firth', H - 3600, H + 3 * 3600), ('Moray Firth', H + 5 * 3600, H + 7 * 3600),
+                                                                                        ('Hornsea', H + 30 * 3600, H + 31 * 3600)], [(x['n'], x['start'], x['end']) for x in sp])
+check('storms: the first passes 25 m/s for two hours', sp[0]['level'] == 'likely' and sp[0]['peak'] == 27.5 and sp[0]['peak_t'] == H + 3600 and sp[0]['hours_over'] == 2
+      and sp[0]['mw'] == 2000 and sp[0]['hours'] == [[H - 3600, 23.0], [H, 26.0], [H + 3600, 27.5], [H + 7200, 24.0]], sp[0])
+check('storms: the others only close', sp[1]['level'] == 'close' and sp[1]['peak'] == 22.5 and sp[2]['level'] == 'close' and sp[2]['mw'] == 5000)
+check('storms: a spell already over is left out, an unknown place too', all(x['n'] not in ('Wales', 'Atlantis') for x in sp))
+check('storms: capacity by hour from now', st['hours'] == [[H, 2000, 0], [H + 3600, 2000, 0], [H + 7200, 0, 2000], [H + 5 * 3600, 0, 2000],
+                                                          [H + 6 * 3600, 0, 2000], [H + 30 * 3600, 0, 5000]], st['hours'])
+check('storms: the worst hour, the first of a tie', st['worst'] == {'t': H, 'over_mw': 2000, 'close_mw': 0} and st['capacity_mw'] == 7000, st['worst'])
+check('storms: more than a week ahead left out', all(x['start'] < H + 7 * 86400 + 1 for x in sp))
+calm = wx.storms(storm, now_s + 40 * 86400, cap)
+check('storms: a calm week', calm['spells'] == [] and calm['worst'] is None and calm['hours'] == [])
+
+
+class Fleet:
+    stations = {1: {'fuel': 'WIND', 'capacity': 1500, 'lat': 58.0, 'lon': -3.1}, 2: {'fuel': 'WIND', 'capacity': 800, 'lat': 53.9, 'lon': 1.7}}
+
+
+withfleet = server.Store(tempfile.mkdtemp())
+wx.Weather(withfleet, Fleet()).poll()
+check('storms: capacity kept at each poll', wx.point_capacity(withfleet) == {'Moray Firth': 1500.0, 'Hornsea': 800.0}, wx.point_capacity(withfleet))
+v = wx.view(withfleet, time.time())
+check('storms: on the page, from the mock’s weekly storm', v['storms']['spells'] and any(x['level'] == 'likely' for x in v['storms']['spells'])
+      and v['storms']['capacity_mw'] == 2300, [(x['n'], x['peak']) for x in v['storms']['spells']])
+
 httpd.shutdown()
 print('weather tests:', 'all passed' if not failures else '%d failed' % failures)
 sys.exit(1 if failures else 0)

@@ -63,6 +63,7 @@ services:
       POLL_GAS_SECONDS: ${POLL_GAS_SECONDS:-300}
       POLL_NEIGHBOURS_SECONDS: ${POLL_NEIGHBOURS_SECONDS:-900}
       POLL_WEATHER_SECONDS: ${POLL_WEATHER_SECONDS:-3600}
+      POLL_PIPELINE_SECONDS: ${POLL_PIPELINE_SECONDS:-21600}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ACCESS_LOG: ${ACCESS_LOG:-false}
     # Hardening: nothing in the container needs to write outside /data and

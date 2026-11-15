@@ -100,6 +100,89 @@ function renderWeek(d) {
   weekChart(byId('sun-chart'), d, 'sun', 'wx-sun');
 }
 
+/* ---------- storm shutdowns ---------- */
+
+function gwOf(mw) { return num(mw) ? (mw / 1000).toFixed(1) : '–'; }
+
+function renderStorms(d) {
+  var st = d.storms, host = clear(byId('storms')), head = byId('storm-head');
+  legend('storm-key', [['wx-storm-near', 'Within 3 m/s of it (22 to 25 m/s)'], ['wx-storm-over', 'Over it (25 m/s or more): turbines likely stopping']]);
+  if (!st || !st.spells.length) {
+    head.textContent = 'No wind farm area is forecast to reach 22 m/s in the week ahead, so no storm shutdowns are expected.';
+    byId('storm-key').hidden = true;
+    return;
+  }
+  byId('storm-key').hidden = false;
+  var likely = st.spells.filter(function (sp) { return sp.level === 'likely'; });
+  if (st.worst) {
+    head.textContent = 'Up to ' + gwOf(st.worst.over_mw) + ' GW of wind farms in winds over 25 m/s, ' + G.day(st.worst.t) + ' at ' + G.hm(st.worst.t) +
+      (st.capacity_mw ? ', of ' + gwOf(st.capacity_mw) + ' GW at all the points' : '') + '. ' +
+      (likely.length > 1 ? likely.length + ' spells in the week ahead.' : 'One spell in the week ahead.');
+  } else if (likely.length) {
+    head.textContent = 'Winds over 25 m/s forecast at ' + likely.map(function (sp) { return sp.n; }).join(', ') + '.';
+  } else {
+    head.textContent = 'Nowhere is forecast over 25 m/s, but ' + st.spells.length + (st.spells.length === 1 ? ' place comes' : ' places come') + ' within 3 m/s of it, where gusty spells can still stop turbines.';
+  }
+  // One row per place with a spell, hour cells on the week's axis
+  var names = [];
+  st.spells.forEach(function (sp) { if (names.indexOf(sp.n) < 0) names.push(sp.n); });
+  var mw = {};
+  st.spells.forEach(function (sp) { mw[sp.n] = sp.mw; });
+  var start = st.hour, end = st.hour + 7 * 86400;
+  // On a phone each place's name sits above its row; otherwise to the left, with its capacity
+  var width = Math.max(300, host.clientWidth || 900), small = width < 620;
+  var rowH = small ? 40 : 26, top = small ? 18 : 5, cellH = 16, padL = small ? 0 : Math.min(300, Math.max(200, width * 0.3)), padR = 8, padT = 4, padB = 22;
+  var height = padT + names.length * rowH + padB;
+  var x = function (t) { return padL + (t - start) / (end - start) * (width - padL - padR); };
+  var svg = s('svg', { viewBox: '0 0 ' + width + ' ' + height, height: height, role: 'img', 'aria-label': 'Hours of storm-force wind at each wind farm area over the week ahead' });
+  for (var t = start - start % 3600; t <= end; t += 3600) {
+    if (t > start && G.hm(t) === '00:00') {
+      svg.appendChild(s('line', { 'class': 'grid-line', x1: x(t).toFixed(1), x2: x(t).toFixed(1), y1: padT, y2: height - padB }));
+      if (end - t > 6 * 3600) svg.appendChild(s('text', { 'class': 'axis-text', x: (x(t) + 4).toFixed(1), y: height - 6, text: dayName(t) }));
+    }
+  }
+  names.forEach(function (n, i) {
+    var y = padT + i * rowH, label = n.charAt(0).toUpperCase() + n.slice(1);
+    if (small) {
+      svg.appendChild(s('text', { 'class': 'wx-storm-name', x: 0, y: y + 13, text: label + (mw[n] ? ', ' + gwOf(mw[n]) + ' GW' : '') }));
+    } else {
+      svg.appendChild(s('text', { 'class': 'wx-storm-name', x: 0, y: y + top + cellH / 2 + 4, text: label }));
+      if (mw[n]) svg.appendChild(s('text', { 'class': 'axis-text', x: padL - 8, y: y + top + cellH / 2 + 4, 'text-anchor': 'end', text: gwOf(mw[n]) + ' GW' }));
+    }
+  });
+  var cells = [];
+  st.spells.forEach(function (sp) {
+    var i = names.indexOf(sp.n), y = padT + i * rowH + top;
+    // Runs of hours at the same level as one block each, with a 2px gap between blocks
+    var runs = [];
+    sp.hours.forEach(function (hr) {
+      var level = hr[1] >= st.cut_out ? 'wx-storm-over' : 'wx-storm-near', last = runs[runs.length - 1];
+      if (last && last.cls === level && last.t1 === hr[0]) last.t1 = hr[0] + 3600;
+      else runs.push({ cls: level, t0: hr[0], t1: hr[0] + 3600 });
+      cells.push({ n: sp.n, t: hr[0], v: hr[1], row: i, mw: sp.mw });
+    });
+    runs.forEach(function (r) {
+      var t0 = Math.max(start, r.t0), t1 = Math.min(end, r.t1);
+      if (t1 <= t0) return;
+      var x0 = x(t0), w = Math.max(2, x(t1) - x0 - 2);
+      svg.appendChild(s('rect', { 'class': r.cls, x: x0.toFixed(1), y: y, width: w.toFixed(1), height: cellH, rx: 2 }));
+    });
+  });
+  host.appendChild(svg);
+  var tip = makeTip(host);
+  svg.addEventListener('pointermove', function (e) {
+    var b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * width / b.width, py = (e.clientY - b.top) * height / b.height;
+    var row = Math.floor((py - padT) / rowH), at = start + (px - padL) / (width - padL - padR) * (end - start);
+    var hit = cells.filter(function (c) { return c.row === row && at >= c.t - 1800 && at < c.t + 5400; })
+      .sort(function (a, c) { return Math.abs(a.t + 1800 - at) - Math.abs(c.t + 1800 - at); })[0];
+    if (!hit) { tip.hide(); return; }
+    tip.show(hit.n + ', ' + G.day(hit.t) + ' ' + G.hm(hit.t), [{ cls: hit.v >= st.cut_out ? 'wx-storm-over' : 'wx-storm-near', value: hit.v.toFixed(1) + ' m/s',
+      label: hit.v >= st.cut_out ? 'turbines likely stopping' : 'close to stopping' }].concat(hit.mw ? [{ value: gwOf(hit.mw) + ' GW', label: 'of wind farms nearest' }] : []),
+      x(hit.t + 1800) * b.width / width, (padT + hit.row * rowH) * b.height / height);
+  });
+  svg.addEventListener('pointerleave', function () { tip.hide(); });
+}
+
 /* ---------- how the grid answers ---------- */
 
 function scatter(host, opts) {
@@ -191,6 +274,7 @@ function render(d) {
   if (!d.ready) { G.setLive('', 'Fetching the weather'); return; }
   renderNow(d);
   renderWeek(d);
+  renderStorms(d);
   renderRelations(d);
   G.setLive('good', 'Open-Meteo, for ' + G.hm(d.hour));
 }

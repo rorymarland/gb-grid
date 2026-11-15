@@ -318,7 +318,7 @@ trip = server.floor_to(now - 5 * 3600, 300) + 37
 fr = [(t, v) for t, v in readings_with(trip, 0.3, start=int(trip - 3600), end=int(now - 60))]
 store.write(server.UPSERT_FREQ, fr, history=False)
 store.write(server.UPSERT_RESP, [(int(trip - 3600), int(trip + 10000), 'DCL', 1200.0, 3.0)], history=False)
-store.write(server.UPSERT_HH, [('inertia', server.floor_to(trip, 1800), 155.0)], history=False)
+store.write('INSERT INTO inertia (t, v, mkt) VALUES (?, ?, ?)', [(server.floor_to(trip, 1800), 155.0, 140.0)], history=False)
 # IFA drops 1,000 MW of imports at the trip
 store.write(server.UPSERT_GEN, [(t, 'INTFR', 1000) for t in range(server.floor_to(trip, 300) + 300, server.floor_to(trip, 300) + 1800, 300)])
 store.write(server.UPSERT_WARN, [(now - 7200, 'ELECTRICITY MARGIN NOTICE', 'ELECTRICITY MARGIN NOTICE from 16:00 to 19:00 on 01/01/2030, shortfall 500 MW')], history=False)

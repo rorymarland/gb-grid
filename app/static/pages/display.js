@@ -561,6 +561,11 @@ function buildWeather(body, take) {
         h('div', null, [h('b', { text: (num(c.sun) ? Math.round(c.sun) : '–') + ' W/m²' }), h('span', { text: 'of sunshine' + (num(g.solar_gw) ? '; solar is making ' + f1(g.solar_gw) + ' GW' : '') })])
       ]));
       take.textContent = windy && calm ? 'Wind at hub height ranges from ' + f1(calm[1]) + ' to ' + f1(windy[1]) + ' m/s over the next two days.' : '';
+      // Storm shutdowns in the next two days: the hour with the most wind farms over 25 m/s
+      var storm = null;
+      ((d.storms && d.storms.hours) || []).forEach(function (r) { if (r[0] <= d.now + 48 * 3600 && r[1] > 0 && (!storm || r[1] > storm[1])) storm = r; });
+      if (storm) take.textContent = 'Storm warning: ' + f1(storm[1] / 1000) + ' GW of wind farms could stop in winds over 25 m/s, ' +
+        (storm[0] <= d.now ? 'this hour' : G.day(storm[0]).split(' ')[0] + ' ' + G.hm(storm[0])) + '.';
     }
   };
 }

@@ -15,6 +15,7 @@ Then the page sets them against what the grid did: wind farms' output against wi
 power curve), demand against temperature, and solar output against sunshine, over the last 90
 days."""
 
+import json
 import math
 import time
 import urllib.parse
@@ -30,6 +31,10 @@ FIRST_DAYS = 92             # history on the first run (Open-Meteo's most)
 PAST_DAYS = 2
 AHEAD_DAYS = 8              # today and a week ahead
 KEEP = 100 * 86400
+# Turbines stop to protect themselves when the wind averages over about 25 m/s for ten minutes
+# (Ørsted; the exact cut-out speed and how quickly each model stops depend on the make)
+CUT_OUT = 25.0
+NEAR_CUT_OUT = 22.0         # an hourly forecast this close can still mean gusty ten-minute spells over 25
 
 VARIABLES = {'wind': 'wind_speed_100m', 'temp': 'temperature_2m', 'sun': 'shortwave_radiation'}
 # Asked for alongside wind speed, in the same request: where the wind blows from, in degrees
@@ -124,6 +129,9 @@ class Weather:
         if len(places) != len(points) or not all(isinstance(p, dict) and isinstance(p.get('hourly'), dict) for p in places):
             raise FetchError('Unexpected response shape from Open-Meteo')
         series, each = [], []
+        if kind == 'wind' and sum(p[3] for p in points) > len(points):
+            # Each point's capacity, for the storm warnings (not the stand-in weights without a station list)
+            self.store.set_meta('wind_point_mw', json.dumps({p[0]: round(p[3]) for p in points}))
         for point, place in zip(points, places):
             hourly = place['hourly']
             times, values = hourly.get('time') or [], hourly.get(VARIABLES[kind]) or []
@@ -161,7 +169,6 @@ class Weather:
             log.warning('[weather] %s', '; '.join(errors))
 
 
-
 def wind_points(store, now):
     """The wind 100 m up at each of the wind points for the hour now, for the map's arrows:
     [{n, x, y, v (m/s), d (degrees it blows from), t}]. Nothing if the hour isn't in yet."""
@@ -169,6 +176,59 @@ def wind_points(store, now):
     where = {p[0]: map_point(p[1], p[2]) for p in WIND_POINTS}
     return [{'n': name, 'x': where[name][0], 'y': where[name][1], 'v': v, 'd': d, 't': hour}
             for name, v, d in store.query('SELECT p, v, d FROM wxp WHERE t = ? ORDER BY p', (hour,)) if name in where]
+
+
+def point_capacity(store):
+    """{wind point: MW of wind farms nearest it}, as of the last weather poll."""
+    try:
+        value = json.loads(store.get_meta('wind_point_mw') or '{}')
+    except ValueError:
+        return {}
+    return {k: float(v) for k, v in value.items() if isinstance(v, (int, float))} if isinstance(value, dict) else {}
+
+
+def storms(store, now, capacity=None):
+    """Spells of wind near or over the speed at which turbines stop, at each wind point, from the
+    hour now to a week ahead. Each spell is a run of hours at or over NEAR_CUT_OUT:
+      {n, mw, start, end, peak, peak_t, hours_over, hours: [[t, m/s]], level: 'likely' if it reaches CUT_OUT else 'close'}
+    (end is the end of the last hour). Also, for each hour with any, the wind farm capacity (MW)
+    where the wind is over CUT_OUT and where it is close to it."""
+    hour = int(now - now % 3600)
+    capacity = point_capacity(store) if capacity is None else capacity
+    known = {p[0] for p in WIND_POINTS}
+    spells, current = [], None
+    # From a day back, so a spell under way now keeps its start
+    for name, t, v in store.query('SELECT p, t, v FROM wxp WHERE t >= ? AND t <= ? AND v >= ? ORDER BY p, t',
+                                  (hour - 86400, hour + 7 * 86400, NEAR_CUT_OUT)):
+        if name not in known:
+            continue
+        if current and current['n'] == name and t == current['end']:
+            current['end'] = t + 3600
+        else:
+            current = {'n': name, 'start': t, 'end': t + 3600, 'peak': v, 'peak_t': t, 'hours_over': 0, 'hours': []}
+            spells.append(current)
+        current['hours'].append([t, round(v, 1)])
+        if v > current['peak']:
+            current['peak'], current['peak_t'] = v, t
+        if v >= CUT_OUT:
+            current['hours_over'] += 1
+    spells = [sp for sp in spells if sp['end'] > hour]
+    hours = {}
+    for name, t, v in store.query('SELECT p, t, v FROM wxp WHERE t >= ? AND t <= ? AND v >= ?', (hour, hour + 7 * 86400, NEAR_CUT_OUT)):
+        if name in known:
+            entry = hours.setdefault(t, [0.0, 0.0])
+            entry[0 if v >= CUT_OUT else 1] += capacity.get(name, 0.0)
+    for sp in spells:
+        sp['mw'] = round(capacity.get(sp['n'], 0.0))
+        sp['peak'] = round(sp['peak'], 1)
+        sp['level'] = 'likely' if sp['peak'] >= CUT_OUT else 'close'
+    spells.sort(key=lambda sp: (sp['start'], -sp['peak']))
+    # The hour with the most capacity over the cut-out speed (the first, if several tie)
+    worst = max(sorted(hours.items()), key=lambda kv: (kv[1][0], kv[1][1], -kv[0]), default=None)
+    return {'cut_out': CUT_OUT, 'near': NEAR_CUT_OUT, 'hour': hour, 'spells': spells,
+            'hours': [[t, round(a), round(c)] for t, (a, c) in sorted(hours.items())],
+            'worst': {'t': worst[0], 'over_mw': round(worst[1][0]), 'close_mw': round(worst[1][1])} if worst and worst[1][0] > 0 else None,
+            'capacity_mw': round(sum(capacity.values()))}
 
 
 # ---- the page ---------------------------------------------------------------------
@@ -283,7 +343,7 @@ def view(store, now, live=None):
         grid = {'wind_gw': src.get('wind', {}).get('gw'), 'wind_tx_gw': (src.get('wind', {}).get('parts') or {}).get('transmission'),
                 'solar_gw': src.get('solar', {}).get('gw'), 'demand_gw': live.get('demand_gw'), 't': live.get('time')}
     return {'ready': True, 'now': int(now), 'hour': hour, 'week': week, 'current': current, 'grid': grid,
-            'relations': cached_relations(store, now)}
+            'storms': storms(store, now), 'relations': cached_relations(store, now)}
 
 
 _cache = {}

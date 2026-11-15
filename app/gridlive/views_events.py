@@ -3,9 +3,10 @@
 import json
 import time
 
+from . import inertia as inertia_data
 from .events import KINDS, event_links
 from .frequency import frequency_stats, histogram, inertia_at, response_at
-from .timeutil import uk_clock, uk_midnight_utc
+from .timeutil import floor_to, uk_clock, uk_midnight_utc
 
 FREQ_RANGES = {'1h': 3600, '6h': 6 * 3600, '24h': 86400, '7d': 7 * 86400}
 
@@ -36,6 +37,49 @@ class EventViews:
             events.append(e)
         return {'days': days, 'kinds': KINDS, 'counts': counts, 'events': events, 'generated': int(now)}
 
+    def inertia_payload(self, now):
+        """NESO's inertia figures and, if it has been tested well enough, the estimate from the mix."""
+        latest, count = self.store.query('SELECT MAX(t), COUNT(*) FROM inertia')[0]
+        lh_last = self.store.scalar('SELECT MAX(t) FROM lh')
+        published = self.cached(('inertia-published',), (latest, count, int(now // 3600)),
+                                lambda: inertia_data.published(self.store, now))
+        model = self.cached(('inertia-model',), (latest, count, lh_last), lambda: inertia_data.build_model(self.store))
+        estimate = None
+        if model.get('ok'):
+            t = self.latest_generation_time()
+            if t and now - t < 3 * 3600:
+                series = self.cached(('inertia-estimate',), (latest, count, lh_last, t), lambda: self._inertia_estimates(model, t))
+                tested = model['tested']
+                estimate = {'t': series['t'][-1], 'gvas': series['v'][-1], 'series': series,
+                            'mae': round(tested['mae'], 1), 'mape': round(tested['mape'], 1), 'p90': round(tested['p90']),
+                            'bias': round(tested['bias'], 1), 'tested': tested['n'], 'test_from': model['test_from'],
+                            'test_to': model['test_to']} if series['t'] else None
+        why = None if estimate else (model.get('why') or 'no live generation figures')
+        if not published and not estimate:
+            return None
+        return {'published': published, 'estimate': estimate, 'no_estimate': why,
+                'max_error': inertia_data.ESTIMATE_MAX_ERROR}
+
+    def _inertia_estimates(self, model, latest):
+        """The estimate every half hour over the last two days, from the five-minute mix, with the
+        latest five minutes last."""
+        start = floor_to(latest, 1800) - 2 * 86400
+        generation = self.load_generation(start, latest)
+        wind, solar, _, _ = self.load_embedded(start, latest + 1800)
+        mixes = []
+        for h in range(start, latest + 1, 1800):
+            samples = [generation[s] for s in range(h, min(h + 1800, latest + 1), 300) if s in generation]
+            if len(samples) < (2 if h + 1800 <= latest else 1):
+                continue
+            codes = set().union(*samples)
+            fuels = {code: sum(sample.get(code, 0.0) for sample in samples) / len(samples) for code in codes}
+            mixes.append((h, self.mix(fuels, self.average_half_hours(wind, h, h + 1800), self.average_half_hours(solar, h, h + 1800))))
+        if latest in generation:
+            if mixes and mixes[-1][0] == latest:
+                mixes.pop()
+            mixes.append((latest, self.mix(generation[latest], self.interpolate(wind, latest), self.interpolate(solar, latest))))
+        return inertia_data.estimate(model, mixes)
+
     def frequency_payload(self, range_key='1h', event=None):
         range_key = range_key if range_key in FREQ_RANGES else '1h'
         version = (self.store.version, range_key, event, int(time.time() // 15))
@@ -63,17 +107,7 @@ class EventViews:
         today = [r for r in rows if r[0] >= today_start]
         last24 = [r for r in rows if r[0] > end - 86400]
         latest = {'t': int(rows[-1][0]), 'hz': round(rows[-1][1], 3)} if rows else None
-        # Inertia: the latest published half hour, and the last week
-        # Inertia: the latest published week, however far behind NESO is
-        inertia_last = self.store.scalar("SELECT MAX(t) FROM hh WHERE k = 'inertia'") or now
-        inertia_rows = self.store.query("SELECT t, v FROM hh WHERE k = 'inertia' AND t > ? ORDER BY t", (inertia_last - 7 * 86400,))
-        market = dict(self.store.query("SELECT t, v FROM hh WHERE k = 'inertia_mkt' AND t > ?", (inertia_last - 7 * 86400,)))
-        inertia = None
-        if inertia_rows:
-            t, v = inertia_rows[-1]
-            inertia = {'t': t, 'gvas': round(v), 'market': round(market[t]) if market.get(t) is not None else None,
-                       'series': {'t': [r[0] for r in inertia_rows], 'v': [round(r[1]) for r in inertia_rows]},
-                       'low': min(round(r[1]) for r in inertia_rows), 'high': max(round(r[1]) for r in inertia_rows)}
+        inertia = self.inertia_payload(now)
         held = response_at(self.store, now)
         window_row = self.store.query('SELECT MIN(start), MAX(end) FROM resp WHERE start <= ? AND end > ?', (now, now))
         response = {'held': held, 'from': window_row[0][0] if window_row else None, 'to': window_row[0][1] if window_row else None,

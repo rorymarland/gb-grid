@@ -1,0 +1,87 @@
+/* What's being built. The stages are one blue ramp, light for scoping to dark for building
+   (lighter in dark mode), checked for adjacent separation with the dataviz validator; the
+   numbers are always written beside them and in the table, as the lightest step is faint. */
+:root { --pl-scoping: #b4d0ee; --pl-awaiting: #6c9fd8; --pl-consented: #2e6cb6; --pl-building: #163f72;
+  --pl-gate-two: #163f72; --pl-gate-one: #6c9fd8; --pl-gate-none: var(--chip); }
+:root[data-theme="dark"] { --pl-scoping: #1e3f66; --pl-awaiting: #2f68a8; --pl-consented: #5b97dc; --pl-building: #a9cdf5;
+  --pl-gate-two: #a9cdf5; --pl-gate-one: #2f68a8; --pl-gate-none: var(--axis); }
+
+.pl-waiting { padding: 8px 0 60px; font-size: 17px; color: var(--ink-2); max-width: 66ch; }
+
+.pl-now { padding: 0 0 26px; }
+.pl-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 28px; margin: 4px 0 0; }
+.pl-figures > div { min-width: 0; }
+.pl-figures dt { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.pl-figures dd { margin: 0; font-size: 28px; font-weight: 620; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.pl-figures dd small { font-size: 14px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; margin-left: 5px; }
+.pl-figures dd .more { display: block; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-top: 3px; line-height: 1.4; }
+
+/* Stage colours, for bars, columns, swatches and tooltip keys */
+.pl-scoping { background: var(--pl-scoping); fill: var(--pl-scoping); }
+.pl-awaiting { background: var(--pl-awaiting); fill: var(--pl-awaiting); }
+.pl-consented { background: var(--pl-consented); fill: var(--pl-consented); }
+.pl-building { background: var(--pl-building); fill: var(--pl-building); }
+.pl-built { background: var(--ink-2); }
+.pl-gate-two { background: var(--pl-gate-two); }
+.pl-gate-one { background: var(--pl-gate-one); }
+.pl-gate-none { background: var(--pl-gate-none); }
+.sw.pl-scoping, .sw.pl-awaiting, .sw.pl-consented, .sw.pl-building, .sw.pl-built, .sw[class*="pl-gate-"] { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; }
+
+.pl-key { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 14px; padding: 0; font-size: 13.5px; color: var(--ink-2); }
+.pl-key li { display: inline-flex; align-items: center; gap: 7px; }
+
+/* By kind: one stacked bar each */
+.pl-kinds { position: relative; }
+.pl-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) 130px; gap: 4px 16px; align-items: center; padding: 9px 0; border-top: 1px solid var(--hair); }
+.pl-row:first-child { border-top: 0; }
+.pl-row .nm { font-size: 14.5px; font-weight: 560; min-width: 0; }
+.pl-bar { display: flex; gap: 2px; height: 14px; min-width: 0; }
+.pl-bar i { display: block; height: 100%; min-width: 2px; }
+.pl-bar i:first-child { border-radius: 4px 0 0 4px; }
+.pl-bar i:last-child { border-radius: 0 4px 4px 0; }
+.pl-bar i:only-child { border-radius: 4px; }
+.pl-row .val { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; font-size: 15px; }
+.pl-row .val small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.pl-note { margin: 12px 0 0; font-size: 13.5px; color: var(--ink-2); max-width: 80ch; line-height: 1.5; }
+.pl-note:empty { display: none; }
+.pl-empty { margin: 0; padding: 24px 0; color: var(--muted); font-size: 14px; max-width: 60ch; }
+
+.pl-table-wrap { margin-top: 14px; font-size: 14px; }
+.pl-table-wrap summary { cursor: pointer; color: var(--ink-2); font-weight: 560; }
+.pl-table, .pl-soon { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 8px; }
+.pl-table th, .pl-table td, .pl-soon th, .pl-soon td { padding: 8px 10px 8px 0; border-top: 1px solid var(--hair); text-align: left; vertical-align: top; }
+.pl-table thead th, .pl-soon thead th { border-top: 0; font-size: 12.5px; font-weight: 560; color: var(--muted); }
+.pl-table .num, .pl-soon .num { text-align: right; font-variant-numeric: tabular-nums; }
+.pl-table tbody th, .pl-soon tbody th { font-weight: 560; }
+.pl-soon small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.pl-soon .nowrap { white-space: nowrap; }
+
+/* By year */
+.pl-years { position: relative; min-height: 260px; }
+.pl-years svg { display: block; width: 100%; }
+
+/* Gates */
+.pl-gatebar { display: flex; gap: 2px; height: 16px; margin: 14px 0 10px; }
+.pl-gatebar i { display: block; height: 100%; min-width: 2px; }
+.pl-gatebar i:first-child { border-radius: 4px 0 0 4px; }
+.pl-gatebar i:last-child { border-radius: 0 4px 4px 0; }
+.pl-gatekey { list-style: none; margin: 0; padding: 0; font-size: 14px; display: grid; gap: 6px; }
+.pl-gatekey li { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.pl-gatekey b { color: var(--ink); font-weight: 600; }
+
+/* The trend */
+#trend svg { display: block; width: 100%; }
+.pl-trend { fill: none; stroke: var(--pl-consented); stroke-width: 2; stroke-linejoin: round; }
+
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; align-items: start; }
+
+@media (max-width: 900px) {
+  .pl-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .pl-figures dd { font-size: 24px; }
+  .pl-row { grid-template-columns: minmax(0, 1fr) 104px; }
+  .pl-bar { grid-column: 1 / -1; grid-row: 2; }
+  .pl-soon td:nth-child(3), .pl-soon th:nth-child(3) { display: none; }
+}
