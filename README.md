@@ -73,6 +73,22 @@ The box beside the map finds a station by name: type a few letters, pick it
 (arrow keys and Enter work), and the map zooms to it and opens its card, even
 if its type is hidden.
 
+Three more things can go on the map, each with its own switch beside it:
+
+- **Wind turned down now:** a dashed ring around a wind farm NESO is paying to
+  make less than it planned, sized for what it would be making, from the
+  instructions in Elexon's bid-offer acceptances.
+- **Outages now:** a dashed red ring the size of the capacity a station has
+  out, from the outage notices; hover for whether it was planned and when
+  it's due back.
+- **Transmission boundaries:** every ETYS boundary faintly, with B4 (the
+  north of Scotland to the Central Belt) and B6 (Scotland to England)
+  coloured by NESO's day-ahead forecast of flow against limit for this half
+  hour, and labelled with both.
+
+Each interconnector's label also gives its country's carbon intensity, live
+or typical, as on the Overview.
+
 Select a station for its card: a photo from Wikimedia Commons with its
 photographer and licence (131 stations so far, including every nuclear and
 pumped storage station and most of the big gas and hydro ones), or a small

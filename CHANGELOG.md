@@ -4,6 +4,21 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.16.0 (unreleased)
+
+- **Also on the map**, each with a switch: wind farms NESO is turning down
+  now, as a dashed ring sized for what they'd otherwise make; stations with
+  an outage now, as a dashed red ring the size of the capacity that's out,
+  with the reason and when it's due back on hover; and the transmission
+  boundaries, with B4 and B6 coloured and labelled by NESO's day-ahead
+  forecast of flow against limit for this half hour. The time machine shows
+  none of them, as they're about now.
+- Each **interconnector** on the map is labelled with its country's carbon
+  intensity, live or typical, and its hover card says where the figure
+  comes from.
+- `/api/map` gains `dn` (MW of wind turned down) and `ol` (an outage now) on
+  stations, and `boundaries`.
+
 ## 1.15.0 (2026-11-15)
 
 - **Find a power station** on the Map: type a few letters of its name and

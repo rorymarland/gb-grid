@@ -224,3 +224,15 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
   .hint .hint-mouse { display: none; }
   .hint .hint-touch { display: inline; }
 }
+
+/* Also on the map: the switches and their key (the marks themselves are in stationmap.css) */
+.sw.ring { width: 12px; height: 12px; border-radius: 50%; background: none; box-sizing: border-box; flex: none; }
+.sw.ring-turned-sw { border: 1.6px dashed var(--c-wind); }
+.sw.ring-out-sw { border: 1.6px dashed var(--bad); }
+.sw.line.bnd-sw { width: 16px; height: 0; border-top: 2.4px solid var(--good); background: none; flex: none; }
+.switch .sw { display: inline-block; }
+.layer-note { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.bnd-key { font-weight: 600; color: var(--ink-2); }
+.bnd-key::before { content: ''; display: inline-block; width: 12px; height: 0; border-top: 2.4px solid var(--good); margin: 0 4px 3px 0; vertical-align: middle; }
+.bnd-key.near::before { border-top-color: var(--warn); }
+.bnd-key.over::before { border-top-color: var(--bad); }

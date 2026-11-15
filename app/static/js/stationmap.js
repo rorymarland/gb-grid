@@ -19,6 +19,10 @@
      onInteract() the person panned, zoomed or dragged
      onKey(e)     page keys first; return true if handled
      onMessage(text or null), onResize()
+     overlays()   which extras to draw: { turned: wind turned down, outages, boundaries }
+                  (default: none). Station data can carry dn (MW of wind turned down) and
+                  ol ({ lost, end, planned, cause } for an outage now); the payload can carry
+                  boundaries ([{ id, name, flow, lim }]) and neighbour_ci.
 */
 
 import { s, clear } from './dom.js';
@@ -46,8 +50,10 @@ export function createStationMap(opts) {
 
   var M = {
     ready: false, s: 1, tx: 0, ty: 0, W: 0, H: 0, minS: 0.1, maxS: 10, fitS: 1, moved: false,
-    nodes: {}, order: [], screen: [], links: [], linkNodes: {}, hoverId: null, hoverLink: null, raf: 0, K: 0.42
+    nodes: {}, order: [], screen: [], links: [], linkNodes: {}, hoverId: null, hoverLink: null, raf: 0, K: 0.42,
+    bounds: null, boundNodes: {}, boundLabels: {}
   };
+  function overlay(name) { return Boolean(opts.overlays && opts.overlays()[name]); }
 
   function init() {
     M.stage = opts.stage;
@@ -55,10 +61,11 @@ export function createStationMap(opts) {
     M.gLand = s('g');
     M.gGeoLabels = s('g');
     M.gLinks = s('g');
+    M.gRings = s('g', { 'class': 'rings' });
     M.gStations = s('g');
     M.gLabels = s('g');
     M.gEnds = s('g');
-    [M.gLand, M.gGeoLabels, M.gLinks, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
+    [M.gLand, M.gGeoLabels, M.gLinks, M.gRings, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
     fetch('/geo.json').then(function (r) { return r.json(); }).then(function (geo) {
       M.geo = geo;
       var inner = s('g', { transform: 'scale(0.5)' });
@@ -66,6 +73,9 @@ export function createStationMap(opts) {
         inner.appendChild(s('path', { d: unit.d, 'class': unit.kind === 'gb' ? 'land' : 'land-near', 'fill-rule': 'evenodd' }));
       });
       M.gLand.appendChild(inner);
+      // Transmission boundaries, in the same units as the land; drawn only when asked for
+      M.gBounds = s('g', { transform: 'scale(0.5)', 'class': 'bounds' });
+      M.gLand.appendChild(M.gBounds);
       M.geoLabels = geo.labels.map(function (label) {
         var node = s('text', { 'class': 'geo-label ' + (label.k === 'gb' ? 'gb' : label.k === 'sea' ? 'sea' : ''), text: label.t });
         M.gGeoLabels.appendChild(node);
@@ -339,6 +349,12 @@ export function createStationMap(opts) {
     if (!id && !code && opts.onHover) opts.onHover(null);
   }
 
+  function placeRing(node, x, y, r) {
+    node.setAttribute('cx', x.toFixed(1));
+    node.setAttribute('cy', y.toFixed(1));
+    node.setAttribute('r', r.toFixed(2));
+  }
+
   function radius(st) {
     if (isIdle(st)) return 3;
     return Math.max(2.5, Math.sqrt(Math.abs(st.mw)) * M.K);
@@ -355,6 +371,7 @@ export function createStationMap(opts) {
     }
     refreshStations();
     drawLinks(data.links || []);
+    drawBounds(data.boundaries || []);
     requestRedraw();
   }
 
@@ -381,12 +398,94 @@ export function createStationMap(opts) {
       var visible = !opts.visible || opts.visible(st);
       entry.node.style.display = visible ? '' : 'none';
       entry.visible = visible;
+      // What a turned-down wind farm would be making: a dashed ring at that size
+      entry.turned = visible && overlay('turned') && num(st.dn) && st.dn >= 1;
+      // A station with an outage: a ring the size of the capacity that's out
+      entry.out = visible && overlay('outages') && st.ol && st.ol.lost >= 1;
+      ['turned', 'out'].forEach(function (kind) {
+        var key = kind + 'Ring';
+        if (entry[kind] && !entry[key]) { entry[key] = s('circle', { 'class': kind === 'turned' ? 'ring-turned' : 'ring-out' }); M.gRings.appendChild(entry[key]); }
+        if (entry[key]) entry[key].style.display = entry[kind] ? '' : 'none';
+      });
     });
     Object.keys(M.nodes).forEach(function (id) {
-      if (!seen[id]) { M.nodes[id].node.remove(); delete M.nodes[id]; }
+      if (seen[id]) return;
+      ['node', 'turnedRing', 'outRing'].forEach(function (k) { if (M.nodes[id][k]) M.nodes[id][k].remove(); });
+      delete M.nodes[id];
     });
     M.order = list.map(function (st) { return M.nodes[st.id]; }).sort(function (a, b) { return radius(b.st) - radius(a.st); });
     M.order.forEach(function (entry) { M.gStations.appendChild(entry.node); });
+  }
+
+  /* The transmission boundaries: every one faintly, and those with NESO's forecast for now coloured
+     by how close the flow is to the limit, with a label at the middle of the line */
+  function drawBounds(now) {
+    if (!overlay('boundaries')) { if (M.gBounds) M.gBounds.style.display = 'none'; hideBoundLabels(); M.boundsNow = []; return; }
+    if (!M.bounds) {
+      if (!M.boundsLoading) {
+        M.boundsLoading = true;
+        fetch('/boundaries.json').then(function (r) { return r.json(); }).then(function (b) { M.bounds = b.boundaries || []; draw(); })
+          .catch(function () { M.boundsLoading = false; });
+      }
+      return;
+    }
+    M.gBounds.style.display = '';
+    var byId = {};
+    now.forEach(function (b) { byId[b.id] = b; });
+    M.boundsNow = [];
+    M.bounds.forEach(function (b) {
+      var node = M.boundNodes[b.id];
+      if (!node) {
+        node = M.boundNodes[b.id] = s('path', { d: b.d });
+        M.gBounds.appendChild(node);
+        var pts = (b.d.match(/-?\d+(\.\d+)? -?\d+(\.\d+)?/g) || []).map(function (p) { return p.split(' ').map(Number); });
+        node.mid = pts.length ? [pts[Math.floor(pts.length / 2)][0] / 2, pts[Math.floor(pts.length / 2)][1] / 2] : null;
+      }
+      var f = byId[b.id];
+      // A flow below zero runs the other way (north, for B4 and B6), well clear of the limit
+      var share = f ? Math.max(0, f.flow) / f.lim : null;
+      node.setAttribute('class', 'bnd' + (f ? ' live ' + (share >= 1 ? 'over' : share >= 0.9 ? 'near' : 'ok') : ''));
+      if (f && node.mid) M.boundsNow.push({ id: b.id, f: f, share: share, mid: node.mid });
+    });
+    Object.keys(M.boundLabels).forEach(function (id) { if (!byId[id]) { M.boundLabels[id].remove(); delete M.boundLabels[id]; } });
+    M.boundsNow.forEach(function (b) {
+      var label = M.boundLabels[b.id];
+      if (!label) {
+        label = M.boundLabels[b.id] = s('text', { 'class': 'bnd-label' }, [s('tspan'), s('tspan', { 'class': 'v' })]);
+        M.gEnds.appendChild(label);
+      }
+      label.setAttribute('class', 'bnd-label ' + (b.share >= 1 ? 'over' : b.share >= 0.9 ? 'near' : 'ok'));
+      if (b.f.flow < 0) {
+        b.long = [b.id + ' flowing north', gw(-b.f.flow) + ' GW, forecast'];
+        b.short = b.id + ' north';
+      } else {
+        b.long = [b.id + ' ' + Math.round(100 * b.share) + '% of its limit', gw(b.f.flow) + ' of ' + gw(b.f.lim) + ' GW, forecast'];
+        b.short = b.id + ' ' + Math.round(100 * b.share) + '%';
+      }
+    });
+  }
+  function hideBoundLabels() { Object.keys(M.boundLabels).forEach(function (id) { M.boundLabels[id].style.display = 'none'; }); }
+
+  /* Boundary labels go first, so the lines they explain are never left bare */
+  function placeBoundLabels(taken) {
+    (M.boundsNow || []).forEach(function (b) {
+      var label = M.boundLabels[b.id];
+      if (!label) return;
+      // On a phone-sized map, just the boundary and its share, until you zoom in
+      var few = small(), spans = label.childNodes;
+      spans[0].textContent = few ? b.short : b.long[0];
+      spans[1].textContent = few ? '' : b.long[1];
+      var x = sx(b.mid[0]), y = sy(b.mid[1]) - (few ? 8 : 16);
+      var width = Math.max(textWidth(spans[0].textContent, 11.5, 650), textWidth(spans[1].textContent, 11.5, 400));
+      var box = [x - width / 2 - 2, y - 13, x + width / 2 + 2, y + (few ? 4 : 17)];
+      var show = x > width / 2 && x < M.W - width / 2 && y > 14 && y < M.H - 20 && !overlaps(box, taken);
+      label.style.display = show ? '' : 'none';
+      if (!show) return;
+      taken.push(box);
+      label.setAttribute('text-anchor', 'middle');
+      spans[0].setAttribute('x', x.toFixed(1)); spans[0].setAttribute('y', y.toFixed(1));
+      spans[1].setAttribute('x', x.toFixed(1)); spans[1].setAttribute('y', (y + 14).toFixed(1));
+    });
   }
 
   function drawLinks(links) {
@@ -405,7 +504,7 @@ export function createStationMap(opts) {
         M.gLinks.appendChild(link.g);
         link.end = s('circle', { 'class': 'link-end', r: 3.5 });
         link.gbEnd = s('circle', { 'class': 'link-gb', r: 3 });
-        link.label = s('text', { 'class': 'link-label' }, [s('tspan'), s('tspan', { 'class': 'v' })]);
+        link.label = s('text', { 'class': 'link-label' }, [s('tspan'), s('tspan', { 'class': 'v' }), s('tspan', { 'class': 'ci' })]);
         M.gEnds.appendChild(link.end);
         M.gEnds.appendChild(link.gbEnd);
         M.gEnds.appendChild(link.label);
@@ -425,6 +524,10 @@ export function createStationMap(opts) {
       }
       link.label.childNodes[0].textContent = link.name;
       link.label.childNodes[1].textContent = linkWords(link);
+      // The neighbour's carbon intensity, live or typical
+      var ci = (M.data.neighbour_ci || {})[link.country];
+      link.ciText = ci && num(ci.v) ? (ci.live ? '' : 'about ') + ci.v + ' g/kWh' : '';
+      link.label.childNodes[2].textContent = link.ciText;
       return link;
     });
     Object.keys(M.linkNodes).forEach(function (code) {
@@ -454,10 +557,13 @@ export function createStationMap(opts) {
       entry.node.setAttribute('cx', x.toFixed(1));
       entry.node.setAttribute('cy', y.toFixed(1));
       entry.node.setAttribute('r', r.toFixed(2));
+      if (entry.turned) placeRing(entry.turnedRing, x, y, Math.max(r + 2, Math.sqrt(Math.abs(st.mw) + st.dn) * M.K));
+      if (entry.out) placeRing(entry.outRing, x, y, Math.max(r + 2.5, Math.sqrt(st.ol.lost) * M.K));
       if (entry.visible && x > -40 && x < W + 40 && y > -40 && y < H + 40) M.screen.push({ id: st.id, sx: x, sy: y, r: r, st: st });
     });
     M.links.forEach(redrawLink);
     var taken = [];
+    placeBoundLabels(taken);
     placeLinkLabels(taken);
     drawStationLabels(taken);
     placeGeoLabels(taken);
@@ -479,7 +585,8 @@ export function createStationMap(opts) {
       var end = [sx(link.far[0]), sy(link.far[1])];
       var place = LINK_LABEL[link.code] || [8, 4, 'start'];
       var value = linkWords(link);
-      var width = Math.max(textWidth(link.name, 11.5, 400), textWidth(value, 11.5, 650));
+      var width = Math.max(textWidth(link.name, 11.5, 400), textWidth(value, 11.5, 650), textWidth(link.ciText || '', 11, 400));
+      var extra = link.ciText ? 13 : 0;
       var onScreen = rank < room && end[0] > -30 && end[0] < M.W + 30 && end[1] > -30 && end[1] < M.H + 30;
       var chosen = null;
       if (onScreen) {
@@ -487,7 +594,7 @@ export function createStationMap(opts) {
           var x = end[0] + place[0], y = end[1] + dy;
           var left = place[2] === 'start' ? x : place[2] === 'end' ? x - width : x - width / 2;
           var shift = clamp(left, 6, M.W - width - 6) - left;
-          var box = [left + shift - 2, y - 19, left + shift + width + 2, y + 11];
+          var box = [left + shift - 2, y - 19, left + shift + width + 2, y + 11 + extra];
           if (box[1] < 2 || box[3] > M.H - 2 || overlaps(box, taken)) return false;
           chosen = { x: x + shift, y: y, box: box };
           return true;
@@ -503,6 +610,8 @@ export function createStationMap(opts) {
       spans[1].setAttribute('x', chosen.x.toFixed(1));
       spans[1].setAttribute('y', (chosen.y + 7).toFixed(1));
       spans[1].textContent = value;
+      spans[2].setAttribute('x', chosen.x.toFixed(1));
+      spans[2].setAttribute('y', (chosen.y + 20).toFixed(1));
     });
   }
 

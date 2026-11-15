@@ -516,6 +516,54 @@ by_id = {e['id']: e for e in listing['events']}
 check('outage events link to the station page', {'t': 'About this station', 'href': '/station?id=1'} in by_id['out-a']['links'], by_id['out-a']['links'])
 check('other events do not', not any('/station' in l['href'] for l in by_id['freq-a']['links']), by_id['freq-a']['links'])
 
+# ---- the map's overlays: wind turned down, outages now, boundaries ----------------
+class OverlayUnits(FakeUnits):
+    snapshot = dict(FakeUnits.snapshot)
+    snapshot['instructions'] = [
+        # Station 3 (a wind farm) turned down by 120 and 30 MW on two units; a gas unit turned up and an unknown unit are left out
+        {'unit': 'W-1', 'elexon': 'T_W-1', 'sid': 3, 'cat': 'wind', 'delta': -120.0, 'level': 80.0},
+        {'unit': 'W-2', 'elexon': 'T_W-2', 'sid': 3, 'cat': 'wind', 'delta': -30.4, 'level': 10.0},
+        {'unit': 'G-1', 'elexon': 'T_G-1', 'sid': 1, 'cat': 'gas', 'delta': 50.0, 'level': 300.0},
+        {'unit': 'X-9', 'elexon': 'T_X-9', 'sid': None, 'cat': 'wind', 'delta': -99.0, 'level': 0.0},
+    ]
+    snapshot['stations'] = dict(FakeUnits.snapshot['stations'])
+    snapshot['stations'][3] = {'mw': 90.0, 'units': 2, 'running': 2, 'ref_cap': 400.0, 'instructed': 2, 'list': []}
+    snapshot.update({'categories': {}, 'scale': {}, 'unplaced': [], 'unplaced_count': 0, 'counts': {}, 'reference_units': 0,
+                     'reference_error': None, 'period': ['2026-11-15', 12]})
+
+
+class OverlayOutages:
+    version = 3
+    lock = server.threading.Lock()
+    checked = 0
+    margin = []
+    def __init__(self, events):
+        self.events = events
+
+
+now = server.time.time()
+outs = OverlayOutages([{'asset': 'T_TORN-1', 'unit': 'TORN-1', 'lost': 595.0, 'normal': 595.0, 'type': 'Unplanned', 'cause': 'Reactor trip',
+                        'start': now - 3600, 'end': now + 86400, 'fuel': ''}])
+map_store = server.Store(tempfile.mkdtemp())
+half = int(now - now % 1800)
+map_store.write('INSERT INTO bflow (grp, t, flow, lim) VALUES (?, ?, ?, ?)', [
+    ('SCOTEX', half, 4900, 5300), ('SSE_SP', half, -200, 3000), ('SSE_SP2', half, 2000, 2500),
+    ('SEIMP', half, 9000, 9100),                      # no boundary on the map, so left out
+    ('SCOTEX', half - 1800, 6000, 5300)], history=False)
+overlay_grid = server.Grid(map_store, server.Status(), fleet, OverlayUnits(), outages=outs)
+overlay_grid.units.describe = lambda unit, asset='': (1, 'nuclear', 'Torness')
+m = overlay_grid.map_data()
+by_sid = {st['id']: st for st in m['stations']}
+check('map: wind turned down, added up per farm', by_sid[3].get('dn') == 150 and 'dn' not in by_sid[1], by_sid[3])
+check('map: an outage now on its station', by_sid[1].get('ol') == {'lost': 595, 'end': now + 86400, 'planned': False, 'cause': 'Reactor trip'}, by_sid[1].get('ol'))
+check('map: no outage, no ring', 'ol' not in by_sid[3])
+bnd = {b['id']: b for b in m['boundaries']}
+check('map: B6 for this half hour', bnd['B6']['flow'] == 4900 and bnd['B6']['lim'] == 5300 and bnd['B6']['t'] == half, bnd.get('B6'))
+# B4 has two groups: the one nearer its limit (2,000 of 2,500, 80%) wins over the other (flowing north)
+check('map: B4 from its busiest group', bnd['B4']['group'] == 'SSE_SP2' and bnd['B4']['flow'] == 2000, bnd.get('B4'))
+check('map: only boundaries drawn on the map', sorted(bnd) == ['B4', 'B6'])
+check('map: no forecast for now, no boundaries', server.Grid(server.Store(tempfile.mkdtemp()), server.Status(), fleet, OverlayUnits()).map_boundaries(now) == [])
+
 # ---- notifications ----------------------------------------------------------
 
 import json as _json

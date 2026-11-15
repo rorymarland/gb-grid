@@ -10,6 +10,7 @@ from .events import event_links
 from .timeutil import floor_to
 from .store import STATION_HISTORY_DAYS
 from .photos import file_key
+from .constraints import label as constraint_label
 from .units import CATEGORY_LABELS, CATEGORY_ORDER, FUEL_NAMES, LINK_ENDS, map_point
 
 
@@ -59,8 +60,25 @@ class MapViews:
     # ---- /api/map and /api/station -------------------------------------
 
     def map_data(self):
-        version = (self.store.version, self.units.version if self.units else 0)
+        # The boundary forecast moves on each half hour, and outages change on their own
+        version = (self.store.version, self.units.version if self.units else 0,
+                   self.outages.version if self.outages else 0, int(time.time() // 1800))
         return self.cached(('map',), version, self._build_map)
+
+    def map_boundaries(self, now):
+        """Each map boundary NESO's day-ahead forecast names, for the half hour now: the constraint
+        group with the highest share of its limit, as {id, group, name, flow, lim, t}."""
+        t = self.store.scalar('SELECT MAX(t) FROM bflow WHERE t <= ? AND t > ?', (now, now - 3600))
+        if t is None:
+            return []
+        best = {}
+        for grp, flow, lim in self.store.query('SELECT grp, flow, lim FROM bflow WHERE t = ?', (t,)):
+            name, boundary = constraint_label(grp)
+            if not boundary or not lim or lim <= 0:
+                continue
+            if boundary not in best or flow / lim > best[boundary]['flow'] / best[boundary]['lim']:
+                best[boundary] = {'id': boundary, 'group': grp, 'name': name, 'flow': flow, 'lim': lim, 't': t}
+        return sorted(best.values(), key=lambda b: b['id'])
 
     def _build_map(self):
         live = self.live()
@@ -74,6 +92,7 @@ class MapViews:
             'unplaced': [], 'model': None,
             'neighbour_ci': {c['country']: c.get('ci') for c in live.get('countries', [])},
             'imports_ci': live.get('imports_ci'),
+            'boundaries': self.map_boundaries(time.time()),
         }
         for link in live.get('links', []):
             item = {'code': link['code'], 'name': link['name'], 'country': link['country'], 'note': link['note'],
@@ -114,15 +133,32 @@ class MapViews:
             })
         if not snapshot:
             return payload
+        # Wind farms told to make less than they'd planned: NESO turning them down, mostly for constraints
+        turned_down = {}
+        for ins in snapshot.get('instructions', []):
+            if ins['sid'] is not None and ins['cat'] == 'wind' and ins['delta'] < 0:
+                turned_down[ins['sid']] = turned_down.get(ins['sid'], 0.0) - ins['delta']
+        # Stations with an outage now, from the outage notices
+        out_now = {}
+        if self.outages:
+            for item in self.outages_payload().get('offline', []):
+                if item['sid'] is not None and item['lost'] >= 1:
+                    out_now[item['sid']] = item
         for sid, st in sorted(snapshot['stations'].items(), key=lambda item: -abs(item[1]['mw'])):
             station = self.fleet.stations[sid]
             capacity = station['capacity'] or st['ref_cap']
-            payload['stations'].append({
+            item = {
                 'id': sid, 'n': station['name'], 'c': station['cat'], 'x': station['x'], 'y': station['y'],
                 'na': station['nation'], 'off': 1 if station['offshore'] else 0,
                 'cap': round(capacity) if capacity else None, 'mw': round(st['mw'], 1),
                 'u': st['units'], 'on': st['running'], 'i': st['instructed'],
-            })
+            }
+            if turned_down.get(sid, 0) >= 1:
+                item['dn'] = round(turned_down[sid])
+            o = out_now.get(sid)
+            if o:
+                item['ol'] = {'lost': o['lost'], 'end': o['end'], 'planned': o['planned'], 'cause': o['cause']}
+            payload['stations'].append(item)
         payload['unplaced'] = snapshot['unplaced']
         payload['model'] = {
             'basis': snapshot['basis'], 'at': snapshot['at'], 'time': snapshot['time'],

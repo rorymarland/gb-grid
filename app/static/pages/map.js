@@ -13,17 +13,21 @@ var state = {
   data: null, text: '', failures: 0, lastOk: 0, timer: null, view: 'map',
   hidden: {}, showIdle: true, selected: null, highlight: null, stationHistory: {}, cards: {},
   sort: { key: 'mw', dir: -1 }, query: '', nation: 'all', cats: {}, includeIdle: false,
-  openRow: null, showAll: false, fuelOrder: null, fuelOrderTime: null
+  openRow: null, showAll: false, fuelOrder: null, fuelOrderTime: null,
+  layers: { turned: true, outages: true, boundaries: true }
 };
 try {
   var saved = JSON.parse(localStorage.getItem('gb-grid-map') || '{}');
   if (saved && typeof saved === 'object') {
     if (saved.hidden) state.hidden = saved.hidden;
     if (saved.showIdle === false) state.showIdle = false;
+    if (saved.layers && typeof saved.layers === 'object') {
+      Object.keys(state.layers).forEach(function (k) { if (typeof saved.layers[k] === 'boolean') state.layers[k] = saved.layers[k]; });
+    }
   }
 } catch (error) { /* storage unavailable */ }
 function savePrefs() {
-  try { localStorage.setItem('gb-grid-map', JSON.stringify({ hidden: state.hidden, showIdle: state.showIdle })); } catch (error) { /* ignore */ }
+  try { localStorage.setItem('gb-grid-map', JSON.stringify({ hidden: state.hidden, showIdle: state.showIdle, layers: state.layers })); } catch (error) { /* ignore */ }
 }
 
 /* ---------- small helpers ---------- */
@@ -194,6 +198,7 @@ function initMap() {
     visible: function (st) { return st.id === state.selected || ((!state.hidden[st.c] || state.highlight === st.c) && (state.showIdle || !isIdle(st))); },
     selected: function () { return state.selected; },
     dimmed: function (st) { return Boolean(state.highlight && state.highlight !== st.c); },
+    overlays: function () { return state.view === 'map' && !(state.data && state.data.replay) ? state.layers : {}; },
     onHover: function (hit, p) {
       if (!hit) tip.hide();
       else if (hit.station) showStationTip(hit.station, p);
@@ -309,6 +314,10 @@ function stationRows(st) {
   rows.push({ value: NAMES[st.c] || st.c, label: where(st) });
   if (!st.replay) rows.push({ value: st.on + ' of ' + st.u, label: st.u === 1 ? 'unit running' : 'units running' });
   if (st.i) rows.push({ value: String(st.i), label: st.i === 1 ? 'unit following a grid instruction' : 'units following grid instructions' });
+  if (num(st.dn) && st.dn >= 1) rows.push({ cls: 'ring-turned-sw', value: mw(st.dn) + ' MW', label: 'turned down by NESO' });
+  if (st.ol && st.ol.lost >= 1) {
+    rows.push({ cls: 'ring-out-sw', value: mw(st.ol.lost) + ' MW', label: (st.ol.planned ? 'out on planned outage' : 'out unexpectedly') + (num(st.ol.end) ? ', back ' + G.day(st.ol.end) + ' ' + hm(st.ol.end) : '') });
+  }
   return rows;
 }
 function showStationTip(st, p) {
@@ -322,6 +331,8 @@ function showLinkTip(link, p) {
   if (link.cap && num(link.mw)) rows.push({ value: Math.round(100 * Math.abs(link.mw) / link.cap) + '%', label: 'of ' + gw(link.cap) + ' GW capacity' });
   rows.push({ sep: true });
   if (link.gb && link.far) rows.push({ value: link.gb[2], label: 'to ' + link.far[2] + ', ' + link.country });
+  var ci = state.data && (state.data.neighbour_ci || {})[link.country];
+  if (ci && num(ci.v)) rows.push({ value: ci.v + ' g/kWh', label: ci.live ? link.country + '’s grid now, from ' + ci.source : link.country + '’s grid, ' + (ci.source === 'NESO' ? 'NESO’s typical figure' : 'an estimate') });
   tip.show(link.name + ' (' + link.country + ')', rows, p[0], p[1], 'Measured flow, Elexon.');
 }
 
@@ -972,6 +983,11 @@ byId('fuels-none').addEventListener('click', function () { setHidden(function ()
 // Belt and braces: leaving the list always ends a preview
 byId('fuels').addEventListener('pointerleave', function () { clicked = null; preview(null); });
 byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); map.restyle(); });
+['turned', 'outages', 'boundaries'].forEach(function (k) {
+  var box = byId('layer-' + k);
+  box.checked = state.layers[k];
+  box.addEventListener('change', function () { state.layers[k] = box.checked; savePrefs(); map.draw(); });
+});
 byId('how-btn').addEventListener('click', function (e) {
   var open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
   e.currentTarget.setAttribute('aria-expanded', String(open));
