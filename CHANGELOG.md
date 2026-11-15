@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.17.0 (unreleased)
+## 1.17.0 (2026-11-15)
 
 - **Wind on the map:** an arrow at each of the dozen points among the wind
   farms that the Weather page uses, pointing the way the wind is blowing 100
