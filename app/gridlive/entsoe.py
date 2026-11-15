@@ -13,8 +13,8 @@ send curve type A03, where a run of equal values is sent once, so a missing posi
 one before it; with curve type A01 a missing position is simply missing. No data gives an Acknowledgement_MarketDocument with reason code 999.
 
 ENTSO-E allows 400 requests a minute per token and bans a token for a while beyond that; this
-asks once per zone per poll, a second apart. Great Britain left ENTSO-E's data in 2021, so it
-covers the neighbours only."""
+asks once per zone per poll, a second apart. Great Britain's figures stopped there in June
+2021, so it covers the neighbours only."""
 
 import time
 import urllib.parse

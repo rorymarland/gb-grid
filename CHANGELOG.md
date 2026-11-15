@@ -4,6 +4,25 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.15.0 (unreleased)
+
+- **Find a power station** on the Map: type a few letters of its name and
+  pick it (arrow keys and Enter work) to zoom to it and open its card, even
+  if its type is hidden.
+- A **neighbours slide** on the Display, after constraints: the carbon
+  intensity of what's coming in against Britain's own generation, and each
+  neighbour's flow and carbon intensity now.
+- Glossary: ENTSO-E and bidding zone.
+- Fixed: a pause National Gas asks for (after refusing a request as too
+  many) now survives a restart, instead of the dashboard asking again
+  straight away.
+- Fixed: `/api/neighbours` counted the hours wrongly for a neighbour that
+  reports hourly, so with an ENTSO-E key Norway, Denmark and others could
+  wait twice as long for their average. Now a day of figures is a day,
+  whichever way they come.
+- The README's Overview, Map, Regions and Display screenshots show the
+  current pages.
+
 ## 1.14.0 (2026-11-13)
 
 - **ENTSO-E (optional):** with a free security token in `ENTSOE_API_KEY`, every

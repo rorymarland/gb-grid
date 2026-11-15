@@ -159,10 +159,20 @@ def half_hours(store, zone, start, end):
     return [[int(h), round(v, 1)] for h, v in rows]
 
 
+def step_of(rows):
+    """How far apart a series' figures are: 1800 seconds, or 3600 for a neighbour that reports hourly."""
+    gaps = [b[0] - a[0] for a, b in zip(rows, rows[1:])]
+    return 1800 if not gaps or min(gaps) <= 1800 else min(3600, min(gaps))
+
+
+def hours_of(rows):
+    return len(rows) * step_of(rows) / 3600
+
+
 def week(store, now):
     """What /api/neighbours returns: the last seven days, half hour by half hour, for Britain
     (NESO's figure) and each neighbour with a live source (the first with a day or more in the
-    week), each with its mean and Britain's over the same half hours, and every neighbour now."""
+    week), counting hours whether it reports half-hourly or hourly, each with its mean and Britain's over the same half hours, and every neighbour now."""
     end = now - now % 1800 + 1800
     start = end - BACKFILL
     gb = [[int(t), round(a if a is not None else f, 1)] for t, f, a in store.query(
@@ -178,9 +188,11 @@ def week(store, now):
         found = [f for f in found if f[3]]
         if not found:
             continue
-        zone, source, what, rows = next((f for f in found if len(f[3]) >= 48), found[0])
+        zone, source, what, rows = next((f for f in found if hours_of(f[3]) >= 24), found[0])
         both = [(v, gb_at[t]) for t, v in rows if t in gb_at]
+        # Each figure stands for its half hour, or its hour where the neighbour reports hourly
+        hours = len(both) * step_of(rows) / 3600
         countries.append({'country': country, 'zone': zone, 'source': source, 'what': what, 'series': rows,
-                          'mean': mean([v for v, _ in both]) if len(both) >= 48 else None,
-                          'gb_mean': mean([g for _, g in both]) if len(both) >= 48 else None, 'hours': len(both) / 2})
+                          'mean': mean([v for v, _ in both]) if hours >= 24 else None,
+                          'gb_mean': mean([g for _, g in both]) if hours >= 24 else None, 'hours': hours})
     return {'start': start, 'end': end, 'gb': gb, 'countries': countries, 'now': country_carbon(store, now)}

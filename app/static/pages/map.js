@@ -190,7 +190,8 @@ function initMap() {
     stage: stage, svg: byId('map'), interactive: true, sizeKey: byId('size-key'),
     active: function () { return state.view === 'map'; },
     // A fuel being previewed (mouse over its row) shows even if it's hidden
-    visible: function (st) { return (!state.hidden[st.c] || state.highlight === st.c) && (state.showIdle || !isIdle(st)); },
+    // The selected station always shows, even if its type or idleness would hide it
+    visible: function (st) { return st.id === state.selected || ((!state.hidden[st.c] || state.highlight === st.c) && (state.showIdle || !isIdle(st))); },
     selected: function () { return state.selected; },
     dimmed: function (st) { return Boolean(state.highlight && state.highlight !== st.c); },
     onHover: function (hit, p) {
@@ -337,6 +338,73 @@ function select(id) {
   if (id && window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
     byId('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+}
+
+/* ---------- find a power station ---------- */
+
+var finder = { matches: [], active: -1 };
+
+function findMatches(query) {
+  var q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  var starts = [], words = [], within = [];
+  stationsOf(state.data).forEach(function (st) {
+    if (st.x === null || st.x === undefined) return;
+    var name = (st.n || '').toLowerCase();
+    if (name.indexOf(q) === 0) starts.push(st);
+    else if ((' ' + name).indexOf(' ' + q) >= 0) words.push(st);
+    else if (name.indexOf(q) >= 0) within.push(st);
+  });
+  // Names that start with it, then a word that does, then anywhere; biggest first in each
+  function bySize(a, b) { return (b.cap || 0) - (a.cap || 0); }
+  return starts.sort(bySize).concat(words.sort(bySize), within.sort(bySize)).slice(0, 8);
+}
+
+function renderFinder() {
+  var input = byId('find'), list = clear(byId('find-list'));
+  var open = input.value.trim().length >= 2;
+  list.hidden = !open;
+  input.setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  if (!finder.matches.length) { list.appendChild(h('li', { cls: 'none', text: 'No station by that name on the map' })); return; }
+  finder.matches.forEach(function (st, i) {
+    var li = h('li', { id: 'find-' + i, role: 'option', 'aria-selected': String(i === finder.active) },
+      [h('i', { cls: 'sw b-' + st.c }), st.n, h('small', { text: (NAMES[st.c] || '') + (num(st.cap) ? ', ' + mw(st.cap) + ' MW' : '') })]);
+    li.addEventListener('mousedown', function (e) { e.preventDefault(); chooseStation(st); });
+    list.appendChild(li);
+  });
+  input.setAttribute('aria-activedescendant', finder.active >= 0 ? 'find-' + finder.active : '');
+}
+
+function chooseStation(st) {
+  var input = byId('find');
+  input.value = '';
+  finder.matches = []; finder.active = -1;
+  renderFinder();
+  input.blur();
+  if (state.view !== 'map') setView('map', true);
+  select(st.id);
+  map.focusOn(st);
+}
+
+function initFinder() {
+  var input = byId('find');
+  input.addEventListener('input', function () { finder.matches = findMatches(input.value); finder.active = finder.matches.length ? 0 : -1; renderFinder(); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!finder.matches.length) return;
+      finder.active = (finder.active + (e.key === 'ArrowDown' ? 1 : -1) + finder.matches.length) % finder.matches.length;
+      renderFinder(); e.preventDefault();
+    } else if (e.key === 'Enter') {
+      if (finder.active >= 0) chooseStation(finder.matches[finder.active]);
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      input.value = ''; finder.matches = []; renderFinder();
+      e.stopPropagation();
+    }
+  });
+  input.addEventListener('blur', function () { setTimeout(function () { byId('find-list').hidden = true; input.setAttribute('aria-expanded', 'false'); }, 120); });
+  input.addEventListener('focus', function () { if (input.value.trim().length >= 2) renderFinder(); });
 }
 
 /* ---------- side panel ---------- */
@@ -1154,5 +1222,6 @@ window.addEventListener('resize', function () {
 });
 
 initMap();
+initFinder();
 setView(viewFromPath(), false);
 tick();

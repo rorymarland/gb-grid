@@ -13,7 +13,7 @@ import { renderParts } from '/static/js/summary.js';
 var h = G.h, s = G.s, byId = G.byId, clear = G.clear, num = G.num;
 var params = new URLSearchParams(location.search);
 /* home is dropped by itself when Octopus isn't set up (see gridlive/home.py) */
-var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,gas,weather,outlook,outages,records';
+var DEFAULT_VIEWS = 'now,home,story,day,map,regions,balancing,constraints,neighbours,gas,weather,outlook,outages,records';
 /* The year in review joins the default slides from mid-December to the end of January */
 (function () {
   var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
@@ -453,6 +453,42 @@ function buildConstraints(body, take) {
   };
 }
 
+/* ---------- neighbours ---------- */
+
+function buildNeighbours(body, take) {
+  var gauge = h('div', { cls: 'gauge-box' }), list = h('div', { cls: 'side' });
+  body.appendChild(h('div', { cls: 'split even' }, [gauge, list]));
+  return {
+    ready: function () { return Boolean(data.live && data.live.countries && data.live.countries.length); },
+    render: function () {
+      var d = data.live;
+      if (!d || !d.countries) return;
+      var coming = d.countries.filter(function (c) { return c.gw > 0.05; });
+      clear(gauge);
+      if (num(d.imports_ci) && coming.length) {
+        gauge.appendChild(h('p', { cls: 'big' }, [String(d.imports_ci), h('small', { text: 'g/kWh of CO₂ in what’s coming in' })]));
+        if (num(d.generation_ci)) gauge.appendChild(h('p', { cls: 'pill', text: 'Britain’s own generation ' + d.generation_ci + ' g/kWh' }));
+      } else {
+        gauge.appendChild(h('p', { cls: 'big' }, ['0', h('small', { text: 'GW coming in through the interconnectors' })]));
+      }
+      gauge.appendChild(h('p', { cls: 'foot-note', text: 'Live where the neighbour’s grid operator or ENTSO-E publishes a figure; otherwise NESO’s typical one.' }));
+      clear(list);
+      list.appendChild(h('h3', { text: 'Each neighbour now' }));
+      d.countries.slice().sort(function (a, b) { return b.gw - a.gw; }).forEach(function (c) {
+        var flow = Math.abs(c.gw) < 0.05 ? 'idle' : (c.gw > 0 ? c.gw.toFixed(1) + ' GW in' : (-c.gw).toFixed(1) + ' GW out');
+        var ci = c.ci && num(c.ci.v) ? (c.ci.live ? '' : 'about ') + c.ci.v + ' g/kWh' + (c.ci.live ? '' : ', typical') : '';
+        list.appendChild(h('div', { cls: 'row' }, [h('span', { text: c.country }), h('b', { text: flow }), h('span', { cls: 'muted', text: ci })]));
+      });
+      fit(list);
+      if (num(d.imports_ci) && num(d.generation_ci) && coming.length) {
+        var diff = d.generation_ci - d.imports_ci;
+        take.textContent = Math.abs(diff) < 10 ? 'What’s coming in is about as clean as what Britain is generating.'
+          : 'What’s coming in is ' + (diff > 0 ? 'cleaner' : 'dirtier') + ' than what Britain is generating, by ' + Math.abs(Math.round(diff)) + ' g/kWh.';
+      } else take.textContent = 'Nothing is coming in through the interconnectors right now.';
+    }
+  };
+}
+
 /* ---------- gas ---------- */
 
 function buildGas(body, take) {
@@ -741,6 +777,7 @@ var BUILDERS = {
   regions: ['Carbon intensity by region', ['regions'], buildRegions],
   balancing: ['Balancing the grid', ['balancing'], buildBalancing],
   constraints: ['Constraints', ['constraints'], buildConstraints],
+  neighbours: ['Britain and its neighbours', ['live'], buildNeighbours],
   gas: ['Gas', ['gas'], buildGas],
   weather: ['Weather', ['weather'], buildWeather],
   review: ['The year in review', ['review'], buildReview],

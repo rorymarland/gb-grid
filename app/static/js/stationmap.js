@@ -625,6 +625,17 @@ export function createStationMap(opts) {
     resize: resize,
     reset: function () { M.moved = false; fitDefault(); requestRedraw(); },
     zoomBy: function (factor) { interacted(); zoomAt([M.W / 2, M.H / 2], M.s * factor); },
+    /* Centre a station, zoomed in to at least four times the whole-country view */
+    focusOn: function (st) {
+      if (!M.ready || st.x === null || st.x === undefined) return;
+      interacted();
+      M.s = clamp(Math.max(M.s, M.fitS * 4), M.minS, M.maxS);
+      M.tx = M.W / 2 - st.x * M.s;
+      M.ty = M.H / 2 - st.y * M.s;
+      M.moved = true;
+      clampView();
+      requestRedraw();
+    },
     setHover: setHover,
     nodeFor: function (id) { return M.nodes[id] ? M.nodes[id].node : null; }
   };

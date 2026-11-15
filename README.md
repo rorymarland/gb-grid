@@ -69,6 +69,9 @@ Every grid-connected power station as a circle sized by what it's generating
 and coloured by fuel, plus the interconnectors to Europe and Ireland with their
 live flows. Zoom, pan, full screen, and a 24-hour history for any station. The
 time machine along the bottom replays the last seven days in 10-minute steps.
+The box beside the map finds a station by name: type a few letters, pick it
+(arrow keys and Enter work), and the map zooms to it and opens its card, even
+if its type is hidden.
 
 Select a station for its card: a photo from Wikimedia Commons with its
 photographer and licence (131 stations so far, including every nuclear and
@@ -317,7 +320,7 @@ shows up in the dashboard.
 A kiosk view for a tablet or spare screen, opened from the Display button in
 the header. Each slide is designed to fit one screen with nothing cut off:
 right now, Today on the grid, the last 24 hours, the station map, regions,
-balancing, constraints, gas, the weather, the next 48 hours, spare capacity and outages, and then and now
+balancing, constraints, the neighbours, gas, the weather, the next 48 hours, spare capacity and outages, and then and now
 (once the history has downloaded). Tap to pause, swipe or use the arrow keys to
 move on, and it dims to a clock overnight. On an iPad, add it to the home
 screen for a full-screen app; it keeps the screen awake where the browser
@@ -329,7 +332,7 @@ allows.
 | ![Display: Today on the grid](docs/display-story.png) | ![Display: the next 48 hours](docs/display-outlook.png) |
 
 Options go in the address:
-`/display?views=now,home,story,day,map,regions,balancing,constraints,gas,weather,outlook,outages,records`
+`/display?views=now,home,story,day,map,regions,balancing,constraints,neighbours,gas,weather,outlook,outages,records`
 (which slides, in order; `home`, Your home, only shows when
 [Octopus is set up](#your-home-octopus-energy); `review`, the year in review,
 joins the default list from 15 December to the end of January), `every=20` (seconds per slide), `night=23-7` (dim

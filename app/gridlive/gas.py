@@ -97,7 +97,11 @@ def use_of(name):
 class Gas:
     def __init__(self, store):
         self.store = store
-        self.blocked_until = 0
+        # A pause National Gas asked for outlives a restart
+        try:
+            self.blocked_until = float(store.get_meta('gas_blocked_until') or 0)
+        except (TypeError, ValueError):
+            self.blocked_until = 0
         self.daily_checked = 0
         self.version = 0
 
@@ -111,6 +115,7 @@ class Gas:
         except FetchError as error:
             if 'HTTP 429' in str(error):
                 self.blocked_until = now + BLOCKED_FOR
+                self.store.set_meta('gas_blocked_until', str(self.blocked_until))
                 log.warning('[gas] National Gas refused a request as too many; waiting half an hour')
             raise
         try:

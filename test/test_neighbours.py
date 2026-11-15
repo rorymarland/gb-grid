@@ -68,11 +68,15 @@ week_store.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)',
                  # Denmark: Energinet has under a day, ENTSO-E more, so ENTSO-E's is shown
                  [('DK1', start + k * 1800 + 300, 80) for k in range(30)] + [('E:DK1', start + k * 1800, 90) for k in range(1, 61)] +
                  # Norway: only ten hours, so no mean yet
-                 [('E:NO2', start + k * 1800, 20) for k in range(20)], history=False)
+                 [('E:NO2', start + k * 1800, 20) for k in range(20)] +
+                 # Belgium hourly: thirty figures are thirty hours, so it has a mean (against Britain's on the hour, all 100)
+                 [('E:BE', start + k * 3600, 70) for k in range(30)], history=False)
 w = nb.week(week_store, now)
 check('week: Britain uses the actual over the forecast', w['gb'][0][1] == 100)
 by = {c['country']: c for c in w['countries']}
-check('week: in the usual order, only those with figures', [c['country'] for c in w['countries']] == ['France', 'Norway', 'Denmark'], list(by))
+check('week: in the usual order, only those with figures', [c['country'] for c in w['countries']] == ['France', 'Norway', 'Belgium', 'Denmark'], list(by))
+check('week: hourly figures count as hours', by['Belgium']['hours'] == 30.0 and by['Belgium']['mean'] == 70 and by['Belgium']['gb_mean'] == 100, by['Belgium'])
+check('step: half-hourly, hourly, a gap', nb.step_of([[0, 1], [1800, 1]]) == 1800 and nb.step_of([[0, 1], [3600, 1], [10800, 1]]) == 3600 and nb.step_of([[0, 1]]) == 1800)
 check('week: RTE first for France', by['France']['zone'] == 'FR' and by['France']['source'] == 'RTE' and len(by['France']['series']) == 60)
 check('week: France against Britain', by['France']['mean'] == 40 and by['France']['gb_mean'] == 150 and by['France']['hours'] == 30.0, by['France'])
 check('week: ENTSO-E for Denmark, with more than a day', by['Denmark']['zone'] == 'E:DK1' and by['Denmark']['mean'] == 90 and by['Denmark']['gb_mean'] == 150)

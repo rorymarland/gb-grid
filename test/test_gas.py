@@ -189,6 +189,7 @@ try:
 except server.FetchError:
     pass
 check('429: blocked for half an hour', close(blocked.blocked_until - time.time(), gs.BLOCKED_FOR, 5))
+check('429: the pause survives a restart', close(gs.Gas(blocked.store).blocked_until, blocked.blocked_until, 0.01))
 mock.GAS_LIMIT = None
 before = len(mock.GAS_ASKED)
 try:

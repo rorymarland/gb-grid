@@ -43,6 +43,12 @@
       <h1>Where Great Britain’s power is coming from</h1>
       <p class="when" id="when">Waiting for the first station data…</p>
       <div class="stats" id="stats"></div>
+      <div class="find" role="search">
+        <label class="visually-hidden" for="find">Find a power station</label>
+        <input type="search" id="find" placeholder="Find a power station" autocomplete="off" spellcheck="false"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="find-list">
+        <ul class="find-list" id="find-list" role="listbox" hidden></ul>
+      </div>
       <h2>By type <span class="aside fuel-tools"><button type="button" id="fuels-all">Show all</button><button type="button" id="fuels-none">Hide all</button></span></h2>
       <ul class="fuels" id="fuels"></ul>
       <label class="switch"><input type="checkbox" id="idle-toggle" checked> Show stations that are idle now</label>
