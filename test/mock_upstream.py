@@ -481,6 +481,8 @@ def weather_value(var, t, lat, lon):
     if var == 'wind_speed_100m':
         gust = 0.55 + 0.45 * math.sin(t / 41000.0) + 0.25 * math.sin(t / 9000.0 + 1.3) + 0.2 * season
         return round(max(0.5, 3 + 9 * gust + 0.3 * (lat - 54)), 2)
+    if var == 'wind_direction_100m':      # where it blows from: veering slowly round the south-west
+        return round((235 + 55 * math.sin(t / 52000.0) + 8 * (lat - 54)) % 360)
     if var == 'temperature_2m':
         return round(10 - 4 * season + 4 * math.sin(math.pi * (hour_of_day(t) - 9) / 12) + 3 * math.sin(t / 300000.0) - 0.6 * (lat - 52), 1)
     if var == 'shortwave_radiation':     # the mean over the hour before t
@@ -494,20 +496,22 @@ WEATHER_ASKED = []
 def open_meteo(q):
     WEATHER_ASKED.append(q)
     lats, lons = [float(x) for x in q['latitude'].split(',')], [float(x) for x in q['longitude'].split(',')]
-    var = q.get('hourly')
-    if len(lats) != len(lons) or var not in ('wind_speed_100m', 'temperature_2m', 'shortwave_radiation'):
+    names = (q.get('hourly') or '').split(',')
+    units = {'wind_speed_100m': 'm/s', 'wind_direction_100m': '°', 'temperature_2m': '°C', 'shortwave_radiation': 'W/m²'}
+    if len(lats) != len(lons) or not names or any(n not in units for n in names):
         return 400, {'error': True, 'reason': 'mock: bad request'}
-    if var == 'wind_speed_100m' and q.get('wind_speed_unit') != 'ms':
+    if 'wind_speed_100m' in names and q.get('wind_speed_unit') != 'ms':
         return 400, {'error': True, 'reason': 'mock: wind would be in km/h'}
     if q.get('timeformat') != 'unixtime' or q.get('timezone') != 'GMT':
         return 400, {'error': True, 'reason': 'mock: expected unixtime and GMT'}
     today = int(_clock.time() // 86400 * 86400)
     times = list(range(today - int(q.get('past_days', 0)) * 86400, today + int(q.get('forecast_days', 7)) * 86400, 3600))
-    unit = {'wind_speed_100m': 'm/s', 'temperature_2m': '°C', 'shortwave_radiation': 'W/m²'}[var]
     out = []
     for i, (lat, lon) in enumerate(zip(lats, lons)):
-        place = {'latitude': lat, 'longitude': lon, 'timezone': 'GMT', 'hourly_units': {'time': 'unixtime', var: unit},
-                 'hourly': {'time': times, var: [weather_value(var, x, lat, lon) for x in times]}}
+        hourly = {'time': times}
+        hourly.update({n: [weather_value(n, x, lat, lon) for x in times] for n in names})
+        place = {'latitude': lat, 'longitude': lon, 'timezone': 'GMT', 'hourly_units': dict({'time': 'unixtime'}, **{n: units[n] for n in names}),
+                 'hourly': hourly}
         if i:
             place['location_id'] = i
         out.append(place)

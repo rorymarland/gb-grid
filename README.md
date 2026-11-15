@@ -85,6 +85,10 @@ Three more things can go on the map, each with its own switch beside it:
   north of Scotland to the Central Belt) and B6 (Scotland to England)
   coloured by NESO's day-ahead forecast of flow against limit for this half
   hour, and labelled with both.
+- **Wind 100 m up:** an arrow at each of the Weather page's dozen points
+  among the wind farms, pointing the way the wind is blowing and longer the
+  stronger it is, with its speed, for this hour. A wind farm making little
+  in a strong wind is then easy to spot as turned down rather than becalmed.
 
 Each interconnector's label also gives its country's carbon intensity, live
 or typical, as on the Overview.
@@ -136,7 +140,8 @@ days of how the grid answered: wind farms' output as a share of capacity
 against wind speed (a power curve, counting what they were turned down),
 each day's demand against its temperature, with how much each degree colder
 adds on a working day, and solar output against sunshine. Three requests an
-hour; the first run also fetches the last 92 days.
+hour (wind direction comes in the same request as wind speed, for the Map's
+arrows); the first run also fetches the last 92 days.
 
 ![The weather page](docs/weather.png)
 

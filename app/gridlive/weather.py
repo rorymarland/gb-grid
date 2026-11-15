@@ -24,6 +24,7 @@ from .config import OPEN_METEO, log
 from .fetch import FetchError, as_float
 from .reference import PES_REGIONS, REGION_NAMES
 from .timeutil import uk_clock
+from .units import map_point
 
 FIRST_DAYS = 92             # history on the first run (Open-Meteo's most)
 PAST_DAYS = 2
@@ -31,6 +32,8 @@ AHEAD_DAYS = 8              # today and a week ahead
 KEEP = 100 * 86400
 
 VARIABLES = {'wind': 'wind_speed_100m', 'temp': 'temperature_2m', 'sun': 'shortwave_radiation'}
+# Asked for alongside wind speed, in the same request: where the wind blows from, in degrees
+DIRECTION = 'wind_direction_100m'
 
 # Wind: points among Britain's wind farms. Each farm in the station list counts towards the
 # nearest point, by capacity.
@@ -112,7 +115,7 @@ class Weather:
     def fetch(self, kind, points, past_days):
         """One request for every point; stores the weighted British value for each hour."""
         query = {'latitude': ','.join('%.3f' % p[1] for p in points), 'longitude': ','.join('%.3f' % p[2] for p in points),
-                 'hourly': VARIABLES[kind], 'timeformat': 'unixtime', 'timezone': 'GMT',
+                 'hourly': VARIABLES[kind] + (',' + DIRECTION if kind == 'wind' else ''), 'timeformat': 'unixtime', 'timezone': 'GMT',
                  'past_days': past_days, 'forecast_days': AHEAD_DAYS}
         if kind == 'wind':
             query['wind_speed_unit'] = 'ms'
@@ -120,11 +123,19 @@ class Weather:
         places = payload if isinstance(payload, list) else [payload]
         if len(places) != len(points) or not all(isinstance(p, dict) and isinstance(p.get('hourly'), dict) for p in places):
             raise FetchError('Unexpected response shape from Open-Meteo')
-        series = []
-        for place in places:
+        series, each = [], []
+        for point, place in zip(points, places):
             hourly = place['hourly']
             times, values = hourly.get('time') or [], hourly.get(VARIABLES[kind]) or []
             series.append({int(t): as_float(v) for t, v in zip(times, values)})
+            if kind == 'wind':
+                # Each point's own speed and direction, for the arrows on the map
+                for t, v, d in zip(times, values, hourly.get(DIRECTION) or [None] * len(times)):
+                    v, d = as_float(v), as_float(d)
+                    if v is not None and d is not None:
+                        each.append((point[0], int(t), round(v, 2), round(d % 360)))
+        if each:
+            self.store.write('INSERT OR REPLACE INTO wxp (p, t, v, d) VALUES (?, ?, ?, ?)', each, history=False)
         merged = weighted(series, [p[3] for p in points])
         digits = 1 if kind == 'sun' else 2
         rows = [(kind, t, round(v, digits)) for t, v in merged.items()]
@@ -143,10 +154,21 @@ class Weather:
             except FetchError as error:
                 errors.append('%s: %s' % (kind, error))
         self.store.write('DELETE FROM wx WHERE t < ?', [(now - KEEP,)], history=False)
+        self.store.write('DELETE FROM wxp WHERE t < ?', [(now - KEEP,)], history=False)
         if len(errors) == len(VARIABLES):
             raise FetchError('; '.join(errors))
         if errors:
             log.warning('[weather] %s', '; '.join(errors))
+
+
+
+def wind_points(store, now):
+    """The wind 100 m up at each of the wind points for the hour now, for the map's arrows:
+    [{n, x, y, v (m/s), d (degrees it blows from), t}]. Nothing if the hour isn't in yet."""
+    hour = int(now - now % 3600)
+    where = {p[0]: map_point(p[1], p[2]) for p in WIND_POINTS}
+    return [{'n': name, 'x': where[name][0], 'y': where[name][1], 'v': v, 'd': d, 't': hour}
+            for name, v, d in store.query('SELECT p, v, d FROM wxp WHERE t = ? ORDER BY p', (hour,)) if name in where]
 
 
 # ---- the page ---------------------------------------------------------------------

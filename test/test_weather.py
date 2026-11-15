@@ -133,7 +133,8 @@ job = wx.Weather(fresh)
 mock.WEATHER_ASKED.clear()
 job.poll()
 asked = [(q['hourly'], q['past_days']) for q in mock.WEATHER_ASKED]
-check('poll: three requests, 92 days back the first time', sorted(asked) == sorted([(v, '92') for v in wx.VARIABLES.values()]), asked)
+check('poll: three requests, 92 days back the first time, with wind direction alongside wind speed',
+      sorted(asked) == sorted([('wind_speed_100m,wind_direction_100m', '92'), ('temperature_2m', '92'), ('shortwave_radiation', '92')]), asked)
 check('poll: wind at the equal-weight points without a station list', mock.WEATHER_ASKED[0]['latitude'].count(',') == len(wx.WIND_POINTS) - 1)
 mock.WEATHER_ASKED.clear()
 job.poll()
@@ -151,6 +152,20 @@ try:
 except server.FetchError as error:
     check('poll: says which', 'wind' in str(error) and 'sun' in str(error))
 wx.fetch.get_json = real_get
+
+# Each wind point's own speed and direction, for the map's arrows
+at = time.time()
+hour = int(at - at % 3600)
+arrows = wx.wind_points(fresh, at)
+names = [p[0] for p in wx.WIND_POINTS]
+check('arrows: one a point for the hour now', sorted(a['n'] for a in arrows) == sorted(names) and all(a['t'] == hour for a in arrows), (sorted(set(names) - set(a['n'] for a in arrows)), len(arrows)))
+first = next(a for a in arrows if a['n'] == 'Hornsea')
+p = next(p for p in wx.WIND_POINTS if p[0] == 'Hornsea')
+check('arrows: speed and direction as Open-Meteo gives them', first['v'] == mock.weather_value('wind_speed_100m', hour, p[1], p[2]) and
+      first['d'] == mock.weather_value('wind_direction_100m', hour, p[1], p[2]) % 360, first)
+check('arrows: placed on the map', [first['x'], first['y']] == wx.map_point(p[1], p[2]))
+check('arrows: kept as long as the rest', fresh.scalar('SELECT COUNT(*) FROM wxp WHERE p = ?', ('Hornsea',)) == 100 * 24)
+check('arrows: nothing for an hour not fetched', wx.wind_points(fresh, at + 30 * 86400) == [])
 
 v = wx.view(fresh, time.time())
 check('view: a week ahead from the mock', v['ready'] and len(v['week']) >= 9 * 24 - 2, len(v['week']))

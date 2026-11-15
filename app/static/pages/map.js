@@ -14,7 +14,7 @@ var state = {
   hidden: {}, showIdle: true, selected: null, highlight: null, stationHistory: {}, cards: {},
   sort: { key: 'mw', dir: -1 }, query: '', nation: 'all', cats: {}, includeIdle: false,
   openRow: null, showAll: false, fuelOrder: null, fuelOrderTime: null,
-  layers: { turned: true, outages: true, boundaries: true }
+  layers: { turned: true, outages: true, boundaries: true, wind: true }
 };
 try {
   var saved = JSON.parse(localStorage.getItem('gb-grid-map') || '{}');
@@ -983,7 +983,7 @@ byId('fuels-none').addEventListener('click', function () { setHidden(function ()
 // Belt and braces: leaving the list always ends a preview
 byId('fuels').addEventListener('pointerleave', function () { clicked = null; preview(null); });
 byId('idle-toggle').addEventListener('change', function (e) { state.showIdle = e.target.checked; savePrefs(); map.restyle(); });
-['turned', 'outages', 'boundaries'].forEach(function (k) {
+['turned', 'outages', 'boundaries', 'wind'].forEach(function (k) {
   var box = byId('layer-' + k);
   box.checked = state.layers[k];
   box.addEventListener('change', function () { state.layers[k] = box.checked; savePrefs(); map.draw(); });

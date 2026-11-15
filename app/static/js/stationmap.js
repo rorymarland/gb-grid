@@ -19,10 +19,11 @@
      onInteract() the person panned, zoomed or dragged
      onKey(e)     page keys first; return true if handled
      onMessage(text or null), onResize()
-     overlays()   which extras to draw: { turned: wind turned down, outages, boundaries }
+     overlays()   which extras to draw: { turned: wind turned down, outages, boundaries, wind }
                   (default: none). Station data can carry dn (MW of wind turned down) and
                   ol ({ lost, end, planned, cause } for an outage now); the payload can carry
-                  boundaries ([{ id, name, flow, lim }]) and neighbour_ci.
+                  boundaries ([{ id, name, flow, lim }]), wind_points ([{ n, x, y, v, d }],
+                  d being where the wind blows from) and neighbour_ci.
 */
 
 import { s, clear } from './dom.js';
@@ -62,10 +63,11 @@ export function createStationMap(opts) {
     M.gGeoLabels = s('g');
     M.gLinks = s('g');
     M.gRings = s('g', { 'class': 'rings' });
+    M.gWind = s('g', { 'class': 'wind' });
     M.gStations = s('g');
     M.gLabels = s('g');
     M.gEnds = s('g');
-    [M.gLand, M.gGeoLabels, M.gLinks, M.gRings, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
+    [M.gLand, M.gGeoLabels, M.gWind, M.gLinks, M.gRings, M.gStations, M.gLabels, M.gEnds].forEach(function (g) { M.svg.appendChild(g); });
     fetch('/geo.json').then(function (r) { return r.json(); }).then(function (geo) {
       M.geo = geo;
       var inner = s('g', { transform: 'scale(0.5)' });
@@ -372,6 +374,7 @@ export function createStationMap(opts) {
     refreshStations();
     drawLinks(data.links || []);
     drawBounds(data.boundaries || []);
+    drawWind(overlay('wind') ? data.wind_points || [] : []);
     requestRedraw();
   }
 
@@ -464,6 +467,50 @@ export function createStationMap(opts) {
       }
     });
   }
+  /* The wind 100 m up at each wind point: an arrow pointing the way it blows, longer the
+     stronger it is, with its speed */
+  function drawWind(points) {
+    M.windNow = points.map(function (p) {
+      var node = (M.windNodes = M.windNodes || {})[p.n];
+      if (!node) {
+        node = M.windNodes[p.n] = { arrow: s('path', { 'class': 'wind-arrow' }), label: s('text', { 'class': 'wind-label' }) };
+        M.gWind.appendChild(node.arrow);
+        M.gWind.appendChild(node.label);
+      }
+      node.p = p;
+      node.label.textContent = Math.round(p.v) + ' m/s';
+      return node;
+    });
+    Object.keys(M.windNodes || {}).forEach(function (n) {
+      var keep = points.some(function (p) { return p.n === n; });
+      M.windNodes[n].arrow.style.display = keep ? '' : 'none';
+      M.windNodes[n].label.style.display = keep ? '' : 'none';
+    });
+  }
+  function redrawWind(taken) {
+    (M.windNow || []).forEach(function (node) {
+      var p = node.p, x = sx(p.x), y = sy(p.y);
+      // Wind direction is where it blows from; the arrow points where it's going. Screen y runs down.
+      var to = (p.d + 180) * Math.PI / 180, len = Math.min(60, 14 + 2.4 * p.v);
+      var ux = Math.sin(to), uy = -Math.cos(to);
+      var x0 = x - ux * len / 2, y0 = y - uy * len / 2, x1 = x + ux * len / 2, y1 = y + uy * len / 2;
+      var hx = -uy, hy = ux, head = 5;
+      node.arrow.setAttribute('d', 'M' + x0.toFixed(1) + ' ' + y0.toFixed(1) + 'L' + x1.toFixed(1) + ' ' + y1.toFixed(1) +
+        'M' + (x1 - ux * head * 1.6 + hx * head).toFixed(1) + ' ' + (y1 - uy * head * 1.6 + hy * head).toFixed(1) + 'L' + x1.toFixed(1) + ' ' + y1.toFixed(1) +
+        'L' + (x1 - ux * head * 1.6 - hx * head).toFixed(1) + ' ' + (y1 - uy * head * 1.6 - hy * head).toFixed(1));
+      var text = node.label.textContent, width = textWidth(text, 11, 600);
+      var lx = x, ly = y + Math.abs(uy) * len / 2 + 14;
+      var box = [lx - width / 2 - 2, ly - 11, lx + width / 2 + 2, ly + 3];
+      var show = lx > 0 && lx < M.W && ly > 10 && ly < M.H - 4 && !overlaps(box, taken);
+      node.label.style.display = show ? '' : 'none';
+      if (show) {
+        taken.push(box);
+        node.label.setAttribute('x', lx.toFixed(1));
+        node.label.setAttribute('y', ly.toFixed(1));
+      }
+    });
+  }
+
   function hideBoundLabels() { Object.keys(M.boundLabels).forEach(function (id) { M.boundLabels[id].style.display = 'none'; }); }
 
   /* Boundary labels go first, so the lines they explain are never left bare */
@@ -566,6 +613,7 @@ export function createStationMap(opts) {
     placeBoundLabels(taken);
     placeLinkLabels(taken);
     drawStationLabels(taken);
+    redrawWind(taken);
     placeGeoLabels(taken);
     drawSizeKey();
   }

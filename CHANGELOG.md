@@ -4,6 +4,15 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.17.0 (unreleased)
+
+- **Wind on the map:** an arrow at each of the dozen points among the wind
+  farms that the Weather page uses, pointing the way the wind is blowing 100
+  metres up and longer the stronger it is, with its speed, for this hour.
+  It has its own switch with the others. Wind direction comes in the same
+  hourly Open-Meteo request as wind speed, so there are no extra requests.
+- `/api/map` gains `wind_points`.
+
 ## 1.16.0 (2026-11-15)
 
 - **Also on the map**, each with a switch: wind farms NESO is turning down

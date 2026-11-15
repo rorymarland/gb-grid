@@ -236,3 +236,6 @@ th[aria-sort] .sort-btn { color: var(--ink); font-weight: 600; }
 .bnd-key::before { content: ''; display: inline-block; width: 12px; height: 0; border-top: 2.4px solid var(--good); margin: 0 4px 3px 0; vertical-align: middle; }
 .bnd-key.near::before { border-top-color: var(--warn); }
 .bnd-key.over::before { border-top-color: var(--bad); }
+.sw.wind-sw { width: 16px; height: 10px; background: none; flex: none; position: relative; }
+.sw.wind-sw::before { content: ''; position: absolute; left: 0; right: 3px; top: 4px; border-top: 2px solid var(--ink-2); }
+.sw.wind-sw::after { content: ''; position: absolute; right: 0; top: 1px; width: 6px; height: 6px; border-top: 2px solid var(--ink-2); border-right: 2px solid var(--ink-2); transform: rotate(45deg); transform-origin: center; }

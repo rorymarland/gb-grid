@@ -11,6 +11,7 @@ from .timeutil import floor_to
 from .store import STATION_HISTORY_DAYS
 from .photos import file_key
 from .constraints import label as constraint_label
+from .weather import wind_points
 from .units import CATEGORY_LABELS, CATEGORY_ORDER, FUEL_NAMES, LINK_ENDS, map_point
 
 
@@ -93,6 +94,7 @@ class MapViews:
             'neighbour_ci': {c['country']: c.get('ci') for c in live.get('countries', [])},
             'imports_ci': live.get('imports_ci'),
             'boundaries': self.map_boundaries(time.time()),
+            'wind_points': wind_points(self.store, time.time()),
         }
         for link in live.get('links', []):
             item = {'code': link['code'], 'name': link['name'], 'country': link['country'], 'note': link['note'],
