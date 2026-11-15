@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.16.0 (unreleased)
+## 1.16.0 (2026-11-15)
 
 - **Also on the map**, each with a switch: wind farms NESO is turning down
   now, as a dashed ring sized for what they'd otherwise make; stations with
