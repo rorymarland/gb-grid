@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.18.3 (unreleased)
+## 1.18.3 (2026-11-16)
 
 - Ireland no longer uses ENTSO-E. Its all-island figures had no gas at all
   over three days, though gas is Ireland's biggest source, and peaked at
