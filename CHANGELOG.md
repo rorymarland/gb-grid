@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.18.1 (unreleased)
+## 1.18.1 (2026-11-16)
 
 - Fixed a test that failed on some days of the week, which stopped the
   1.18.0 image from being published. It worked out a Saving Session's
