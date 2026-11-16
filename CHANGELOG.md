@@ -8,8 +8,8 @@ releases that keep working with your existing settings and data.
 
 - Ireland no longer uses ENTSO-E. Its all-island figures had no gas at all
   over three days, though gas is Ireland's biggest source, and peaked at
-  about 3.2 GW a day where Ireland's own peak is nearer 6 GW, so the carbon
-  intensity they gave (about 100 g/kWh) was far too low. Ireland is back on NESO's
+  only about 3.2 GW a day, well short of what the island uses, so the
+  carbon intensity they gave (about 100 g/kWh) was far too low. Ireland is back on NESO's
   typical figure. ENTSO-E figures stored before this are fetched again (one
   request for each of the five remaining zones), and Ireland's are dropped.
 

@@ -37,8 +37,8 @@ ZONES = {
     'Denmark': ('E:DK1', '10YDK-1--------W'),        # western Denmark, where Viking Link lands
 }
 # Not Ireland: on 16 November 2026 ENTSO-E's all-island figures (10Y1001A1001A59C) had no gas at
-# all for three days, Ireland's biggest source, and peaked at about 3.2 GW a day against a real
-# peak nearer 6 GW, so any carbon intensity from them would be far too low. NESO's typical figure is used instead.
+# all for three days, Ireland's biggest source, and peaked at only about 3.2 GW a day, well short
+# of what the island uses, so any carbon intensity from them would be far too low. NESO's typical figure is used instead.
 BACKFILL = 7 * 86400
 SPACING = 1.0               # seconds between requests
 COMPLETE = 0.8              # a period counts once this share of the zone's production types have reported
