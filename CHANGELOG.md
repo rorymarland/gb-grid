@@ -4,6 +4,14 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.18.1 (unreleased)
+
+- Fixed a test that failed on some days of the week, which stopped the
+  1.18.0 image from being published. It worked out a Saving Session's
+  baseline from the previous ten weekdays even when the mock's session fell
+  on a weekend, where Octopus (and the dashboard) use the previous four
+  weekend days. The dashboard itself is unchanged from 1.18.0.
+
 ## 1.18.0 (2026-11-16)
 
 - **What's being built,** a new page under Over time, from NESO's TEC

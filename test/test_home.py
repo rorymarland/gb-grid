@@ -178,14 +178,18 @@ first = [e for e in sv['past'] if e['id'] == 101][0]
 check('points Octopus gave', first['given'] == 1240 and first['joined'])
 other = [e for e in sv['past'] if e['id'] == 102][0]
 check('estimated points', other['estimate'] == round(other['saved'] * 1600) and not other['joined'])
-# The baseline worked out independently: previous 10 weekdays, skipping the other session's day
+# The baseline worked out independently: the previous 10 working days, skipping other session
+# days, or the previous 4 weekend days for a session at the weekend (where the mock's falls
+# depends on the day the tests run)
 ev = mock.parse(mock.octopus_backend('savingSessions ' + mock.OCTOPUS_ACCOUNT, 'x')['data']['savingSessions']['events'][1]['startAt'])
 day = server.uk_clock(ev)[0]
 skip = {server.uk_clock(mock.parse(e['startAt']))[0] for e in mock.octopus_backend('savingSessions', 'x')['data']['savingSessions']['events']}
+weekend = day.weekday() >= 5 or day in server.bank_holidays(day.year)
 dates, d = [], day
-while len(dates) < 10:
+while len(dates) < (4 if weekend else 10):
     d -= server.timedelta(days=1)
-    if d.weekday() < 5 and d not in skip:
+    working = d.weekday() < 5 and d not in server.bank_holidays(d.year)
+    if (d.weekday() >= 5 if weekend else working) and d not in skip:
         dates.append(d)
 offset = ev - server.uk_midnight_utc(day)
 expected = 0
