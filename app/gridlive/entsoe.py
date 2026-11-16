@@ -16,6 +16,7 @@ ENTSO-E allows 400 requests a minute per token and bans a token for a while beyo
 asks once per zone per poll, a second apart. Great Britain's figures stopped there in June
 2021, so it covers the neighbours only."""
 
+import json
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -39,6 +40,9 @@ ZONES = {
 BACKFILL = 7 * 86400
 SPACING = 1.0               # seconds between requests
 COMPLETE = 0.8              # a period counts once this share of the zone's production types have reported
+KNOWN_DAYS = 7              # how long a zone's production types and daily peaks are remembered
+MIN_SHARE = 0.2             # a period's total must be at least this share of the zone's usual daily peak
+RULES = '2'                 # bump to throw away stored figures made under older rules
 RESOLUTIONS = {'PT15M': 900, 'PT30M': 1800, 'PT60M': 3600}
 NAMES = {'B01': 'biomass', 'B02': 'lignite', 'B03': 'gas from coal', 'B04': 'gas', 'B05': 'coal', 'B06': 'oil', 'B07': 'oil shale',
          'B08': 'peat', 'B09': 'geothermal', 'B10': 'pumped storage', 'B11': 'run-of-river hydro', 'B12': 'reservoir hydro',
@@ -129,20 +133,55 @@ def intensity(mix, factors=None):
     return sum(mw * factors.get(kind, factors['B20']) for kind, mw in mix.items() if mw > 0) / total
 
 
-def complete_intensities(generation):
-    """[(t, g/kWh)] for the periods where enough of the zone's production types have reported:
-    the latest period often arrives a type at a time, which would skew it."""
-    kinds = set()
-    for mix in generation.values():
-        kinds |= set(mix)
-    need = COMPLETE * len(kinds)
+def day_of(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%d')
+
+
+def complete_intensities(generation, memory=None, now=None):
+    """([(t, g/kWh)], memory) for the periods that look whole. The latest periods often arrive a
+    production type at a time, and some zones (Ireland's, often) send only a few types for hours,
+    so a period counts only if:
+      - at least COMPLETE of the types the zone has reported over the last KNOWN_DAYS have
+        reported for it, and
+      - its total is at least MIN_SHARE of the zone's usual daily peak (the second highest of the
+        last KNOWN_DAYS days' peaks, so one odd day doesn't set it).
+    `memory` is what was learnt before, {'types': {psrType: last seen}, 'days': {day: peak MW}};
+    the one returned includes this request's periods, trimmed to KNOWN_DAYS."""
+    memory = memory or {}
+    types = dict(memory.get('types') or {})
+    days = dict(memory.get('days') or {})
+    for t, mix in generation.items():
+        for kind in mix:
+            types[kind] = max(types.get(kind, 0), t)
+    latest = max([now or 0] + list(generation) + list(types.values()))
+    types = {k: v for k, v in types.items() if v > latest - KNOWN_DAYS * 86400}
+    need = COMPLETE * len(types)
+    totals = {t: sum(mw for mw in mix.values() if mw > 0) for t, mix in generation.items()}
+    typed = sorted(t for t, mix in generation.items() if len(mix) >= need and totals[t] > 0)
+    for t in typed:
+        days[day_of(t)] = max(days.get(day_of(t), 0.0), round(totals[t]))
+    cutoff = day_of(latest - KNOWN_DAYS * 86400)
+    days = {d: v for d, v in days.items() if d >= cutoff}
+    peaks = sorted(days.values(), reverse=True)
+    usual = peaks[1] if len(peaks) > 1 else (peaks[0] if peaks else 0.0)
     rows = []
-    for t, mix in sorted(generation.items()):
-        if len(mix) >= need:
-            v = intensity(mix)
+    for t in typed:
+        if totals[t] >= MIN_SHARE * usual:
+            v = intensity(generation[t])
             if v is not None:
                 rows.append((t, round(v, 1)))
-    return rows
+    return rows, {'types': types, 'days': days, 'usual': usual}
+
+
+def why_not(generation, t, memory):
+    """Why period t didn't count, in words, for --test-entsoe."""
+    mix = generation.get(t, {})
+    known = memory.get('types') or {}
+    missing = sorted(set(known) - set(mix))
+    total = sum(mw for mw in mix.values() if mw > 0)
+    if len(mix) < COMPLETE * len(known):
+        return 'only %d of its %d usual types had reported (missing %s)' % (len(mix), len(known), ', '.join(NAMES.get(k, k) for k in missing[:6]))
+    return 'its total, %d MW, is under %d%% of the usual daily peak of %d MW' % (total, MIN_SHARE * 100, memory.get('usual') or 0)
 
 
 class Entsoe:
@@ -172,11 +211,23 @@ class Entsoe:
             raise FetchError(message)
         return parse_generation(body)
 
+    def memory(self, zone):
+        try:
+            return json.loads(self.store.get_meta('entsoe_zone:' + zone) or '{}')
+        except ValueError:
+            return {}
+
     def poll(self):
         if not self.enabled:
             return
         now = time.time()
         end = now - now % 900 + 900
+        if self.store.get_meta('entsoe_rules') != RULES:
+            # Figures from before the checks above could include half-reported periods: fetch the week again
+            self.store.write("DELETE FROM ext_ci WHERE zone LIKE 'E:%'", [()], history=False)
+            for _, (zone, _) in ZONES.items():
+                self.store.set_meta('entsoe_zone:' + zone, '{}')
+            self.store.set_meta('entsoe_rules', RULES)
         errors, stored = [], 0
         for i, (country, (zone, eic)) in enumerate(ZONES.items()):
             last = self.store.scalar('SELECT MAX(t) FROM ext_ci WHERE zone = ?', (zone,))
@@ -185,12 +236,13 @@ class Entsoe:
             if i:
                 time.sleep(SPACING)
             try:
-                rows = complete_intensities(self.fetch_zone(eic, start, end))
+                rows, learnt = complete_intensities(self.fetch_zone(eic, start, end), self.memory(zone), now)
             except FetchError as error:
                 errors.append('%s: %s' % (country, error))
                 if 'security token' in str(error):
                     break               # no point asking again with the same token
                 continue
+            self.store.set_meta('entsoe_zone:' + zone, json.dumps({'types': learnt['types'], 'days': learnt['days']}))
             if rows:
                 self.store.write('INSERT OR REPLACE INTO ext_ci (zone, t, v) VALUES (?, ?, ?)', [(zone, t, v) for t, v in rows], history=False)
                 stored += len(rows)
@@ -202,7 +254,8 @@ class Entsoe:
 
 
 def test_entsoe():
-    """Check the token and each neighbour's last few hours, with one request a zone. Prints no token."""
+    """Check the token and each neighbour's last three days, one request a zone, and show its latest
+    period that counts, or why the latest it has doesn't. Prints no token."""
     job = Entsoe(None)
     if not job.enabled:
         return 'Set ENTSOE_API_KEY (or ENTSOE_API_KEY_FILE) first.'
@@ -212,22 +265,30 @@ def test_entsoe():
         if i:
             time.sleep(SPACING)
         try:
-            generation = job.fetch_zone(eic, now - 6 * 3600, now)
+            generation = job.fetch_zone(eic, now - 3 * 86400, now)
         except FetchError as error:
             print('%s: %s' % (country, error))
             if 'security token' in str(error):
                 return 'ENTSO-E refused the token.'
             failed += 1
             continue
-        rows = complete_intensities(generation)
+        if not generation:
+            print('%s: ENTSO-E has nothing for the last three days' % country)
+            continue
+        rows, memory = complete_intensities(generation, None, now)
+        newest = max(generation)
+        hhmm = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime('%a %H:%M')  # noqa: E731
         if not rows:
-            print('%s: no figures in the last six hours yet' % country)
+            print('%s: %d periods to %s UTC, none whole: the latest because %s' % (country, len(generation), hhmm(newest), why_not(generation, newest, memory)))
             continue
         t, v = rows[-1]
         mix = generation[t]
         total = sum(mw for mw in mix.values() if mw > 0)
         top = sorted(((mw, kind) for kind, mw in mix.items() if mw > 0), reverse=True)[:3]
-        print('%s: %d g/kWh at %s UTC, from %d periods; biggest: %s' % (
-            country, round(v), datetime.fromtimestamp(t, timezone.utc).strftime('%H:%M'), len(rows),
-            ', '.join('%s %d%%' % (NAMES.get(kind, kind), round(100 * mw / total)) for mw, kind in top)))
+        line = '%s: %d g/kWh at %s UTC (%d MW from %d types); biggest: %s' % (
+            country, round(v), hhmm(t), total, len(mix),
+            ', '.join('%s %d%%' % (NAMES.get(kind, kind), round(100 * mw / total)) for mw, kind in top))
+        if newest > t:
+            line += '. Later periods to %s UTC not yet whole: the latest because %s' % (hhmm(newest), why_not(generation, newest, memory))
+        print(line)
     return 1 if failed == len(ZONES) else 0

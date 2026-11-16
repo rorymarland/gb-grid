@@ -529,9 +529,9 @@ is late) from each one's generation mix, every 15 minutes.
    docker compose exec gb-grid python /app/server.py --test-entsoe
    ```
 
-   This asks for each neighbour's last six hours and prints its latest
-   carbon intensity and biggest sources. The token is never printed or
-   logged.
+   This asks for each neighbour's last three days and prints its latest
+   carbon intensity that counts (see below), its biggest sources, and why
+   any later periods don't count yet. The token is never printed or logged.
 
 How it's worked out: ENTSO-E's actual generation per production type for each
 bidding zone that a cable from Britain lands in (France; the Netherlands;
@@ -540,8 +540,12 @@ market for Ireland and Northern Ireland), at NESO's factors for each fuel,
 counting only what's burned at power stations, the way NESO counts Britain.
 Gas counts as combined cycle, as ENTSO-E doesn't split it; lignite, peat and
 gas made from coal count as coal and waste as NESO's "other", though none of
-those is significant in these zones. A period only counts once most of a
-zone's sources have reported, as the latest often arrives one at a time. One
+those is significant in these zones. The latest periods often arrive one
+source at a time, and some zones (Ireland's especially) can send only a few
+sources for hours, so a period only counts once at least 80% of the sources
+the zone has reported over the last week are in, and its total is at least a
+fifth of the zone's usual daily peak (the second highest of the last week's).
+One
 request per neighbour each poll, a second apart; ENTSO-E allows 400 a
 minute. The token keeps the same rules as the Octopus key below: `.env` or a
 Docker secret (`ENTSOE_API_KEY_FILE`), never the compose file.

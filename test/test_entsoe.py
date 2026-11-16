@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the neighbours' generation mix from ENTSO-E: the parser and carbon intensity by hand,
 then the mock (run: python3 test/test_entsoe.py)."""
+import json
 import os
 import sys
 import tempfile
@@ -86,8 +87,36 @@ check('intensity: an unknown type counts as other', close(en.intensity({'B99': 1
 check('intensity: nothing generating', en.intensity({'B04': 0}) is None)
 check('factors: every production type', sorted(ENTSOE_FACTORS) == ['B%02d' % i for i in range(1, 21)] + ['B25'])
 # The latest period with only one of three types in so far is left out
-rows = en.complete_intensities({T0: {'B14': 1000, 'B04': 500, 'B19': 350}, T0 + 900: {'B04': 500}})
+rows, learnt = en.complete_intensities({T0: {'B14': 1000, 'B04': 500, 'B19': 350}, T0 + 900: {'B04': 500}})
 check('complete: a period missing most types is skipped', rows == [(T0, round(500 * 394 / 1850, 1))], rows)
+check('complete: what it learnt', learnt['types'] == {'B14': T0, 'B04': T0 + 900, 'B19': T0} and learnt['days'] == {'2026-11-12': 1850}, learnt)
+
+# Ireland, as seen for real on 16 November 2026: a few hours with only pumped storage, peat and
+# hydro in. The zone's usual types, remembered from earlier polls, rule them out.
+ireland = {'types': {k: T0 - 3600 for k in ('B04', 'B19', 'B18', 'B05', 'B08', 'B10', 'B11', 'B20')},
+           'days': {'2026-11-10': 5400, '2026-11-11': 5600, '2026-11-12': 5200}}
+partial = {T0 + 3600 + k * 1800: {'B10': 290, 'B08': 140, 'B11': 15} for k in range(4)}
+rows, learnt = en.complete_intensities(partial, ireland, T0 + 4 * 3600)
+check('Ireland: three of eight types is nothing', rows == [], rows)
+check('Ireland: its types still remembered', set(learnt['types']) == {'B04', 'B19', 'B18', 'B05', 'B08', 'B10', 'B11', 'B20'})
+check('Ireland: half-reported periods don\'t set a day\'s peak', learnt['days'] == ireland['days'])
+check('why: says which types are missing', 'only 3 of its 8 usual types' in en.why_not(partial, T0 + 3600, learnt) and 'gas' in en.why_not(partial, T0 + 3600, learnt))
+# Even with no memory of its types, 445 MW against a usual peak of 5,400 MW (the second highest
+# of 5,600, 5,400 and 5,200) is under a fifth of it
+rows, learnt = en.complete_intensities(partial, {'days': ireland['days']}, T0 + 4 * 3600)
+check('Ireland: too small to be whole', rows == [] and learnt['usual'] == 5400, (rows, learnt.get('usual')))
+check('why: says it is too small', 'under 20% of the usual daily peak of 5400 MW' in en.why_not(partial, T0 + 3600, learnt), en.why_not(partial, T0 + 3600, learnt))
+# A quiet night is still whole: 2,000 MW is 37% of that peak
+night = {T0 + 3600: {'B04': 1200, 'B19': 500, 'B18': 200, 'B05': 0.0, 'B08': 50, 'B10': 0.0, 'B11': 20, 'B20': 30}}
+rows, _ = en.complete_intensities(night, ireland, T0 + 2 * 3600)
+check('night: a low but whole period counts', [t for t, _ in rows] == [T0 + 3600], rows)
+# One odd day doesn't set the bar: the second highest peak does
+rows, learnt = en.complete_intensities(night, {'types': ireland['types'], 'days': {'2026-11-11': 90000, '2026-11-10': 5400}}, T0 + 2 * 3600)
+check('usual: the second highest peak', learnt['usual'] == 5400 and len(rows) == 1, learnt['usual'])
+# A type unseen for a week is forgotten, and old days dropped
+old = {'types': {'B05': T0 - 8 * 86400, 'B04': T0}, 'days': {'2026-11-01': 9000, '2026-11-12': 1000}}
+_, learnt = en.complete_intensities({T0 + 3600: {'B04': 900}}, old, T0 + 3600)
+check('memory: a week at most', learnt['types'] == {'B04': T0 + 3600} and learnt['days'] == {'2026-11-12': 1000}, learnt)
 
 # Each country's figure now: RTE first, then ENTSO-E, then NESO's typical one
 store = server.Store(tempfile.mkdtemp())
@@ -105,9 +134,15 @@ threading.Thread(target=httpd.serve_forever, daemon=True).start()
 en.ENTSOE = 'http://127.0.0.1:%d/entsoe/api' % httpd.server_address[1]
 en.SPACING = 0
 live = server.Store(tempfile.mkdtemp())
+# Figures stored by 1.18.1 and before, one of them bad; RTE's are a different source and stay
+live.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)', [('E:IE', int(time.time()) - 7200, 297.0), ('FR', int(time.time()) - 7200, 30.0)], history=False)
 job = en.Entsoe(live, key=mock.ENTSOE_TOKEN)
 mock.ENTSOE_ASKED.clear()
 stored = job.poll()
+check('upgrade: ENTSO-E figures from the old rules fetched again', live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone = 'E:IE' AND v = 297.0") == 0
+      and live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone = 'FR'") == 1 and live.get_meta('entsoe_rules') == en.RULES)
+learnt = json.loads(live.get_meta('entsoe_zone:E:NL'))
+check('poll: each zone\'s types and peaks remembered', len(learnt['types']) >= 4 and len(learnt['days']) >= 7, learnt)
 check('poll: one request a zone', len(mock.ENTSOE_ASKED) == len(en.ZONES), len(mock.ENTSOE_ASKED))
 check('poll: a week of each', all(live.scalar('SELECT COUNT(*) FROM ext_ci WHERE zone = ?', (z,)) >= 7 * 24 - 4 for z, _ in en.ZONES.values()))
 t = live.scalar("SELECT MAX(t) FROM ext_ci WHERE zone = 'E:NL'")
@@ -116,7 +151,9 @@ check('poll: the Netherlands as the mock mixes it', close(live.scalar("SELECT v 
 check('poll: the half-reported latest period left out', t <= time.time() - mock.ENTSOE_LAG - 900 + 1, (t, time.time()))
 check('poll: Norway near zero', live.scalar("SELECT MAX(v) FROM ext_ci WHERE zone = 'E:NO2'") < 5)
 mock.ENTSOE_ASKED.clear()
+before = live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone LIKE 'E:%'")
 job.poll()
+check('poll: no refetch of the week once the rules are current', live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone LIKE 'E:%'") >= before)
 starts = [q['periodStart'] for q in mock.ENTSOE_ASKED]
 check('poll: then only the last few hours', all(time.time() - en.parse_time(s[:8] + 'T' + s[8:10] + ':' + s[10:] + 'Z') < 8 * 3600 for s in starts), starts)
 check('poll: the token goes in the query, as ENTSO-E asks', all(q['securityToken'] == mock.ENTSOE_TOKEN for q in mock.ENTSOE_ASKED))

@@ -4,6 +4,18 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.18.2 (unreleased)
+
+- Fixed: ENTSO-E's figure for a neighbour could come from a period that only
+  some of its sources had reported. Ireland showed 297 g/kWh from pumped
+  storage, peat and hydro alone. A period now counts only if at least 80% of
+  the sources the zone has reported over the last week are in, and its total
+  is at least a fifth of the zone's usual daily peak. Each zone's sources and
+  peaks are remembered between polls. ENTSO-E figures stored before this are
+  fetched again (one request per zone).
+- `--test-entsoe` looks at three days rather than six hours, so it knows each
+  zone's usual sources, and says why any later periods don't count yet.
+
 ## 1.18.1 (2026-11-16)
 
 - Fixed a test that failed on some days of the week, which stopped the
