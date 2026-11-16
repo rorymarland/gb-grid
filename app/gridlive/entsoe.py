@@ -35,14 +35,16 @@ ZONES = {
     'Belgium': ('E:BE', '10YBE----------2'),
     'Norway': ('E:NO2', '10YNO-2--------T'),        # southern Norway, where North Sea Link lands
     'Denmark': ('E:DK1', '10YDK-1--------W'),        # western Denmark, where Viking Link lands
-    'Ireland': ('E:IE', '10Y1001A1001A59C'),          # the all-island market, Ireland and Northern Ireland
 }
+# Not Ireland: on 16 November 2026 ENTSO-E's all-island figures (10Y1001A1001A59C) had no gas at
+# all for three days, Ireland's biggest source, and peaked at about 3.2 GW a day against a real
+# peak nearer 6 GW, so any carbon intensity from them would be far too low. NESO's typical figure is used instead.
 BACKFILL = 7 * 86400
 SPACING = 1.0               # seconds between requests
 COMPLETE = 0.8              # a period counts once this share of the zone's production types have reported
 KNOWN_DAYS = 7              # how long a zone's production types and daily peaks are remembered
 MIN_SHARE = 0.2             # a period's total must be at least this share of the zone's usual daily peak
-RULES = '2'                 # bump to throw away stored figures made under older rules
+RULES = '3'                 # bump to throw away stored figures made under older rules (3: Ireland dropped)
 RESOLUTIONS = {'PT15M': 900, 'PT30M': 1800, 'PT60M': 3600}
 NAMES = {'B01': 'biomass', 'B02': 'lignite', 'B03': 'gas from coal', 'B04': 'gas', 'B05': 'coal', 'B06': 'oil', 'B07': 'oil shale',
          'B08': 'peat', 'B09': 'geothermal', 'B10': 'pumped storage', 'B11': 'run-of-river hydro', 'B12': 'reservoir hydro',
@@ -139,7 +141,7 @@ def day_of(t):
 
 def complete_intensities(generation, memory=None, now=None):
     """([(t, g/kWh)], memory) for the periods that look whole. The latest periods often arrive a
-    production type at a time, and some zones (Ireland's, often) send only a few types for hours,
+    production type at a time, and some zones send only a few types for hours,
     so a period counts only if:
       - at least COMPLETE of the types the zone has reported over the last KNOWN_DAYS have
         reported for it, and
@@ -225,7 +227,7 @@ class Entsoe:
         if self.store.get_meta('entsoe_rules') != RULES:
             # Figures from before the checks above could include half-reported periods: fetch the week again
             self.store.write("DELETE FROM ext_ci WHERE zone LIKE 'E:%'", [()], history=False)
-            for _, (zone, _) in ZONES.items():
+            for zone in [z for z, _ in ZONES.values()] + ['E:IE']:
                 self.store.set_meta('entsoe_zone:' + zone, '{}')
             self.store.set_meta('entsoe_rules', RULES)
         errors, stored = [], 0

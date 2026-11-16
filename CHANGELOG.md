@@ -4,7 +4,16 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.18.2 (unreleased)
+## 1.18.3 (unreleased)
+
+- Ireland no longer uses ENTSO-E. Its all-island figures had no gas at all
+  over three days, though gas is Ireland's biggest source, and peaked at
+  about 3.2 GW a day where Ireland's own peak is nearer 6 GW, so the carbon
+  intensity they gave (about 100 g/kWh) was far too low. Ireland is back on NESO's
+  typical figure. ENTSO-E figures stored before this are fetched again (one
+  request for each of the five remaining zones), and Ireland's are dropped.
+
+## 1.18.2 (2026-11-16)
 
 - Fixed: ENTSO-E's figure for a neighbour could come from a period that only
   some of its sources had reported. Ireland showed 297 g/kWh from pumped

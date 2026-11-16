@@ -139,7 +139,7 @@ live.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)', [('E:IE', int(tim
 job = en.Entsoe(live, key=mock.ENTSOE_TOKEN)
 mock.ENTSOE_ASKED.clear()
 stored = job.poll()
-check('upgrade: ENTSO-E figures from the old rules fetched again', live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone = 'E:IE' AND v = 297.0") == 0
+check('upgrade: ENTSO-E figures from the old rules dropped', live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone = 'E:IE'") == 0
       and live.scalar("SELECT COUNT(*) FROM ext_ci WHERE zone = 'FR'") == 1 and live.get_meta('entsoe_rules') == en.RULES)
 learnt = json.loads(live.get_meta('entsoe_zone:E:NL'))
 check('poll: each zone\'s types and peaks remembered', len(learnt['types']) >= 4 and len(learnt['days']) >= 7, learnt)
@@ -173,7 +173,11 @@ check('off without a key', en.Entsoe(server.Store(tempfile.mkdtemp()), key='').p
 check('fetch: no data yet', job.fetch_zone('10YFR-RTE------C', time.time() - 600, time.time()) == {})
 
 w = nb.week(live, time.time())
-check('week: every neighbour from ENTSO-E', [c['country'] for c in w['countries']] == ['France', 'Norway', 'Netherlands', 'Belgium', 'Denmark', 'Ireland'], [c['country'] for c in w['countries']])
+check('week: every neighbour but Ireland from ENTSO-E', [c['country'] for c in w['countries']] == ['France', 'Norway', 'Netherlands', 'Belgium', 'Denmark'], [c['country'] for c in w['countries']])
+# Ireland: not asked for, and anything stored for it before is ignored
+check('Ireland: not asked for', all(q['in_Domain'] != '10Y1001A1001A59C' for q in mock.ENTSOE_ASKED))
+live.write('INSERT INTO ext_ci (zone, t, v) VALUES (?, ?, ?)', [('E:IE', int(time.time()) - 600, 100.0)], history=False)
+check('Ireland: NESO\'s typical figure', nb.country_carbon(live, time.time())['Ireland'] == {'v': 458, 'live': False, 'source': 'NESO'})
 
 httpd.shutdown()
 print('entsoe tests:', 'all passed' if not failures else '%d failed' % failures)

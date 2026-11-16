@@ -125,7 +125,7 @@ ahead, with each region's generation mix and solar output. Below, a small
 chart for each neighbour with a live figure, its carbon intensity over the
 last week against Britain's, half hour by half hour, with both averages over
 the same half hours: France and Denmark always, and the Netherlands,
-Belgium, Norway and Ireland with an ENTSO-E key. If a source isn't coming
+Belgium and Norway with an ENTSO-E key. Ireland uses NESO's typical figure. If a source isn't coming
 through, the panel says why.
 
 ![The regions page](docs/regions.png)
@@ -509,9 +509,11 @@ webhook to keep everything on your network.
 Without a key, France's and Denmark's carbon intensity are live (from RTE and
 Energinet) and the other neighbours use NESO's typical figures. With a free
 security token from the ENTSO-E Transparency Platform, the dashboard also
-works out the Netherlands', Belgium's, southern Norway's and Ireland's (and a
+works out the Netherlands', Belgium's and southern Norway's (and a
 second figure for France and western Denmark, used when RTE's or Energinet's
-is late) from each one's generation mix, every 15 minutes.
+is late) from each one's generation mix, every 15 minutes. Ireland stays on
+NESO's typical figure: ENTSO-E's all-island figures leave out gas, Ireland's
+biggest source, so they'd make it look far cleaner than it is.
 
 1. Register on the [Transparency Platform](https://transparency.entsoe.eu/),
    then email transparency@entsoe.eu with "Restful API access" in the
@@ -535,14 +537,13 @@ is late) from each one's generation mix, every 15 minutes.
 
 How it's worked out: ENTSO-E's actual generation per production type for each
 bidding zone that a cable from Britain lands in (France; the Netherlands;
-Belgium; southern Norway, NO2; western Denmark, DK1; and the all-island
-market for Ireland and Northern Ireland), at NESO's factors for each fuel,
+Belgium; southern Norway, NO2; and western Denmark, DK1), at NESO's factors
+for each fuel,
 counting only what's burned at power stations, the way NESO counts Britain.
 Gas counts as combined cycle, as ENTSO-E doesn't split it; lignite, peat and
 gas made from coal count as coal and waste as NESO's "other", though none of
 those is significant in these zones. The latest periods often arrive one
-source at a time, and some zones (Ireland's especially) can send only a few
-sources for hours, so a period only counts once at least 80% of the sources
+source at a time, and some zones can send only a few sources for hours, so a period only counts once at least 80% of the sources
 the zone has reported over the last week are in, and its total is at least a
 fifth of the zone's usual daily peak (the second highest of the last week's).
 One

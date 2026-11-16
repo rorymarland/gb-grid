@@ -39,8 +39,8 @@ LIVE = {
     'Belgium': [('E:BE', 'ENTSO-E', 'Belgian generation', ENTSOE_STALE)],
     'Denmark': [('DK1', 'Energinet', 'electricity used in western Denmark', STALE),
                 ('E:DK1', 'ENTSO-E', 'generation in western Denmark', ENTSOE_STALE)],
-    'Ireland': [('E:IE', 'ENTSO-E', 'generation across Ireland and Northern Ireland', ENTSOE_STALE)],
 }
+# Ireland has no live source: ENTSO-E's all-island figures leave out gas (see entsoe.ZONES)
 
 
 def iso_utc(t):
