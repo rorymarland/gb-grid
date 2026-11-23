@@ -29,6 +29,20 @@ LH_START = int(datetime(2009, 1, 1, tzinfo=timezone.utc).timestamp())
 PRICE_HISTORY_START = int(datetime(2018, 1, 1, tzinfo=timezone.utc).timestamp())
 
 
+def caught_up(store):
+    """Whether the history has been downloaded to the end of NESO's record: the newest half hour
+    kept is the one a short page last ended on (or is under ten days old, from before that was
+    recorded)."""
+    last = store.scalar('SELECT MAX(t) FROM lh')
+    if not last:
+        return False
+    try:
+        end = int(float(store.get_meta('lh_caught_up') or 0))
+    except ValueError:
+        end = 0
+    return end >= last or last > time.time() - 10 * 86400
+
+
 class LongHistory:
     """NESO's half-hourly generation mix and carbon intensity since 2009, and
     Elexon's market index price since 2018, downloaded once then kept current."""
@@ -122,17 +136,20 @@ class LongHistory:
         """Page through the record (10,000 half hours per query) until caught up,
         for up to an hour per poll; then check every six hours."""
         now = time.time()
-        last = self.store.scalar('SELECT MAX(t) FROM lh') or 0
-        if now - last < 3 * 86400 and now - self.mix_checked < 6 * 3600:
+        if caught_up(self.store) and now - self.mix_checked < 6 * 3600:
             return
+        limit = 10000
         while time.time() - now < 3600:
-            got = self.fetch_mix()
+            got = self.fetch_mix(limit=limit)
             self.version += 1
-            if not got:
+            if got < limit:
+                # A short page is the end of NESO's record: the download is done, however far
+                # behind NESO is (it has run more than ten days behind)
+                self.store.set_meta('lh_caught_up', str(self.store.scalar('SELECT MAX(t) FROM lh') or 0))
                 break
             time.sleep(1)
         self.mix_checked = now
-        if now - last < 10 * 86400 and now - self.refreshed > REFRESH_EVERY:
+        if caught_up(self.store) and now - self.refreshed > REFRESH_EVERY:
             self.refreshed = now
             try:
                 if self.refresh_recent():

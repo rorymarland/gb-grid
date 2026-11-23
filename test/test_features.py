@@ -204,6 +204,34 @@ check('mix rows stored', n == len(records) and store.scalar('SELECT COUNT(*) FRO
 check('first query starts at the beginning', '2000-01-01' in server.urllib.parse.unquote(since), since)
 check('next query starts after the last row', datetime.fromtimestamp(start + (len(records) - 1) * 1800, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') in server.urllib.parse.unquote(calls[1]), calls[1])
 check('prices stored', first_prices > 300 and store.scalar('SELECT MIN(t) FROM lp') == server.PRICE_HISTORY_START)
+# NESO's record running 14 days behind, as it did in November 2026: once a short page shows the
+# download has reached the end, the history is ready, and checked again only every six hours
+lag_store = server.Store(tempfile.mkdtemp())
+lag = server.LongHistory(lag_store)
+lag.resource = 'hgm'
+lag.refreshed = server.time.time()
+lag_end = server.floor_to(server.time.time(), 1800) - 14 * 86400
+lag_records = [mix_record(lag_end - i * 1800, 150) for i in range(48 * 30)][::-1]
+lag_calls = []
+def lag_fake(url, timeout=30):
+    lag_calls.append(url)
+    return {'result': {'records': lag_records if len(lag_calls) == 1 else []}}
+lag_grid = server.Grid(lag_store, server.Status())
+lag_store.write('INSERT INTO lh (t, gas) VALUES (?, ?)', [(lag_end - 40 * 86400, 1.0)], history=False)
+check('lagging: not ready mid-download', not lag_grid.longterm_extent()['complete'] and not lag_grid.longterm_summary()['ready'])
+server.fetch.get_json = lag_fake
+try:
+    lag.poll_mix()
+    after_first = len(lag_calls)
+    lag.poll_mix()
+finally:
+    server.fetch.get_json = original
+check('lagging: one request reaches the end', after_first == 1 and lag_store.scalar('SELECT MAX(t) FROM lh') == lag_end, (after_first, lag_calls))
+check('lagging: ready though 14 days behind', lag_grid.longterm_extent()['complete'] and lag_grid.longterm_summary()['ready'])
+check('lagging: not asked again within six hours', len(lag_calls) == 1, len(lag_calls))
+lag_store.write('INSERT INTO lh (t, gas) VALUES (?, ?)', [(lag_end + 1800, 1.0)], history=False)
+check('lagging: a newer half hour than the end seen means not caught up', not server.caught_up(lag_store))
+
 grid = server.Grid(store, server.Status())
 check('buckets', [grid.longterm_bucket(x * 86400) for x in (7, 60, 365, 3000)] == [1800, 21600, 86400, 604800])
 data = grid.longterm(start, start + 7 * 86400)

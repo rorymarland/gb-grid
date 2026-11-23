@@ -270,6 +270,7 @@ function updateHeader() {
   if (!data) { G.setLive('', 'Connecting to the dashboard server…'); return; }
   if (!data.ready) { G.setLive('warn', 'Downloading the history from NESO…'); return; }
   var ext = data.extent, text = 'History to ' + G.date(ext.last) + '.';
+  if (Date.now() / 1000 - ext.last > 10 * DAY) text += ' NESO hasn’t published anything newer yet.';
   if (num(ext.price_last) && ext.last - ext.price_last > 3 * DAY) text += ' Prices loaded to ' + G.date(ext.price_last) + ', still catching up.';
   G.setLive('good', text);
 }

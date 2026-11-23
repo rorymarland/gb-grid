@@ -4,6 +4,18 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
+## 1.18.4 (unreleased)
+
+- Fixed: the History page stuck on "Downloading the history from NESO…".
+  It counted the download as finished only once its newest half hour was
+  under ten days old, and NESO's historic generation mix has fallen further
+  behind than that (on 23 November it still ended on 4 November). It now
+  counts as finished once it reaches the end of NESO's record, however old
+  that is, and says when NESO hasn't published anything newer. The same rule
+  had stopped NESO's revised figures being re-read, and records being noted
+  on the Events page; both work again. While caught up, it checks NESO for
+  new figures every six hours rather than every poll.
+
 ## 1.18.3 (2026-11-16)
 
 - Ireland no longer uses ENTSO-E. Its all-island figures had no gas at all

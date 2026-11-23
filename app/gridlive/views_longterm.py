@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from .config import LONG_HISTORY
 from .timeutil import floor_to, uk_day, uk_midnight_utc
-from .longterm import LH_START
+from .longterm import LH_START, caught_up
 
 
 class LongtermViews:
@@ -30,7 +30,7 @@ class LongtermViews:
     def longterm_extent(self):
         first, last, count = self.store.query('SELECT MIN(t), MAX(t), COUNT(*) FROM lh')[0]
         price_first, price_last = self.store.query('SELECT MIN(t), MAX(t) FROM lp WHERE price IS NOT NULL')[0]
-        complete = bool(last and last > time.time() - 10 * 86400)
+        complete = caught_up(self.store)
         progress = 0.0 if not last else max(0.0, min(1.0, (last - LH_START) / max(1, time.time() - 2 * 86400 - LH_START)))
         return {'first': first, 'last': last, 'rows': count, 'price_first': price_first, 'price_last': price_last,
                 'complete': complete, 'progress': round(progress, 3)}
