@@ -4,7 +4,7 @@ Notable changes in each release. Version numbers follow
 [semantic versioning](https://semver.org/), so the `1` image tag only moves to
 releases that keep working with your existing settings and data.
 
-## 1.18.4 (unreleased)
+## 1.18.4 (2026-11-23)
 
 - Fixed: the History page stuck on "Downloading the history from NESO…".
   It counted the download as finished only once its newest half hour was
